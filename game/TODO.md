@@ -38,9 +38,14 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
 
 ---
 
-## 🚀 Phase 2 (plus tard)
+## 🚀 Phase 2 (en cours)
 
+- [x] **Personas historiques des 4 dirigeants** — fiches recherchées (vie/histoire,
+  façon de parler, ennemis, alliés, répliques) dans `game/data/leaders/`, utilisées
+  comme mémoire par l'IA. Testé : réponses en caractère, anachronismes traités comme
+  hérésie, le fil de conversation est tenu (Ollama llama3.1:8b).
+- [ ] **Conseiller dans l'onglet Diplomatie** — un conseiller qui guide le joueur.
 - [ ] IA adverse + guerre (conquête de provinces ennemies, batailles).
-- [ ] Messagerie / diplomatie active (accords, alliances, trahisons).
+- [ ] Messagerie / diplomatie active (accords, alliances, trahisons appliqués au jeu).
 - [ ] Conditions de victoire (prestige culturel, domination militaire…).
 - [ ] Feuilles / historique de conversations par IA.
