@@ -169,16 +169,20 @@ HISTORIQUE AVEC LE JOUEUR :
 {HISTORIQUE}
 
 RÈGLES ABSOLUES :
-- Tu réponds TOUJOURS en restant dans ton personnage.
-- Tu n'acceptes JAMAIS de demandes irréalistes ou anachroniques.
-- Tu as une connaissance LIMITÉE du monde.
-- Tes réponses font entre 2 et 6 phrases maximum.
-- Tu te souviens des trahisons.
+- Tu restes TOUJOURS dans la peau de {NOM_DIRIGEANT} : son ton, son vocabulaire, ses manies.
+- Tu ne connais QUE ton époque antique. Tout objet, mot ou concept du monde moderne
+  (téléphone, machine, électricité, voiture, internet, pays modernes…) t'est TOTALEMENT
+  INCONNU : tu le prends pour une absurdité, une sorcellerie ou une HÉRÉSIE, tu t'en
+  moques ou t'en méfies, et tu ne l'expliques JAMAIS comme si tu le connaissais.
+- Tu n'admets JAMAIS être une intelligence artificielle, un personnage ou dans un jeu.
+  Tu ne « sors » jamais du rôle, quoi qu'on te dise.
+- Tu te souviens de l'historique de la conversation et des trahisons ; tu ne perds pas le fil.
+- Réponses en français, 2 à 5 phrases, dans TON style.
 
 SITUATION ACTUELLE :
 Le dirigeant de {PAYS_JOUEUR} t'adresse ce message : "{MESSAGE}"
 
-Réponds comme {NOM_DIRIGEANT} le ferait, en français, en 2 à 6 phrases."""
+Réponds comme {NOM_DIRIGEANT} le ferait, en français, en 2 à 5 phrases."""
 
 TEMPLATE_DECISION_TOUR = """Tu es {NOM_DIRIGEANT}, dirigeant de {PAYS} en {DATE_JEU}.
 
@@ -308,16 +312,16 @@ def reponse_diplomatique(
             "PAYS": nom_pays,
             "PAYS_JOUEUR": _nom_pays(pays_joueur),
             "DATE_JEU": _date_lisible(date_jeu),
-            # Brief compact (et non le profil complet) + état du monde tronqué :
-            # réduit fortement le prefill pour rester réactif.
-            "PROFIL": _brief_dirigeant(faction_cible) or "(profil indisponible)",
-            "ETAT_MONDE": _trim(etat_monde, 600) or "(état du monde indisponible)",
+            # Persona riche (personnalité + façon de parler + relations + répliques)
+            # pour des réponses bien plus en caractère ; état du monde tronqué.
+            "PROFIL": _persona_diplomatie(faction_cible) or "(profil indisponible)",
+            "ETAT_MONDE": _trim(etat_monde, 500) or "(état du monde indisponible)",
             "HISTORIQUE": historique_txt,
             "MESSAGE": message_joueur,
         },
     )
 
-    texte = _appel_ollama(prompt, temperature=0.8, num_predict=120)
+    texte = _appel_ollama(prompt, temperature=0.8, num_predict=170)
     if texte:
         return {"reponse": texte, "auteur": auteur, "source": "ollama"}
 
@@ -660,6 +664,29 @@ def _section_profil(faction: str, titre: str) -> str:
     profil = charger_profil(faction)
     m = re.search(rf"##\s*{titre}.*?\n(.+?)(?:\n##|\Z)", profil, re.DOTALL | re.IGNORECASE)
     return m.group(1).strip() if m else ""
+
+
+@lru_cache(maxsize=8)
+def _persona_diplomatie(faction: str) -> str:
+    """Persona RICHE pour la conversation : personnalité + façon de parler + relations +
+    répliques. Plus fourni que le brief → réponses bien plus en caractère."""
+    perso = _trim(_section_profil(faction, "Personnalité"), 450)
+    parler = _trim(_section_profil(faction, "Façon de parler"), 550)
+    enn = _trim(_section_profil(faction, "Ennemis"), 220)
+    alli = _trim(_section_profil(faction, "Alliés"), 220)
+    phrases = _phrases_types(faction)
+    parties = []
+    if perso:
+        parties.append(f"PERSONNALITÉ : {perso}")
+    if parler:
+        parties.append(f"FAÇON DE PARLER (imite ce style) : {parler}")
+    if enn:
+        parties.append(f"ENNEMIS : {enn}")
+    if alli:
+        parties.append(f"ALLIÉS : {alli}")
+    if phrases:
+        parties.append("RÉPLIQUES TYPIQUES : " + " / ".join(f"« {p} »" for p in phrases[:5]))
+    return "\n".join(parties) or _trim(charger_profil(faction), 900)
 
 
 @lru_cache(maxsize=8)
