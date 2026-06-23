@@ -1,0 +1,60 @@
+{
+  "evenements": [
+    {
+      "id": "epidemie",
+      "nom": "Épidémie",
+      "type": "negatif",
+      "probabilite": 0.015,
+      "effet": { "cible": "ville_aleatoire", "population_pct": -0.20 },
+      "texte": "Une fièvre pestilentielle s'abat sur {ville} : les rues se vident et la population chute brutalement."
+    },
+    {
+      "id": "recolte_exceptionnelle",
+      "nom": "Récolte exceptionnelle",
+      "type": "positif",
+      "probabilite": 0.02,
+      "effet": { "cible": "faction", "nourriture_pct": 0.40 },
+      "texte": "Les greniers de {faction} débordent : une récolte exceptionnelle augmente fortement les réserves de nourriture."
+    },
+    {
+      "id": "rebellion_province",
+      "nom": "Rébellion d'une province",
+      "type": "negatif",
+      "probabilite": 0.012,
+      "effet": { "cible": "territoire_aleatoire", "stabilite": -25 },
+      "texte": "La province de {territoire} se soulève contre {faction} : la stabilité s'effondre et l'autorité vacille."
+    },
+    {
+      "id": "decouverte_mines",
+      "nom": "Découverte de mines",
+      "type": "positif",
+      "probabilite": 0.012,
+      "effet": { "cible": "territoire_aleatoire", "nouvelle_ressource": "fer" },
+      "texte": "Des prospecteurs mettent au jour un nouveau gisement à {territoire} : une mine s'ouvre pour {faction}."
+    },
+    {
+      "id": "ambassadeur_inattendu",
+      "nom": "Ambassadeur étranger inattendu",
+      "type": "neutre",
+      "probabilite": 0.013,
+      "effet": { "cible": "faction", "evenement_diplomatique": true },
+      "texte": "Un ambassadeur inattendu se présente à la cour de {faction}, porteur d'une proposition surprenante."
+    },
+    {
+      "id": "catastrophe_naturelle",
+      "nom": "Catastrophe naturelle",
+      "type": "negatif",
+      "probabilite": 0.01,
+      "effet": { "cible": "ville_aleatoire", "batiments_pct": -0.15, "stabilite": -10 },
+      "texte": "Un tremblement de terre ravage {ville} : des bâtiments s'effondrent et la peur gagne la population."
+    },
+    {
+      "id": "rumeur_trahison",
+      "nom": "Rumeur de trahison",
+      "type": "neutre",
+      "probabilite": 0.012,
+      "effet": { "cible": "faction", "reputation_alea": -10 },
+      "texte": "Une rumeur de trahison circule contre {faction} : la méfiance s'installe parmi les puissances voisines."
+    }
+  ]
+}

@@ -1,0 +1,194 @@
+{
+  "rome": {
+    "ressources": {
+      "or": 100,
+      "nourriture": 0,
+      "eau": 0,
+      "pierre": 0,
+      "bois": 0,
+      "fer": 0,
+      "population": 24
+    },
+    "ressources_luxe": {
+      "vin": 0,
+      "epices": 0,
+      "ivoire": 0,
+      "marbre": 0,
+      "grain_egyptien": 0
+    },
+    "stabilite": 60,
+    "technologies": [
+      "legion_tactique"
+    ],
+    "villes": [
+      {
+        "id": "rome",
+        "nom": "Rome",
+        "territoire": "perugia",
+        "population": 24,
+        "batiments": [],
+        "fortifications": 0,
+        "construction": null
+      }
+    ],
+    "unites": [
+      {
+        "id": "rome-lev-1",
+        "type": "levee",
+        "territoire": "perugia",
+        "effectif": 1,
+        "moral": 100,
+        "a_bouge": false
+      }
+    ],
+    "reputation": {
+      "carthage": -10,
+      "macedoine": 0,
+      "sparte": -10
+    }
+  },
+  "carthage": {
+    "ressources": {
+      "or": 100,
+      "nourriture": 0,
+      "eau": 0,
+      "pierre": 0,
+      "bois": 0,
+      "fer": 0,
+      "population": 24
+    },
+    "ressources_luxe": {
+      "vin": 0,
+      "epices": 0,
+      "ivoire": 0,
+      "marbre": 0,
+      "grain_egyptien": 0
+    },
+    "stabilite": 60,
+    "technologies": [
+      "routes_commerciales"
+    ],
+    "villes": [
+      {
+        "id": "carthage",
+        "nom": "Alexandrie",
+        "territoire": "al_buhayrah",
+        "population": 24,
+        "batiments": [],
+        "fortifications": 0,
+        "construction": null
+      }
+    ],
+    "unites": [
+      {
+        "id": "carthage-lev-1",
+        "type": "levee",
+        "territoire": "al_buhayrah",
+        "effectif": 1,
+        "moral": 100,
+        "a_bouge": false
+      }
+    ],
+    "reputation": {
+      "rome": -10,
+      "macedoine": 0,
+      "sparte": 0
+    }
+  },
+  "macedoine": {
+    "ressources": {
+      "or": 100,
+      "nourriture": 0,
+      "eau": 0,
+      "pierre": 0,
+      "bois": 0,
+      "fer": 0,
+      "population": 24
+    },
+    "ressources_luxe": {
+      "vin": 0,
+      "epices": 0,
+      "ivoire": 0,
+      "marbre": 0,
+      "grain_egyptien": 0
+    },
+    "stabilite": 60,
+    "technologies": [
+      "philosophie_grecque"
+    ],
+    "villes": [
+      {
+        "id": "pella",
+        "nom": "Pella",
+        "territoire": "kentriki_makedonia",
+        "population": 24,
+        "batiments": [],
+        "fortifications": 0,
+        "construction": null
+      }
+    ],
+    "unites": [
+      {
+        "id": "macedoine-lev-1",
+        "type": "levee",
+        "territoire": "kentriki_makedonia",
+        "effectif": 1,
+        "moral": 100,
+        "a_bouge": false
+      }
+    ],
+    "reputation": {
+      "rome": 0,
+      "carthage": 0,
+      "sparte": -20
+    }
+  },
+  "sparte": {
+    "ressources": {
+      "or": 100,
+      "nourriture": 0,
+      "eau": 0,
+      "pierre": 0,
+      "bois": 0,
+      "fer": 0,
+      "population": 24
+    },
+    "ressources_luxe": {
+      "vin": 0,
+      "epices": 0,
+      "ivoire": 0,
+      "marbre": 0,
+      "grain_egyptien": 0
+    },
+    "stabilite": 60,
+    "technologies": [
+      "philosophie_grecque"
+    ],
+    "villes": [
+      {
+        "id": "sparte",
+        "nom": "Sparte",
+        "territoire": "peloponnisos",
+        "population": 24,
+        "batiments": [],
+        "fortifications": 0,
+        "construction": null
+      }
+    ],
+    "unites": [
+      {
+        "id": "sparte-lev-1",
+        "type": "levee",
+        "territoire": "peloponnisos",
+        "effectif": 1,
+        "moral": 100,
+        "a_bouge": false
+      }
+    ],
+    "reputation": {
+      "rome": -10,
+      "carthage": 0,
+      "macedoine": -20
+    }
+  }
+}

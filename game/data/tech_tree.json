@@ -1,0 +1,212 @@
+{
+  "eres": [
+    {
+      "id": "premiere_republique",
+      "nom": "Première République",
+      "periode": "264-220 av. J.C."
+    },
+    {
+      "id": "guerres_puniques",
+      "nom": "Guerres Puniques",
+      "periode": "220-200 av. J.C."
+    },
+    {
+      "id": "expansion_mediterraneenne",
+      "nom": "Expansion Méditerranéenne",
+      "periode": "200-150 av. J.C."
+    },
+    {
+      "id": "crise_republique",
+      "nom": "Crise de la République",
+      "periode": "150-100 av. J.C."
+    },
+    {
+      "id": "chute_rome",
+      "nom": "Chute de Rome",
+      "periode": "100-27 av. J.C."
+    }
+  ],
+  "technologies": [
+    {
+      "id": "legion_tactique",
+      "nom": "Tactique de la légion",
+      "branche": "militaire",
+      "ere": "premiere_republique",
+      "cout_recherche": 100,
+      "prerequis": [],
+      "effet": "+15% combat infanterie",
+      "description": "La manipule remplace la phalange rigide : les légions combattent en lignes flexibles, plus efficaces sur tous terrains."
+    },
+    {
+      "id": "siege",
+      "nom": "Siège (catapulte, bélier)",
+      "branche": "militaire",
+      "ere": "guerres_puniques",
+      "cout_recherche": 160,
+      "prerequis": [
+        "legion_tactique"
+      ],
+      "effet": "Permet l'assaut des forteresses et villes fortifiées",
+      "description": "Catapultes, béliers et tours de siège brisent les murailles ennemies au lieu d'attendre la famine."
+    },
+    {
+      "id": "marine_guerre",
+      "nom": "Marine de guerre",
+      "branche": "militaire",
+      "ere": "guerres_puniques",
+      "cout_recherche": 180,
+      "prerequis": [
+        "legion_tactique"
+      ],
+      "effet": "Trirèmes améliorées (+20% force navale, corvus)",
+      "description": "Le corvus transforme la bataille navale en abordage terrestre, jouant sur la supériorité de l'infanterie."
+    },
+    {
+      "id": "tactique_elephants",
+      "nom": "Tactique des éléphants",
+      "branche": "militaire",
+      "ere": "expansion_mediterraneenne",
+      "cout_recherche": 240,
+      "prerequis": [
+        "siege"
+      ],
+      "effet": "Déblocage de l'unité éléphant de guerre",
+      "description": "Dressage et déploiement des éléphants de guerre, capables de semer la terreur et de rompre les lignes ennemies."
+    },
+    {
+      "id": "routes_commerciales",
+      "nom": "Routes commerciales",
+      "branche": "economie",
+      "ere": "premiere_republique",
+      "cout_recherche": 100,
+      "prerequis": [],
+      "effet": "+20% or produit par les marchés",
+      "description": "L'établissement de comptoirs et de routes sécurisées démultiplie les revenus du négoce méditerranéen."
+    },
+    {
+      "id": "ingenierie_hydraulique",
+      "nom": "Ingénierie hydraulique",
+      "branche": "economie",
+      "ere": "guerres_puniques",
+      "cout_recherche": 150,
+      "prerequis": [
+        "routes_commerciales"
+      ],
+      "effet": "Aqueducs 30% moins chers",
+      "description": "La maîtrise des arches et des conduites permet d'amener l'eau plus loin et à moindre coût."
+    },
+    {
+      "id": "monnaie_frappee",
+      "nom": "Monnaie frappée",
+      "branche": "economie",
+      "ere": "guerres_puniques",
+      "cout_recherche": 170,
+      "prerequis": [
+        "routes_commerciales"
+      ],
+      "effet": "+10% or global",
+      "description": "L'émission d'une monnaie standardisée fluidifie les échanges et augmente les recettes de l'État."
+    },
+    {
+      "id": "agriculture_intensive",
+      "nom": "Agriculture intensive",
+      "branche": "economie",
+      "ere": "expansion_mediterraneenne",
+      "cout_recherche": 210,
+      "prerequis": [
+        "ingenierie_hydraulique"
+      ],
+      "effet": "+25% nourriture produite",
+      "description": "Assolement, irrigation et grands domaines (latifundia) accroissent fortement les rendements agricoles."
+    },
+    {
+      "id": "droit_romain",
+      "nom": "Droit romain",
+      "branche": "culture",
+      "ere": "premiere_republique",
+      "cout_recherche": 110,
+      "prerequis": [],
+      "effet": "+Stabilité, -Rébellions",
+      "description": "La codification du droit (mos maiorum, lois des Douze Tables) renforce la cohésion civique et l'autorité de l'État."
+    },
+    {
+      "id": "philosophie_grecque",
+      "nom": "Philosophie grecque",
+      "branche": "culture",
+      "ere": "premiere_republique",
+      "cout_recherche": 120,
+      "prerequis": [],
+      "effet": "+Culture, +Recherche",
+      "description": "L'étude des écoles helléniques nourrit les arts, la rhétorique et accélère le progrès scientifique."
+    },
+    {
+      "id": "jeux_publics",
+      "nom": "Jeux publics",
+      "branche": "culture",
+      "ere": "guerres_puniques",
+      "cout_recherche": 160,
+      "prerequis": [
+        "droit_romain"
+      ],
+      "effet": "+Stabilité massive lors des Jeux organisés",
+      "description": "Jeux du cirque, courses et spectacles canalisent les tensions populaires (panem et circenses)."
+    },
+    {
+      "id": "reseau_espionnage",
+      "nom": "Réseau d'espionnage",
+      "branche": "culture",
+      "ere": "expansion_mediterraneenne",
+      "cout_recherche": 220,
+      "prerequis": [
+        "philosophie_grecque"
+      ],
+      "effet": "Révèle la puissance réelle des adversaires",
+      "description": "Un réseau d'informateurs et d'agents perce le secret des forces et des intentions ennemies."
+    },
+    {
+      "id": "architecture_pierre",
+      "nom": "Architecture en pierre",
+      "branche": "construction",
+      "ere": "premiere_republique",
+      "cout_recherche": 110,
+      "prerequis": [],
+      "effet": "Murailles 25% moins chères",
+      "description": "La taille de la pierre et le mortier romain (opus caementicium) rendent les fortifications plus solides et économiques."
+    },
+    {
+      "id": "ponts_routes",
+      "nom": "Ponts et routes",
+      "branche": "construction",
+      "ere": "guerres_puniques",
+      "cout_recherche": 150,
+      "prerequis": [
+        "architecture_pierre"
+      ],
+      "effet": "Déplacement des armées +1 case par tour",
+      "description": "Le réseau de voies pavées (viae) et de ponts accélère le mouvement des légions et du ravitaillement."
+    },
+    {
+      "id": "genie_militaire",
+      "nom": "Génie militaire",
+      "branche": "construction",
+      "ere": "expansion_mediterraneenne",
+      "cout_recherche": 230,
+      "prerequis": [
+        "ponts_routes",
+        "architecture_pierre"
+      ],
+      "effet": "Fortifications avancées (+défense, camps retranchés)",
+      "description": "Les ingénieurs militaires érigent camps fortifiés, lignes de circonvallation et ouvrages défensifs élaborés."
+    },
+    {
+      "id": "navigation_maritime",
+      "nom": "Navigation maritime",
+      "branche": "economie",
+      "ere": "premiere_republique",
+      "cout_recherche": 90,
+      "prerequis": [],
+      "effet": "Permet de transporter les armées par la mer",
+      "description": "La maîtrise des routes maritimes permet d'embarquer des troupes et de franchir les mers vers les rivages lointains."
+    }
+  ]
+}

@@ -1,0 +1,29 @@
+{
+  "branches": [
+    { "id": "civique", "nom": "Ordre civique" },
+    { "id": "foi", "nom": "Foi" },
+    { "id": "expansion", "nom": "Expansion" }
+  ],
+  "dogmes": [
+    { "id": "magistratures", "nom": "Magistratures", "branche": "civique", "cout_or": 120, "prerequis": [],
+      "effet": "+3 stabilité par tour", "description": "Des magistrats élus administrent la cité et apaisent le peuple." },
+    { "id": "code_lois", "nom": "Code des lois", "branche": "civique", "cout_or": 180, "prerequis": ["magistratures"],
+      "effet": "+3 stabilité, −15% coût d'annexion", "description": "Une loi écrite et commune unifie les provinces." },
+    { "id": "senat", "nom": "Sénat", "branche": "civique", "cout_or": 240, "prerequis": ["code_lois"],
+      "effet": "+6% or", "description": "Le Sénat oriente les finances et le commerce de la République." },
+
+    { "id": "culte_etat", "nom": "Culte d'État", "branche": "foi", "cout_or": 110, "prerequis": [],
+      "effet": "+2 stabilité par tour", "description": "Une religion d'État soude la communauté civique." },
+    { "id": "grands_temples", "nom": "Grands temples", "branche": "foi", "cout_or": 200, "prerequis": ["culte_etat"],
+      "effet": "+10% or (offrandes)", "description": "Les sanctuaires attirent pèlerins et richesses." },
+    { "id": "pretrise", "nom": "Prêtrise", "branche": "foi", "cout_or": 230, "prerequis": ["culte_etat"],
+      "effet": "+3 stabilité par tour", "description": "Un clergé organisé encadre les âmes et l'ordre public." },
+
+    { "id": "colonisation", "nom": "Esprit colonisateur", "branche": "expansion", "cout_or": 150, "prerequis": [],
+      "effet": "−35% coût de fondation de ville", "description": "L'État finance et encourage l'envoi de colons." },
+    { "id": "limes", "nom": "Limes", "branche": "expansion", "cout_or": 210, "prerequis": ["colonisation"],
+      "effet": "+3 stabilité (provinces sûres)", "description": "Une frontière fortifiée sécurise les terres conquises." },
+    { "id": "voies_imperiales", "nom": "Voies impériales", "branche": "expansion", "cout_or": 220, "prerequis": ["colonisation"],
+      "effet": "+6% or (routes)", "description": "Un réseau de routes relie et enrichit l'empire." }
+  ]
+}

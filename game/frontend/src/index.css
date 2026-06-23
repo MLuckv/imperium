@@ -1,0 +1,318 @@
+/* Polices gravées (titres) + lisible (corps).
+   IMPORTANT : les @import doivent précéder tout le reste, donc AVANT tailwindcss.
+   Cinzel ≈ Trajan (titres gravés Civ/AoH) ; EB Garamond = corps serif lisible.
+   Fallbacks serif robustes : le jeu reste beau si Google Fonts ne charge pas. */
+@import url("https://fonts.googleapis.com/css2?family=Cinzel:wght@500;600;700&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap");
+@import "tailwindcss";
+
+/* ====== Thème antique épique (Civ VI / Age of History) ======
+   Parchemin & marbre, bronze/or, terre cuite, encre profonde, mer nocturne.
+   Titres gravés (Cinzel), corps lisible (EB Garamond), fond sombre élégant. */
+@theme {
+  /* Surfaces / encre */
+  --color-parchment: #f3e9d2;
+  --color-parchment-dark: #e3d4ad;
+  --color-ink: #241d12;
+  --color-ink-soft: #3a2f1d;
+
+  /* Métaux & accents */
+  --color-bronze: #c9a13b;        /* or/bronze clair (accents, titres) */
+  --color-bronze-dark: #7a5d1f;   /* bronze patiné (bordures) */
+  --color-gold: #e8c267;          /* or lumineux (highlights) */
+  --color-terracotta: #b5462f;    /* terre cuite / action */
+  --color-marble: #d9d2c2;
+  --color-stone: #8a9499;
+
+  /* Fonds profonds */
+  --color-abyss: #14110c;         /* fond UI le plus sombre */
+  --color-night: #1c1813;         /* fond panneaux */
+  --color-sea: #16222e;           /* mer (carte) */
+
+  /* Couleurs des factions — raffinées AoH/Civ, restent reconnaissables.
+     (cf. ARCHITECTURE.md : rome rouge, carthage violet, macedoine vert, neutre gris) */
+  --color-faction-rome: #c0392b;       /* rouge légionnaire, plus vif */
+  --color-faction-carthage: #8e44ad;   /* pourpre tyrien */
+  --color-faction-macedoine: #1e8449;  /* vert phalange */
+  --color-faction-neutre: #6b7378;     /* gris pierre */
+
+  /* Polices */
+  --font-display: "Cinzel", "Trajan Pro", Georgia, "Times New Roman", serif;
+  --font-body: "EB Garamond", Georgia, Cambria, "Times New Roman", serif;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background-color: var(--color-abyss);
+  color: var(--color-parchment);
+  font-family: var(--font-body);
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* ============================================================
+   CONTRAT DE CLASSES (utilisé tel quel par les composants)
+   ============================================================ */
+@layer components {
+  /* ---------- Menu plein écran ---------- */
+  .menu-screen {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    padding: 2rem;
+    text-align: center;
+    color: var(--color-parchment);
+    background:
+      radial-gradient(ellipse at 50% 30%, rgba(201, 161, 59, 0.10) 0%, transparent 55%),
+      radial-gradient(ellipse at 50% 120%, rgba(181, 70, 47, 0.18) 0%, transparent 60%),
+      linear-gradient(180deg, #20190f 0%, #14110c 55%, #0c0a07 100%);
+  }
+  /* Vignette sombre sur les bords */
+  .menu-screen::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    box-shadow: inset 0 0 220px 60px rgba(0, 0, 0, 0.75);
+  }
+  .menu-screen > * { position: relative; z-index: 1; }
+
+  .menu-title {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(2.5rem, 7vw, 4.5rem);
+    letter-spacing: 0.14em;
+    line-height: 1.05;
+    color: var(--color-gold);
+    text-shadow: 0 2px 0 #5a4416, 0 0 28px rgba(232, 194, 103, 0.30);
+  }
+  .menu-subtitle {
+    margin-top: 0.5rem;
+    font-family: var(--font-body);
+    font-style: italic;
+    font-size: clamp(0.9rem, 2vw, 1.15rem);
+    letter-spacing: 0.05em;
+    color: color-mix(in srgb, var(--color-parchment) 75%, transparent);
+  }
+
+  /* ---------- Panneau de section ---------- */
+  .panel {
+    border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 70%, transparent);
+    border-radius: 0.6rem;
+    background:
+      linear-gradient(180deg, rgba(42, 34, 21, 0.92) 0%, rgba(28, 23, 16, 0.92) 100%);
+    box-shadow:
+      inset 0 1px 0 rgba(232, 194, 103, 0.08),
+      0 6px 18px rgba(0, 0, 0, 0.45);
+    padding: 0.85rem;
+  }
+  .panel-title {
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.72rem;
+    text-transform: uppercase;
+    letter-spacing: 0.22em;
+    color: var(--color-bronze);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-bronze-dark) 55%, transparent);
+    padding-bottom: 0.4rem;
+    margin-bottom: 0.6rem;
+  }
+
+  /* ---------- Boutons ---------- */
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.4rem;
+    font-family: var(--font-display);
+    font-weight: 600;
+    font-size: 0.9rem;
+    letter-spacing: 0.05em;
+    padding: 0.55rem 1.1rem;
+    border-radius: 0.45rem;
+    border: 1px solid transparent;
+    cursor: pointer;
+    user-select: none;
+    transition: background-color 0.15s ease, border-color 0.15s ease,
+                color 0.15s ease, transform 0.05s ease, box-shadow 0.15s ease;
+  }
+  .btn:active { transform: translateY(1px); }
+  .btn:disabled,
+  .btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+  .btn:disabled:active { transform: none; }
+
+  .btn-primary {
+    color: var(--color-ink);
+    background: linear-gradient(180deg, var(--color-gold) 0%, var(--color-bronze) 100%);
+    border-color: var(--color-bronze-dark);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.35), 0 3px 10px rgba(0, 0, 0, 0.4);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: linear-gradient(180deg, #f2d486 0%, #d4ae46 100%);
+  }
+
+  .btn-danger {
+    color: var(--color-parchment);
+    background: linear-gradient(180deg, #c0392b 0%, #8c2a1f 100%);
+    border-color: #5e1c14;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.18), 0 3px 10px rgba(0, 0, 0, 0.4);
+  }
+  .btn-danger:hover:not(:disabled) {
+    background: linear-gradient(180deg, #d2452f 0%, #9c3023 100%);
+  }
+
+  .btn-ghost {
+    color: var(--color-parchment);
+    background: rgba(58, 47, 29, 0.55);
+    border-color: color-mix(in srgb, var(--color-bronze-dark) 60%, transparent);
+  }
+  .btn-ghost:hover:not(:disabled) {
+    background: rgba(74, 60, 38, 0.8);
+    border-color: var(--color-bronze);
+    color: var(--color-gold);
+  }
+
+  .btn-sm {
+    font-size: 0.78rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 0.35rem;
+  }
+
+  /* ---------- Badges / chips ---------- */
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    font-family: var(--font-body);
+    font-size: 0.7rem;
+    font-weight: 600;
+    line-height: 1;
+    padding: 0.22rem 0.5rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.35);
+    border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 50%, transparent);
+    color: var(--color-parchment);
+  }
+  .chip-war {
+    background: rgba(120, 24, 16, 0.85);
+    border-color: #5e1c14;
+    color: #ffe2da;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+
+  /* ---------- Cartes d'item (bâtiment / unité) ---------- */
+  .card {
+    border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 45%, transparent);
+    border-radius: 0.5rem;
+    background: rgba(0, 0, 0, 0.22);
+    padding: 0.6rem 0.7rem;
+    cursor: pointer;
+    transition: border-color 0.15s ease, background-color 0.15s ease,
+                box-shadow 0.15s ease;
+  }
+  .card:hover {
+    border-color: var(--color-bronze);
+    background: rgba(0, 0, 0, 0.32);
+  }
+  .card-selected {
+    border-color: var(--color-gold);
+    background: linear-gradient(180deg, rgba(201, 161, 59, 0.18) 0%, rgba(0, 0, 0, 0.3) 100%);
+    box-shadow: 0 0 0 1px var(--color-gold), 0 4px 14px rgba(0, 0, 0, 0.45);
+  }
+  .card-disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    filter: grayscale(0.35);
+  }
+  .card-disabled:hover {
+    border-color: color-mix(in srgb, var(--color-bronze-dark) 45%, transparent);
+    background: rgba(0, 0, 0, 0.22);
+  }
+
+  /* ---------- Barre de progression (construction) ---------- */
+  .progress {
+    width: 100%;
+    height: 0.5rem;
+    border-radius: 999px;
+    background: rgba(0, 0, 0, 0.45);
+    border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 40%, transparent);
+    overflow: hidden;
+  }
+  .progress-bar {
+    height: 100%;
+    border-radius: 999px;
+    background: linear-gradient(90deg, var(--color-bronze) 0%, var(--color-gold) 100%);
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.3);
+    transition: width 0.3s ease;
+  }
+
+  /* ---------- Paire ressource (libellé / valeur) ---------- */
+  .stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.35rem;
+    white-space: nowrap;
+  }
+  .stat > .stat-label {
+    font-size: 0.72rem;
+    color: color-mix(in srgb, var(--color-parchment) 70%, transparent);
+  }
+  .stat > .stat-value {
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+    color: var(--color-parchment);
+  }
+
+  /* ---------- Bandeau supérieur de ressources ---------- */
+  .resource-bar {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.5rem 1.25rem;
+    padding: 0.5rem 1rem;
+    color: var(--color-parchment);
+    background: linear-gradient(180deg, #2b2419 0%, #1c1610 100%);
+    border-bottom: 1px solid color-mix(in srgb, var(--color-bronze-dark) 70%, transparent);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  }
+}
+
+/* ============================================================
+   Utilitaires conservés (déjà utilisés par les composants)
+   ============================================================ */
+
+/* Indicateur « écrit… » (messagerie) : trois points animés */
+.typing-dots::after {
+  content: "";
+  animation: typing-ellipsis 1.4s steps(4, end) infinite;
+}
+@keyframes typing-ellipsis {
+  0% { content: ""; }
+  25% { content: "."; }
+  50% { content: ".."; }
+  75% { content: "..."; }
+  100% { content: ""; }
+}
+
+/* Scrollbars discrètes pour panneaux latéraux */
+.thin-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+.thin-scroll::-webkit-scrollbar-thumb {
+  background: rgba(122, 93, 31, 0.5);
+  border-radius: 4px;
+}
+.thin-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}

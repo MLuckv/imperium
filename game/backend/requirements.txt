@@ -1,0 +1,7 @@
+# Versions minimales : on laisse pip choisir des wheels compatibles avec
+# l'interpréteur courant (y compris Python 3.13/3.14). Bornes basses récentes
+# et stables ; bornes hautes prudentes pour éviter les ruptures majeures.
+fastapi>=0.115,<1.0
+uvicorn[standard]>=0.34,<1.0
+pydantic>=2.10,<3.0
+httpx>=0.28,<1.0
