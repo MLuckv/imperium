@@ -164,6 +164,9 @@ PROFIL :
 
 AUTRES DIRIGEANTS DE CE MONDE (tes rivaux du moment, tu as un avis sur chacun) : {RIVAUX}
 
+CE QUE TES ESPIONS ET MARCHANDS RAPPORTENT SUR LE ROYAUME DU JOUEUR ({PAYS_JOUEUR}) :
+{SITUATION_JOUEUR}
+
 ÉTAT DU MONDE :
 {ETAT_MONDE}
 
@@ -180,6 +183,8 @@ RÈGLES ABSOLUES :
   Tu ne « sors » jamais du rôle, quoi qu'on te dise.
 - Tu te souviens de l'historique de la conversation et des trahisons ; tu ne perds pas le fil.
 - Tu as un avis TRANCHÉ et PERSONNEL sur les autres dirigeants ; exprime-le quand c'est pertinent.
+- Tu TIENS COMPTE de l'état réel du royaume du joueur : méprisant ou menaçant s'il est faible,
+  instable ou ruiné ; prudent, respectueux voire flatteur s'il est puissant et prospère.
 - VARIE tes formulations : ne resserts pas la même phrase ni la même image d'un message à l'autre.
 - Tu réponds UNIQUEMENT par les paroles du personnage : jamais de commentaire sur ta propre
   réponse, jamais de parenthèse explicative, jamais de narration. Tu ne sors pas de la scène.
@@ -310,6 +315,7 @@ def reponse_diplomatique(
     historique: list[dict] | None = None,
     date_jeu: str = "264-03",
     pays_joueur: str = "rome",
+    situation_joueur: str = "",
 ) -> dict:
     """Génère la réponse d'un dirigeant IA. Retourne {reponse, auteur, source}."""
     auteur = nom_dirigeant(faction_cible)
@@ -329,13 +335,14 @@ def reponse_diplomatique(
             "PROFIL": _persona_diplomatie(faction_cible) or "(profil indisponible)",
             "RIVAUX": ", ".join(f"{n} ({_nom_pays(f)})" for f, n in NOMS_DIRIGEANTS.items()
                                 if f != faction_cible) or "(aucun)",
-            "ETAT_MONDE": _trim(etat_monde, 500) or "(état du monde indisponible)",
+            "SITUATION_JOUEUR": situation_joueur or "(situation du joueur mal connue)",
+            "ETAT_MONDE": _trim(etat_monde, 400) or "(état du monde indisponible)",
             "HISTORIQUE": historique_txt,
             "MESSAGE": message_joueur,
         },
     )
 
-    texte = _appel_ollama(prompt, temperature=0.9, num_predict=220)
+    texte = _nettoyer_reponse(_appel_ollama(prompt, temperature=0.9, num_predict=150))
     if texte:
         return {"reponse": texte, "auteur": auteur, "source": "ollama"}
 
@@ -616,6 +623,55 @@ def _nom_pays(faction: str) -> str:
     from models.country import META_FACTIONS
 
     return META_FACTIONS.get(faction, {}).get("nom", faction.capitalize())
+
+
+_RE_META = re.compile(
+    r"\s*\([^)]*\b(notez?|nb|je précise|sous-entend|ironie|concise|pause|réponse)\b[^)]*\)",
+    re.IGNORECASE)
+
+def _nettoyer_reponse(texte: str | None) -> str | None:
+    """Retire les apartés méta que le modèle ajoute parfois (« (Notez: …) », « (Pause) »)
+    pour que le dirigeant ne sorte jamais de son rôle."""
+    if not texte:
+        return texte
+    t = _RE_META.sub("", texte)
+    # Coupe un éventuel bloc d'explication détaché en fin de réponse.
+    for sep in ("\n\n(", "\n(Notez", "\nNotez", "\n\nJe sais ce que"):
+        i = t.find(sep)
+        if i > 40:
+            t = t[:i]
+    t = t.strip()
+    # Si la réponse a été tronquée en plein milieu (cap de tokens), on la ramène à la
+    # dernière phrase complète — fin nette, jamais de mot coupé.
+    if t and t[-1] not in '.!?…»"':
+        fins = list(re.finditer(r'[.!?…»"]', t))
+        if fins and fins[-1].end() > 40:
+            t = t[:fins[-1].end()].strip()
+    return t or None
+
+
+def resume_situation(pays: dict, nom: str) -> str:
+    """Résumé LISIBLE de l'état d'un royaume (stabilité, prospérité, puissance) pour
+    que les dirigeants y réagissent. Pur (ne dépend pas de game_engine)."""
+    if not pays:
+        return f"{nom} : royaume mal connu de tes espions."
+    stab = int(pays.get("stabilite", 60))
+    res = pays.get("ressources", {})
+    orr = res.get("or", 0)
+    pop = res.get("population", 0)
+    nb_terr = len(pays.get("territoires", []))
+    nb_u = sum(u.get("effectif", 1) for u in pays.get("unites", []))
+    age = pays.get("age")
+    s_stab = ("très stable" if stab >= 75 else "stable" if stab >= 55 else
+              "fragile" if stab >= 35 else "au bord de la révolte")
+    s_pros = ("florissant" if orr >= 800 else "prospère" if orr >= 300 else
+              "modeste" if orr >= 80 else "exsangue")
+    s_mil = ("redoutable" if nb_u >= 6 else "modeste" if nb_u >= 2 else "dérisoire")
+    s_taille = ("vaste" if nb_terr >= 8 else "moyen" if nb_terr >= 3 else "petit")
+    extra = " ; il connaît un ÂGE D'OR" if age == "or" else " ; il sombre dans un ÂGE SOMBRE" if age == "sombre" else ""
+    return (f"{nom} est un royaume {s_taille} ({nb_terr} province(s), ~{int(pop)} habitants), "
+            f"actuellement {s_stab} (stabilité {stab}/100), au trésor {s_pros}, "
+            f"à l'armée {s_mil}{extra}.")
 
 
 def _date_lisible(date_jeu: str) -> str:

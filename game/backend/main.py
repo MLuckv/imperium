@@ -284,9 +284,12 @@ def diplomatie_message(req: MessageReq):
         texte=req.texte, tour=tour)
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
 
+    pj = state.get("pays", {}).get(pays_joueur, {})
+    situation_joueur = ai_director.resume_situation(pj, pj.get("nom", pays_joueur))
     res = ai_director.reponse_diplomatique(
         req.cible, req.texte, etat_monde=etat_monde,
-        historique=historique, date_jeu=date_jeu, pays_joueur=pays_joueur)
+        historique=historique, date_jeu=date_jeu, pays_joueur=pays_joueur,
+        situation_joueur=situation_joueur)
 
     conversations.ajouter_message(
         state, req.cible, role="ia", auteur=res["auteur"],
