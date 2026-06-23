@@ -632,15 +632,26 @@ def _date_lisible(date_jeu: str) -> str:
         return f"{date_jeu} av. J.C."
 
 
-def _formater_historique(historique: list[dict] | None) -> str:
-    """Formate l'historique pour le prompt (gère fils de conversation et actions)."""
+def _formater_historique(historique: list[dict] | None, recents: int = 14) -> str:
+    """Formate l'historique pour le prompt SANS perdre le fil sur les longues
+    conversations : on garde TOUTES les paroles du JOUEUR (elles portent les faits —
+    noms, offres, accords) + les `recents` derniers échanges intégralement ; on ne
+    coupe que les anciennes répliques du dirigeant (verbeuses) pour borner la taille."""
     if not historique:
         return "(aucune interaction antérieure)"
+    n = len(historique)
     lignes = []
-    for h in historique[-12:]:
+    for i, h in enumerate(historique):
+        recent = i >= n - recents
         if "role" in h:  # message de conversation
-            qui = "Toi" if h.get("role") == "ia" else "Le joueur"
-            lignes.append(f"- {qui} : {h.get('texte', '')}")
+            est_ia = h.get("role") == "ia"
+            if est_ia and not recent:
+                continue  # on omet tes anciennes répliques pour garder de la place
+            qui = "Toi" if est_ia else "Le joueur"
+            txt = h.get("texte", "")
+            if not recent:
+                txt = _trim(txt, 200)  # compresse les anciens messages du joueur
+            lignes.append(f"- {qui} : {txt}")
         else:  # entrée d'historique_actions
             lignes.append(f"- [{h.get('acteur', '?')}] {h.get('texte', '')}")
     return "\n".join(lignes)

@@ -275,12 +275,14 @@ def diplomatie_message(req: MessageReq):
     pays_joueur = state.get("meta", {}).get("joueur_pays", "rome")
     tour = state.get("meta", {}).get("tour")
 
-    # Ajoute le message du joueur AVANT de répondre, puis passe tout le fil à l'IA.
+    # Ajoute le message du joueur AVANT de répondre, puis passe un LARGE fil à l'IA
+    # (ai_director le compresse intelligemment : garde toutes les paroles du joueur +
+    # les échanges récents → ne perd pas le fil sur les longues conversations).
     conversations.ajouter_message(
         state, req.cible, role="joueur",
         auteur=state.get("pays", {}).get(pays_joueur, {}).get("nom", pays_joueur),
         texte=req.texte, tour=tour)
-    historique = conversations.historique_pour_prompt(state, req.cible)
+    historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
 
     res = ai_director.reponse_diplomatique(
         req.cible, req.texte, etat_monde=etat_monde,
