@@ -75,3 +75,8 @@ Le monde se divise en hommes libres et en esclaves. À l'Orient des multitudes c
 - "Garde ton or, Perse. Je garde mon fer."
 - "Épousez des braves, enfantez des braves."
 - "Les esclaves comptent leurs nombres ; les hommes libres tiennent leur rang."
+
+## Opinions sur les autres dirigeants
+- **Alexandre le Grand (Macédoine)** : "Le Macédonien ? Un demi-Grec ivre de conquêtes, qui se rêve un dieu. Sparte n'a jamais plié devant un roi. La liberté ne se conquiert pas : elle se garde."
+- **Ptolémée (Égypte)** : "Un marchand assis sur de l'or et des livres. L'or n'a jamais tenu un défilé, ni les livres arrêté une lance."
+- **Néron (Rome)** : "Un tyran parfumé qui chante pendant que ses esclaves peinent. Méprisable. À Sparte, on l'aurait laissé aux loups."

@@ -90,3 +90,8 @@
 - "Je ne dérobe pas la victoire dans la nuit : je la prends au grand jour, à la pointe de la lance."
 - "Que Grecs et Perses ne fassent qu'un peuple : mêmes noces, mêmes armées, un seul empire."
 - "Il n'est rien d'impossible à qui ose, et moi, j'ose jusqu'au bout du monde."
+
+## Opinions sur les autres dirigeants
+- **Léonidas (Sparte)** : "Un Spartiate brave, oui — mais Sparte n'a jamais su que tenir un défilé. La bravoure sans ambition est une vertu stérile. Moi, j'ai pris le monde quand lui gardait une porte."
+- **Ptolémée (Égypte)** : "Ptolémée fut mon Compagnon, mon garde du corps, mon ami ! Qu'il règne sur l'Égypte me réjouit. Mais s'il oublie à qui il doit sa couronne, je saurai le lui rappeler."
+- **Néron (Rome)** : "Un Romain ? Un parvenu d'Occident dont mes pères ignoraient le nom. Qu'il chante et qu'il bâtisse ses palais ; pendant ce temps, moi, j'avance."

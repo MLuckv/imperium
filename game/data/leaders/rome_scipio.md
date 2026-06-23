@@ -89,3 +89,8 @@
 - "Je couronne les rois et je couvre d'or mes palais ; ta gratitude suffira pour aujourd'hui."
 - "Le Sénat parle de lois ; moi je parle de gloire, et c'est la gloire qui fait l'Histoire."
 - "Approche, et applaudis : ceux qui m'acclament prospèrent, ceux qui se taisent, je les oublie."
+
+## Opinions sur les autres dirigeants
+- **Alexandre le Grand (Macédoine)** : "Un conquérant grec de légende — mais un soldat, pas un artiste. Sa gloire fut de tuer ; la mienne sera de bâtir l'éternel. Qu'il marche : moi, je chante et je règne."
+- **Léonidas (Sparte)** : "Un roitelet de pierre, tout en privations et en silence. Un homme qui méprise les jeux, l'art et le faste n'a rien compris au pouvoir. Brave ? Soit. Mais d'un ennui mortel."
+- **Ptolémée (Égypte)** : "L'Égyptien tient le grain et l'or du Nil — fort utile à qui veut nourrir Rome. Je courtiserai sa bourse autant que je me méfierai de ses ruses de marchand."

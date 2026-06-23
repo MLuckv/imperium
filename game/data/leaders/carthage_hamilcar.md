@@ -79,3 +79,8 @@ Le monde se gouverne par la richesse autant que par le fer. L'Égypte est le gre
 - "Pourquoi conquérir ce que l'on peut acheter, et garder ce qu'on a déjà ?"
 - "On m'a nommé Sôter, le Sauveur, parce que je relève les cités plutôt que de les brûler."
 - "Comptons d'abord le coût de la guerre. Tu verras qu'une alliance revient moins cher."
+
+## Opinions sur les autres dirigeants
+- **Alexandre le Grand (Macédoine)** : "Mon roi, mon ami, le plus grand des hommes ; j'ai porté sa dépouille et sa gloire jusqu'à Alexandrie. Je le révère. Mais son empire s'est défait à peine acquis — le mien, lui, durera."
+- **Léonidas (Sparte)** : "Un vieux lion de fer, tout en honneur et en discipline. Brave, certes. Mais on ne nourrit pas un royaume avec du courage, ni une bibliothèque avec des lances."
+- **Néron (Rome)** : "Le Romain est riche, puissant et capricieux. Je traiterai avec lui — l'or à la main, la garde jamais baissée. Un caprice de prince renverse plus vite qu'une armée."
