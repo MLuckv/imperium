@@ -306,6 +306,101 @@ def _extraire_json(texte: str) -> dict | None:
 
 
 # =====================================================================
+#  Conseiller du joueur (chat + directives libres → projets)
+# =====================================================================
+# Identité du conseiller selon la civilisation du JOUEUR (ton culturel).
+CONSEILLERS = {
+    "rome": ("Cassius, conseiller romain", "sénateur retors et loyal ; parle avec la gravité "
+             "de Rome, cite le Sénat, la gloire, l'aigle et la pourpre ; vouvoie « Auguste maître »."),
+    "macedoine": ("Cleitos, Compagnon du roi", "hétaïre macédonien franc et martial ; parle de "
+                  "phalange, de conquête, d'honneur ; appelle le joueur « mon roi »."),
+    "sparte": ("l'Éphore de Sparte", "magistrat austère et laconique ; phrases brèves et "
+               "tranchantes ; méprise le luxe ; parle de discipline, de fer et de liberté."),
+    "carthage": ("Manéthon, vizir d'Égypte", "vizir lettré et calculateur ; parle du Nil, du "
+                 "grain, de l'or, des scribes et de la Bibliothèque ; appelle le joueur « Pharaon »."),
+}
+
+TEMPLATE_CONSEILLER = """Tu es {IDENTITE}, le conseiller fidèle du souverain de {PAYS} en {DATE}.
+Profil : {STYLE}. Tu t'adresses à TON souverain (le joueur), jamais à un étranger.
+
+ÉTAT ACTUEL DU ROYAUME : {SITUATION}
+PROJETS SECRETS EN COURS : {PROJETS}
+PUISSANCES VOISINES (et leur capitale) : {RIVAUX}
+
+TON RÔLE :
+- Faire le point sur l'état du royaume et conseiller CONCRÈTEMENT quoi améliorer.
+- Si on te demande un rapport, décris l'avancement des projets en cours (ci-dessus).
+- RÈGLE D'OR : dès que le souverain ORDONNE une entreprise concrète (verbe d'action :
+  engage, envoie, espionne, forme, lève, bâtis, sabote, infiltre, soudoie, organise…),
+  tu NE refuses JAMAIS : tu l'organises et tu REMPLIS "directive" (coût en or et durée
+  que TU fixes, raisonnables). Tu ne remplis "directive" QUE pour un ordre concret.
+
+Tu réponds en JSON STRICT, rien d'autre. Schéma :
+{{"reponse": "<ce que tu dis à voix haute, EN CARACTÈRE, 2 à 4 phrases>",
+  "directive": null | {{"nom":"<nom court>","type":"espionnage|garnison|sabotage|commerce|autre",
+  "cible_faction":"<un id parmi {RIVAUX} ou null>","cout_or":<entier>,"duree":<entier tours>,
+  "rapport":"<une phrase sur ce que fait ce projet>"}}}}
+
+EXEMPLES (réponds EXACTEMENT dans ce format) :
+Souverain: "Envoie des espions chez les Spartiates." →
+{{"reponse":"Il en sera fait, mon souverain : nos agents partent dès ce soir.","directive":{{"nom":"Espions à Sparte","type":"espionnage","cible_faction":"sparte","cout_or":90,"duree":4,"rapport":"Nos agents s'infiltrent dans les hautes sphères spartiates."}}}}
+Souverain: "Lève une garnison cachée au nord." →
+{{"reponse":"Une troupe se rassemblera dans l'ombre, loin des regards.","directive":{{"nom":"Garnison du Nord","type":"garnison","cible_faction":null,"cout_or":140,"duree":3,"rapport":"Une garnison secrète se forme au nord."}}}}
+Souverain: "Comment se porte le royaume ?" →
+{{"reponse":"Rome prospère, mais l'armée est faible ; renforçons-la.","directive":null}}
+
+Coûts indicatifs : espionnage 60-150 or (3-5 tours), garnison 80-220 or (2-4 tours), sabotage 100-200 or (3-5 tours).
+
+ORDRE / QUESTION DU SOUVERAIN : "{MESSAGE}"
+JSON :"""
+
+
+def conseil(faction: str, message: str, situation: str, projets: list[dict],
+            historique: list[dict] | None = None, date_jeu: str = "5-03") -> dict:
+    """Réponse du conseiller du joueur + éventuelle directive (projet à créer).
+    Retourne {reponse, directive, source}."""
+    ident, style = CONSEILLERS.get(faction, ("ton conseiller", "fidèle et avisé"))
+    proj_txt = "; ".join(f"{p.get('nom')} ({p.get('statut')}, {p.get('tours_restants',0)} tours restants)"
+                         for p in projets) or "(aucun)"
+    prompt = _remplir(TEMPLATE_CONSEILLER, {
+        "IDENTITE": ident, "STYLE": style, "PAYS": _nom_pays(faction),
+        "DATE": _date_lisible(date_jeu), "SITUATION": situation,
+        "PROJETS": proj_txt,
+        "RIVAUX": ", ".join(f"{_nom_pays(f)} [id={f}]" for f in CONSEILLERS if f != faction),
+        "MESSAGE": message,
+    })
+    if historique:
+        prompt = f"FIL RÉCENT AVEC TON SOUVERAIN :\n{_formater_historique(historique)}\n\n" + prompt
+    brut = _appel_ollama(prompt, temperature=0.7, num_predict=240, format_json=True)
+    data = None
+    if brut:
+        try:
+            data = json.loads(brut)
+        except Exception:
+            m = re.search(r"\{.*\}", brut, re.DOTALL)
+            if m:
+                try:
+                    data = json.loads(m.group(0))
+                except Exception:
+                    data = None
+    if isinstance(data, dict) and data.get("reponse"):
+        rep = _nettoyer_reponse(str(data["reponse"]))
+        directive = data.get("directive")
+        if not isinstance(directive, dict):
+            directive = None
+        return {"reponse": rep, "directive": directive, "source": "ollama"}
+    # Repli déterministe (Ollama absent/échec) : conseil générique, pas de directive.
+    return {"reponse": _conseil_repli(faction, message, situation), "directive": None,
+            "source": "fallback"}
+
+
+def _conseil_repli(faction: str, message: str, situation: str) -> str:
+    ident = CONSEILLERS.get(faction, ("ton conseiller", ""))[0]
+    return (f"({ident}) {situation} Concentrons nos efforts sur la stabilité et le trésor, "
+            f"mon souverain ; donne-moi un ordre précis et je m'en charge.")
+
+
+# =====================================================================
 #  1) Réponse diplomatique d'un dirigeant à un message joueur
 # =====================================================================
 def reponse_diplomatique(

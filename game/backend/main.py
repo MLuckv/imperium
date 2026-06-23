@@ -91,6 +91,10 @@ class MessageReq(BaseModel):
     texte: str
 
 
+class ConseilReq(BaseModel):
+    texte: str
+
+
 class MoveReq(BaseModel):
     unit_id: str
     territoire: str
@@ -307,6 +311,43 @@ def diplomatie_conversation(cible: str):
     if state is None:
         raise HTTPException(status_code=404, detail="Aucune partie en cours.")
     return {"cible": cible, "messages": conversations.get_conversation(state, cible)}
+
+
+@app.post("/api/conseiller/message")
+def conseiller_message(req: ConseilReq):
+    """Conseiller du joueur : fait le point, conseille, et exécute des DIRECTIVES libres
+    (espionnage, garnison secrète…) en créant un PROJET sur la carte dont il décide le
+    coût et la durée. {reponse, projet, projets, source, state}."""
+    state = ws.charger_etat_courant()
+    if state is None:
+        raise HTTPException(status_code=404, detail="Aucune partie en cours.")
+    pays_joueur = state.get("meta", {}).get("joueur_pays", "rome")
+    date_jeu = state.get("meta", {}).get("date_jeu", "5-03")
+    tour = state.get("meta", {}).get("tour")
+    pj = state.get("pays", {}).get(pays_joueur, {})
+    situation = ai_director.resume_situation(pj, pj.get("nom", pays_joueur))
+
+    conversations.ajouter_message(
+        state, "_conseiller", role="joueur",
+        auteur=pj.get("nom", pays_joueur), texte=req.texte, tour=tour)
+    historique = conversations.historique_pour_prompt(state, "_conseiller", limite=40)
+
+    res = ai_director.conseil(pays_joueur, req.texte, situation, pj.get("projets", []),
+                              historique=historique, date_jeu=date_jeu)
+    projet = None
+    if res.get("directive"):
+        appl = game_engine.appliquer_directive_conseiller(state, res["directive"])
+        if appl.get("ok"):
+            projet = appl["projet"]
+        else:
+            res["reponse"] = (res.get("reponse") or "") + f" (Hélas, {appl.get('raison')}.)"
+
+    conversations.ajouter_message(
+        state, "_conseiller", role="ia", auteur="Conseiller",
+        texte=res.get("reponse", ""), tour=tour)
+    ws.sauver_etat_courant(state)
+    return {"reponse": res.get("reponse", ""), "source": res.get("source"),
+            "projet": projet, "projets": pj.get("projets", []), "state": state}
 
 
 @app.get("/api/catalog")

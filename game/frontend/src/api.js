@@ -86,6 +86,9 @@ export const sendDiplomaticMessage = (cible, texte, opts) =>
     ...opts,
   })
 
+export const sendConseillerMessage = (texte, opts) =>
+  request('/api/conseiller/message', { method: 'POST', body: { texte }, ...opts })
+
 export const moveUnit = (unitId, territoire, opts) =>
   request('/api/unit/move', { method: 'POST', body: { unit_id: unitId, territoire }, ...opts })
 

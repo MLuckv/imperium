@@ -40,6 +40,13 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
 
 ## 🚀 Phase 2 (en cours)
 
+- [ ] **Vitesse des réponses IA** — objectif **≤ 5 s** par réponse (actuellement ~7–15 s
+  selon la verbosité du dirigeant + la richesse du contexte). À optimiser plus tard
+  (tokens, contexte allégé, modèle plus rapide/quantisé).
+- [ ] **Conseiller dans l'onglet Diplomatie** — chat IA pour le joueur : fait le point sur
+  l'état du royaume, conseille, et exécute des DIRECTIVES libres (non codées) en créant
+  des « points » sur la carte (espions, garnison secrète…) dont IL décide le coût/durée.
+- [ ] **Dirigeants qui écrivent au joueur d'eux-mêmes** (reproches, ont repéré un espion…).
 - [x] **Personas historiques des 4 dirigeants** — fiches recherchées (vie/histoire,
   façon de parler, ennemis, alliés, répliques) dans `game/data/leaders/`, utilisées
   comme mémoire par l'IA. Testé : réponses en caractère, anachronismes traités comme

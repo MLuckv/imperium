@@ -5,6 +5,7 @@ import ResourceBar from './components/ResourceBar'
 import ProductionModal from './components/ProductionModal'
 import RecruitmentModal from './components/RecruitmentModal'
 import DiplomacyModal from './components/DiplomacyModal'
+import ConseillerModal from './components/ConseillerModal'
 import TechTree from './components/TechTree'
 import DogmeTree from './components/DogmeTree'
 import { factionColor, factionLabel, leaderName, reputationTone, num } from './lib/format'
@@ -258,6 +259,7 @@ export default function App() {
         <button onClick={() => setModal('tech')} className="btn btn-ghost">Technologies</button>
         <button onClick={() => setModal('dogmes')} className="btn btn-ghost">Dogmes</button>
         <button onClick={() => setModal('civs')} className="btn btn-ghost">Diplomatie</button>
+        <button onClick={() => setModal('conseiller')} className="btn btn-ghost">Conseiller</button>
         {impotsOpts.length > 0 && (
           <label className="flex items-center gap-1 text-xs text-parchment/70">
             Impôts
@@ -288,6 +290,9 @@ export default function App() {
       )}
       {diploTarget && state.pays[diploTarget] && (
         <DiplomacyModal cible={diploTarget} state={state} onClose={() => setDiploTarget(null)} onStateChange={setState} />
+      )}
+      {modal === 'conseiller' && (
+        <ConseillerModal state={state} onClose={() => setModal(null)} onStateChange={setState} />
       )}
     </div>
   )

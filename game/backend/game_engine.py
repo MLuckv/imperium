@@ -220,6 +220,7 @@ def new_game(joueur_pays: str = "rome") -> dict:
         p["prov_stab"] = {tid: 60.0 for tid in p.get("territoires", [])}
         p["age"] = None; p["age_compteur"] = 0; p["tours_guerre"] = 0; p["prov_modif"] = {}
         p["corruption"] = 0.0; p["inflation"] = 0.0
+        p["projets"] = []  # entreprises libres ordonnées via le conseiller
         pays[fid] = p
 
     state = {
@@ -776,6 +777,60 @@ def _declencher_catastrophes(state: dict, evenements: list) -> None:
                            "texte": cat["texte"].format(prov=_nom_territoire(tid)) + " !"})
 
 
+def appliquer_directive_conseiller(state: dict, directive: dict) -> dict:
+    """Applique une DIRECTIVE libre décidée par le conseiller : prélève l'or (selon le
+    coût qu'IL a fixé) et crée un PROJET (un « point » sur la carte). Générique : aucun
+    type d'action n'est codé en dur. Retourne {ok, projet|raison}."""
+    joueur = state.get("meta", {}).get("joueur_pays")
+    pays = state.get("pays", {}).get(joueur, {})
+    res = pays.setdefault("ressources", {})
+    cout = _cout_inflation(pays, max(0, int(directive.get("cout_or", 0) or 0)))
+    cout_res = {r: int(v) for r, v in (directive.get("cout_res", {}) or {}).items() if v}
+    if res.get("or", 0) < cout:
+        return {"ok": False, "raison": f"le trésor est insuffisant ({cout} or nécessaires)"}
+    manque = next((r for r, v in cout_res.items() if res.get(r, 0) < v), None)
+    if manque:
+        return {"ok": False, "raison": f"il manque du {manque} ({cout_res[manque]} requis)"}
+    res["or"] = round(res.get("or", 0) - cout, 1)
+    for r, v in cout_res.items():
+        res[r] = round(res.get(r, 0) - v, 1)
+    dur = max(1, int(directive.get("duree", 3) or 3))
+    cible = directive.get("cible_faction")
+    if cible:  # tolère les noms d'affichage (Égypte→carthage, etc.)
+        alias = {"egypte": "carthage", "égypte": "carthage", "sparte": "sparte",
+                 "rome": "rome", "macedoine": "macedoine", "macédoine": "macedoine"}
+        cible = alias.get(str(cible).strip().lower(), cible)
+    cible = cible if cible in state.get("pays", {}) and cible != joueur else None
+    origine = _capitale_faction(joueur) or (pays.get("territoires") or [None])[0]
+    projets = pays.setdefault("projets", [])
+    projet = {
+        "id": f"proj-{len(projets) + 1}",
+        "nom": str(directive.get("nom") or "Projet secret")[:48],
+        "type": str(directive.get("type") or "autre"),
+        "territoire": origine,
+        "cible_faction": cible,
+        "cible_territoire": _capitale_faction(cible) if cible else None,
+        "cout_or": cout, "cout_res": cout_res,
+        "duree": dur, "tours_restants": dur,
+        "statut": "en_cours",
+        "rapport": str(directive.get("rapport") or "")[:200],
+        "journal": [],
+    }
+    projets.append(projet)
+    return {"ok": True, "projet": projet}
+
+
+def _avancer_projets(pays: dict, evenements: list) -> None:
+    """Fait progresser les projets du conseiller ; les marque actifs à l'échéance."""
+    for p in pays.get("projets", []):
+        if p.get("statut") == "en_cours":
+            p["tours_restants"] = p.get("tours_restants", 1) - 1
+            if p["tours_restants"] <= 0:
+                p["statut"] = "actif"
+                evenements.append({"type": "conseiller", "faction": pays.get("id"),
+                                   "texte": f"« {p.get('nom')} » est désormais opérationnel."})
+
+
 def _verifier_revolte(pays: dict, evenements: list) -> None:
     """Une province dont la stabilité s'effondre fait SÉCESSION + mutinerie possible.
     La capitale n'est jamais perdue."""
@@ -1168,6 +1223,7 @@ def end_turn(state: dict) -> dict:
         _appliquer_production(p, state)
         _decrementer_modificateurs(p)  # les effets d'événements s'estompent
         _decrementer_prov_modif(p)     # les catastrophes locales s'estompent
+        _avancer_projets(p, evenements)  # projets du conseiller (espions, garnisons…)
         _avancer_constructions(p, evenements)  # chantiers : -1 tour, livraison
         _maj_moral(p)
         _progresser_recherche(p, evenements)

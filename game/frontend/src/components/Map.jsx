@@ -178,6 +178,35 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       star.anchor.set(0.5, 0.5); star.position.set(c[0], c[1] - 2); star.eventMode = 'none'; labels.addChild(star)
     }
 
+    // Projets du conseiller (espions, garnisons…) : point à l'origine + trait vers la cible.
+    const stPl = stateRef.current; const jid = joueurId()
+    const mesProjets = (stPl && stPl.pays && stPl.pays[jid] && stPl.pays[jid].projets) || []
+    const ICONE = { espionnage: '🕵', garnison: '🛡', sabotage: '🔥', commerce: '⚖' }
+    mesProjets.forEach((p, pi) => {
+      const base = centreOf(p.territoire); if (!base) return
+      const o = [base[0] + (pi % 2 ? 11 : -11), base[1] - 14 - pi * 10]  // décale les points empilés
+      const cible = p.cible_territoire && centreOf(p.cible_territoire)
+      const actif = p.statut === 'actif'
+      const col = actif ? 0x7fc4a0 : 0xd49a3a
+      if (cible) {  // trait pointillé vers la cible
+        const g = new Graphics()
+        const steps = 14
+        for (let i = 0; i < steps; i += 2) {
+          const x1 = o[0] + (cible[0] - o[0]) * (i / steps), y1 = o[1] + (cible[1] - o[1]) * (i / steps)
+          const x2 = o[0] + (cible[0] - o[0]) * ((i + 1) / steps), y2 = o[1] + (cible[1] - o[1]) * ((i + 1) / steps)
+          g.moveTo(x1, y1); g.lineTo(x2, y2)
+        }
+        g.stroke({ width: 1.4, color: col, alpha: 0.8 }); g.eventMode = 'none'; labels.addChild(g)
+      }
+      const dot = new Graphics(); dot.circle(o[0], o[1], 6)
+      dot.fill({ color: 0x14110c, alpha: 0.6 }); dot.stroke({ width: 1.4, color: col })
+      dot.eventMode = 'none'; labels.addChild(dot)
+      const ic = new Text({ text: ICONE[p.type] || '✦', style: { fontFamily: 'Georgia, serif', fontSize: 10 } })
+      ic.anchor.set(0.5, 0.5); ic.position.set(o[0], o[1]); ic.eventMode = 'none'; labels.addChild(ic)
+      const lab = new Text({ text: p.nom, style: { fontFamily: 'Georgia, serif', fontSize: 11, fontWeight: '700', fill: col, stroke: { color: 0x14110c, width: 3 } } })
+      lab.anchor.set(0.5, 1); lab.position.set(o[0], o[1] - 8); lab.eventMode = 'none'; labels.addChild(lab)
+    })
+
     for (const a of collectArmies()) {
       const [x, y] = a.pos; const mine = a.faction === joueurId()
       const col = hexToNumber(factionColor(a.faction)); const sel = mine && selUnitTerrRef.current === a.territoire
