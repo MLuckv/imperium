@@ -325,6 +325,8 @@ Profil : {STYLE}. Tu t'adresses à TON souverain (le joueur), jamais à un étra
 
 ÉTAT ACTUEL DU ROYAUME : {SITUATION}
 PROJETS SECRETS EN COURS : {PROJETS}
+RENSEIGNEMENTS DE TES ESPIONS (rapporte-les FIDÈLEMENT si on te demande un rapport) :
+{RENSEIGNEMENTS}
 PUISSANCES VOISINES (et leur capitale) : {RIVAUX}
 
 TON RÔLE :
@@ -356,7 +358,8 @@ JSON :"""
 
 
 def conseil(faction: str, message: str, situation: str, projets: list[dict],
-            historique: list[dict] | None = None, date_jeu: str = "5-03") -> dict:
+            historique: list[dict] | None = None, date_jeu: str = "5-03",
+            renseignements: str = "") -> dict:
     """Réponse du conseiller du joueur + éventuelle directive (projet à créer).
     Retourne {reponse, directive, source}."""
     ident, style = CONSEILLERS.get(faction, ("ton conseiller", "fidèle et avisé"))
@@ -366,6 +369,7 @@ def conseil(faction: str, message: str, situation: str, projets: list[dict],
         "IDENTITE": ident, "STYLE": style, "PAYS": _nom_pays(faction),
         "DATE": _date_lisible(date_jeu), "SITUATION": situation,
         "PROJETS": proj_txt,
+        "RENSEIGNEMENTS": renseignements or "(aucun espion n'a encore livré de rapport)",
         "RIVAUX": ", ".join(f"{_nom_pays(f)} [id={f}]" for f in CONSEILLERS if f != faction),
         "MESSAGE": message,
     })

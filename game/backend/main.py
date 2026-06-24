@@ -327,13 +327,44 @@ def conseiller_message(req: ConseilReq):
     pj = state.get("pays", {}).get(pays_joueur, {})
     situation = ai_director.resume_situation(pj, pj.get("nom", pays_joueur))
 
+    # Renseignements des espions OPÉRATIONNELS : ils livrent l'état réel de leur cible
+    # (et aperçoivent ses propres projets secrets).
+    lignes_intel = []
+    for p in pj.get("projets", []):
+        if p.get("type") != "espionnage" or not p.get("cible_faction"):
+            continue
+        cf = p["cible_faction"]; cp = state.get("pays", {}).get(cf, {})
+        if p.get("statut") == "actif":
+            intel = ai_director.resume_situation(cp, cp.get("nom", cf))
+            secrets = [q.get("nom") for q in cp.get("projets", []) if q.get("type") in ("espionnage", "sabotage")]
+            if secrets:
+                intel += " Manœuvres secrètes repérées : " + ", ".join(secrets) + "."
+            lignes_intel.append(f"[{p['nom']}] {intel}")
+        else:
+            lignes_intel.append(f"[{p['nom']}] Agents en route, rapport dans {p.get('tours_restants', '?')} tour(s).")
+    renseignements = "\n".join(lignes_intel)
+
     conversations.ajouter_message(
         state, "_conseiller", role="joueur",
         auteur=pj.get("nom", pays_joueur), texte=req.texte, tour=tour)
     historique = conversations.historique_pour_prompt(state, "_conseiller", limite=40)
 
     res = ai_director.conseil(pays_joueur, req.texte, situation, pj.get("projets", []),
-                              historique=historique, date_jeu=date_jeu)
+                              historique=historique, date_jeu=date_jeu,
+                              renseignements=renseignements)
+    # Si le conseiller n'a pas fixé de cible, on la déduit du texte de l'ordre (pour le
+    # tracé sur la carte). Mots-clés → faction.
+    if res.get("directive") and not res["directive"].get("cible_faction"):
+        low = req.texte.lower()
+        cibles = {"sparte": "sparte", "léonidas": "sparte", "leonidas": "sparte",
+                  "macédoine": "macedoine", "macedoine": "macedoine", "alexandre": "macedoine",
+                  "égypte": "carthage", "egypte": "carthage", "ptolémée": "carthage",
+                  "ptolemee": "carthage", "nil": "carthage", "alexandrie": "carthage",
+                  "rome": "rome", "néron": "rome", "neron": "rome"}
+        for kw, fid in cibles.items():
+            if kw in low and fid != pays_joueur and fid in state.get("pays", {}):
+                res["directive"]["cible_faction"] = fid
+                break
     projet = None
     if res.get("directive"):
         appl = game_engine.appliquer_directive_conseiller(state, res["directive"])
