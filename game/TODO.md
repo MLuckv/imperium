@@ -43,9 +43,11 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
 - [ ] **Vitesse des réponses IA** — objectif **≤ 5 s** par réponse (actuellement ~7–15 s
   selon la verbosité du dirigeant + la richesse du contexte). À optimiser plus tard
   (tokens, contexte allégé, modèle plus rapide/quantisé).
-- [ ] **Conseiller dans l'onglet Diplomatie** — chat IA pour le joueur : fait le point sur
-  l'état du royaume, conseille, et exécute des DIRECTIVES libres (non codées) en créant
-  des « points » sur la carte (espions, garnison secrète…) dont IL décide le coût/durée.
+- [x] **Conseiller dans l'onglet Diplomatie** — chat IA : point sur le royaume, conseils,
+  DIRECTIVES libres → « points » sur la carte (coût/durée décidés par l'IA, en mois).
+  Espions opérationnels = vrais renseignements sur la cible. Rébellion bien financée =
+  une province NON-capitale ennemie fait sécession / rejoint le joueur (capitale
+  imprenable). Sabotage = dégâts. Garde-fous : refus des ordres impossibles/magiques.
 - [ ] **Dirigeants qui écrivent au joueur d'eux-mêmes** (reproches, ont repéré un espion…).
 - [x] **Personas historiques des 4 dirigeants** — fiches recherchées (vie/histoire,
   façon de parler, ennemis, alliés, répliques) dans `game/data/leaders/`, utilisées

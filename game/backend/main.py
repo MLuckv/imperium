@@ -352,6 +352,10 @@ def conseiller_message(req: ConseilReq):
     res = ai_director.conseil(pays_joueur, req.texte, situation, pj.get("projets", []),
                               historique=historique, date_jeu=date_jeu,
                               renseignements=renseignements)
+    # Filet de sécurité : un ordre impossible/magique ne crée JAMAIS de projet.
+    if ai_director.ordre_impossible(req.texte) and res.get("directive"):
+        res["directive"] = None
+        res["reponse"] = (res.get("reponse") or "") + " (Cela dépasse le pouvoir des hommes, mon souverain.)"
     # Si le conseiller n'a pas fixé de cible, on la déduit du texte de l'ordre (pour le
     # tracé sur la carte). Mots-clés → faction.
     if res.get("directive") and not res["directive"].get("cible_faction"):

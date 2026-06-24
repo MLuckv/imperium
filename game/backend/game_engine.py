@@ -820,15 +820,70 @@ def appliquer_directive_conseiller(state: dict, directive: dict) -> dict:
     return {"ok": True, "projet": projet}
 
 
-def _avancer_projets(pays: dict, evenements: list) -> None:
-    """Fait progresser les projets du conseiller ; les marque actifs à l'échéance."""
+def _avancer_projets(pays: dict, state: dict, evenements: list) -> None:
+    """Fait progresser les projets du conseiller. À l'échéance : les projets PASSIFS
+    (espionnage, garnison, commerce) deviennent « actifs » ; les projets HOSTILES
+    (rébellion, sabotage) produisent leur EFFET puis se terminent."""
     for p in pays.get("projets", []):
-        if p.get("statut") == "en_cours":
-            p["tours_restants"] = p.get("tours_restants", 1) - 1
-            if p["tours_restants"] <= 0:
-                p["statut"] = "actif"
-                evenements.append({"type": "conseiller", "faction": pays.get("id"),
-                                   "texte": f"« {p.get('nom')} » est désormais opérationnel."})
+        if p.get("statut") != "en_cours":
+            continue
+        p["tours_restants"] = p.get("tours_restants", 1) - 1
+        if p["tours_restants"] > 0:
+            continue
+        typ = (p.get("type") or "").lower()
+        if typ in ("espionnage", "garnison", "commerce"):
+            p["statut"] = "actif"
+            evenements.append({"type": "conseiller", "faction": pays.get("id"),
+                               "texte": f"« {p.get('nom')} » est désormais opérationnel."})
+        else:  # rébellion, sabotage, autre entreprise hostile : effet ponctuel
+            _effet_projet_termine(state, pays, p, evenements)
+            p["statut"] = "termine"
+
+
+def _effet_projet_termine(state: dict, pays: dict, projet: dict, evenements: list) -> None:
+    """Effet GÉNÉRIQUE d'un projet hostile achevé (selon son type + ses MOYENS). La
+    capitale ennemie est TOUJOURS imprenable par ce biais."""
+    cf = projet.get("cible_faction")
+    cible = state.get("pays", {}).get(cf) if cf else None
+    if not cible:
+        evenements.append({"type": "projet", "faction": pays.get("id"),
+                           "texte": f"« {projet.get('nom')} » s'achève sans cible claire."})
+        return
+    typ = (projet.get("type") or "").lower()
+    nomp, nomc = projet.get("nom"), META_FACTIONS.get(cf, {}).get("nom", cf)
+    cap = _capitale_faction(cf)
+    non_cap = [t for t in cible.get("territoires", []) if t != cap]
+    cout = projet.get("cout_or", 0)
+    rebelle = typ in ("rebellion", "militaire", "revolte") or "rebel" in (projet.get("nom", "").lower())
+    if rebelle:
+        if not non_cap:
+            evenements.append({"type": "projet", "faction": pays.get("id"),
+                               "texte": f"« {nomp} » : la révolte n'a pas pris — {nomc} ne tient que sa capitale, imprenable."})
+            return
+        prov = random.choice(non_cap)
+        cible["territoires"] = [t for t in cible["territoires"] if t != prov]
+        cible["villes"] = [v for v in cible.get("villes", []) if v.get("territoire") != prov]
+        cible.get("prov_stab", {}).pop(prov, None)
+        if cout >= 300:  # moyens suffisants : la province soulevée te rejoint
+            pays.setdefault("territoires", []).append(prov)
+            pays.setdefault("prov_stab", {})[prov] = 32.0
+            evenements.append({"type": "projet", "faction": pays.get("id"),
+                               "texte": f"« {nomp} » : {_nom_territoire(prov)} se soulève contre {nomc} et REJOINT votre cause !"})
+        else:  # moyens modestes : la province devient indépendante (affaiblit l'ennemi)
+            evenements.append({"type": "projet", "faction": pays.get("id"),
+                               "texte": f"« {nomp} » : {_nom_territoire(prov)} se soulève contre {nomc} et proclame son indépendance !"})
+    elif typ == "sabotage":
+        res = cible.setdefault("ressources", {})
+        perte = round(res.get("or", 0) * 0.2, 1)
+        res["or"] = max(0.0, round(res.get("or", 0) - perte, 1))
+        if non_cap:
+            prov = random.choice(non_cap)
+            cible.setdefault("prov_stab", {})[prov] = max(0.0, cible.get("prov_stab", {}).get(prov, 50) - 25)
+        evenements.append({"type": "projet", "faction": pays.get("id"),
+                           "texte": f"« {nomp} » : sabotage réussi en {nomc} (−{perte} or, troubles)."})
+    else:
+        evenements.append({"type": "projet", "faction": pays.get("id"),
+                           "texte": f"« {nomp} » est mené à bien."})
 
 
 def _verifier_revolte(pays: dict, evenements: list) -> None:
@@ -1223,7 +1278,7 @@ def end_turn(state: dict) -> dict:
         _appliquer_production(p, state)
         _decrementer_modificateurs(p)  # les effets d'événements s'estompent
         _decrementer_prov_modif(p)     # les catastrophes locales s'estompent
-        _avancer_projets(p, evenements)  # projets du conseiller (espions, garnisons…)
+        _avancer_projets(p, state, evenements)  # projets du conseiller (espions, garnisons…)
         _avancer_constructions(p, evenements)  # chantiers : -1 tour, livraison
         _maj_moral(p)
         _progresser_recherche(p, evenements)

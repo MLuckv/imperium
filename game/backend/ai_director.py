@@ -332,26 +332,38 @@ PUISSANCES VOISINES (et leur capitale) : {RIVAUX}
 TON RÔLE :
 - Faire le point sur l'état du royaume et conseiller CONCRÈTEMENT quoi améliorer.
 - Si on te demande un rapport, décris l'avancement des projets en cours (ci-dessus).
-- RÈGLE D'OR : dès que le souverain ORDONNE une entreprise concrète (verbe d'action :
-  engage, envoie, espionne, forme, lève, bâtis, sabote, infiltre, soudoie, organise…),
-  tu NE refuses JAMAIS : tu l'organises et tu REMPLIS "directive" (coût en or et durée
-  que TU fixes, raisonnables). Tu ne remplis "directive" QUE pour un ordre concret.
+- RÈGLE D'OR : dès que le souverain ORDONNE une entreprise concrète et PLAUSIBLE pour
+  l'Antiquité (engage, envoie, espionne, forme, lève, bâtis, sabote, infiltre, soulève,
+  finance une rébellion…), tu l'organises et tu REMPLIS "directive" : tu fixes un coût en
+  or et une DURÉE EN MOIS raisonnables. directive QUE pour un ordre concret.
+- LIMITES — tu REFUSES tout ordre impossible, magique, fantastique, anachronique ou qui
+  briserait le monde (invoquer un démon, lancer une arme moderne ou un explosif, faire
+  DISPARAÎTRE une cité ou une province, ressusciter les morts, téléporter une armée…) :
+  alors directive=null et tu réponds par un refus EN CARACTÈRE (incompréhension, ironie).
+  Tu ne peux JAMAIS faire tomber ni faire disparaître une CAPITALE ennemie par ces moyens.
+- DURÉES en MOIS (1 mois = 1 tour) : une entreprise ambitieuse (lever une rébellion,
+  bâtir un réseau d'influence) prend des ANNÉES — souvent 12 à 36 mois.
 
 Tu réponds en JSON STRICT, rien d'autre. Schéma :
 {{"reponse": "<ce que tu dis à voix haute, EN CARACTÈRE, 2 à 4 phrases>",
-  "directive": null | {{"nom":"<nom court>","type":"espionnage|garnison|sabotage|commerce|autre",
-  "cible_faction":"<un id parmi {RIVAUX} ou null>","cout_or":<entier>,"duree":<entier tours>,
+  "directive": null | {{"nom":"<nom court>","type":"espionnage|garnison|sabotage|rebellion|commerce|autre",
+  "cible_faction":"<un id parmi {RIVAUX} ou null>","cout_or":<entier>,"duree":<entier en MOIS>,
   "rapport":"<une phrase sur ce que fait ce projet>"}}}}
 
 EXEMPLES (réponds EXACTEMENT dans ce format) :
 Souverain: "Envoie des espions chez les Spartiates." →
 {{"reponse":"Il en sera fait, mon souverain : nos agents partent dès ce soir.","directive":{{"nom":"Espions à Sparte","type":"espionnage","cible_faction":"sparte","cout_or":90,"duree":4,"rapport":"Nos agents s'infiltrent dans les hautes sphères spartiates."}}}}
-Souverain: "Lève une garnison cachée au nord." →
-{{"reponse":"Une troupe se rassemblera dans l'ombre, loin des regards.","directive":{{"nom":"Garnison du Nord","type":"garnison","cible_faction":null,"cout_or":140,"duree":3,"rapport":"Une garnison secrète se forme au nord."}}}}
+Souverain: "Finance une rébellion pour soulever une province d'Égypte." →
+{{"reponse":"J'allume la révolte chez les Lagides, mais cela prendra des années et beaucoup d'or.","directive":{{"nom":"Rébellion en Égypte","type":"rebellion","cible_faction":"carthage","cout_or":350,"duree":18,"rapport":"Nos agents arment et soulèvent une province égyptienne."}}}}
+Souverain: "Forme une armée pour prendre une province d'Égypte, sans toucher Alexandrie." →
+{{"reponse":"Des troupes se lèveront pour fondre sur leurs provinces, jamais sur leur capitale.","directive":{{"nom":"Campagne d'Égypte","type":"rebellion","cible_faction":"carthage","cout_or":320,"duree":15,"rapport":"Une armée se forme pour arracher une province à l'Égypte."}}}}
+Souverain: "Invoque un démon pour détruire Sparte." →
+{{"reponse":"Mon souverain... les démons n'obéissent pas au Sénat. Donnez-moi des hommes et de l'or, pas des sortilèges.","directive":null}}
 Souverain: "Comment se porte le royaume ?" →
 {{"reponse":"Rome prospère, mais l'armée est faible ; renforçons-la.","directive":null}}
 
-Coûts indicatifs : espionnage 60-150 or (3-5 tours), garnison 80-220 or (2-4 tours), sabotage 100-200 or (3-5 tours).
+Coûts indicatifs : espionnage 60-150 or (3-6 mois), garnison 80-220 or (3-8 mois),
+sabotage 100-220 or (4-8 mois), rébellion 250-500 or (12-36 mois).
 
 ORDRE / QUESTION DU SOUVERAIN : "{MESSAGE}"
 JSON :"""
@@ -747,6 +759,18 @@ def _nettoyer_reponse(texte: str | None) -> str | None:
         if fins and fins[-1].end() > 40:
             t = t[:fins[-1].end()].strip()
     return t or None
+
+
+_RE_IMPOSSIBLE = re.compile(
+    r"\b(d[ée]mon|diable|enfer|magie|magique|sortil[èe]ge|mal[ée]diction|maudi|dragon|"
+    r"bombe|nucl[ée]aire|atomique|missile|fus[ée]e|explos|poudre|t[ée]l[ée]port|"
+    r"ressuscit|zombie|mort[- ]vivant|miracle|invoque|invocation|disparai|"
+    r"an[ée]antis|raser? la capitale|d[ée]truis? la capitale|efface)\b", re.I)
+
+def ordre_impossible(texte: str) -> bool:
+    """Vrai si l'ordre est manifestement impossible/magique/anachronique ou briserait le
+    monde (filet de sécurité au-dessus du refus du modèle)."""
+    return bool(_RE_IMPOSSIBLE.search(texte or ""))
 
 
 def resume_situation(pays: dict, nom: str) -> str:
