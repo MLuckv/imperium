@@ -50,10 +50,13 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
   une province NON-capitale ennemie fait sécession / rejoint le joueur (capitale
   imprenable). Sabotage = dégâts. Garde-fous : refus des ordres impossibles/magiques.
 - [x] **Dirigeants qui écrivent au joueur d'eux-mêmes** — déclencheurs (manœuvre hostile
-  détectée, armée trop proche, attaque d'un protégé, hostilité, alliance face à un tiers
-  puissant, joueur affaibli) → message EN CARACTÈRE + conséquence (réputation, guerre,
-  coalition). Affiché dans la chronique + badge sur Diplomatie. Varié (graine + contexte).
-  Reste à faire : la désamorce par réponse du joueur, et lier la guerre au combat (phase combat).
+  DÉTECTÉE — l'espionnage est furtif et souvent indétecté —, armée trop proche, attaque
+  d'un protégé, hostilité, alliance face à un tiers puissant, joueur affaibli) → message
+  EN CARACTÈRE + conséquence (réputation, guerre, coalition). **Sans réponse → escalade**
+  (menace → ultimatum → guerre) ; **répondre apaise**. Badge sur Diplomatie. Varié.
+- [x] **Chronique** — plus de résumé chaque tour (juste les événements marquants) ; au
+  PASSAGE D'UNE ANNÉE, belle chronique embellie « livre d'histoire » (Ollama, variée).
+- [ ] Lier la guerre déclarée au **combat réel** (phase combat).
 - [x] **Personas historiques des 4 dirigeants** — fiches recherchées (vie/histoire,
   façon de parler, ennemis, alliés, répliques) dans `game/data/leaders/`, utilisées
   comme mémoire par l'IA. Testé : réponses en caractère, anachronismes traités comme

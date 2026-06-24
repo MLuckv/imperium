@@ -740,6 +740,30 @@ def _repli_analyse_accords(conversation: list[dict]) -> dict:
 # =====================================================================
 #  5) Résumé narratif du tour écoulé
 # =====================================================================
+TEMPLATE_CHRONIQUE_ANNEE = """Tu es le grand chroniqueur de ce monde antique.
+Rédige, dans le style somptueux et embelli d'un livre d'histoire ancien, un TRÈS BREF
+résumé de l'année {ANNEE} : 3 à 4 phrases, UN SEUL paragraphe continu, élégant et imagé,
+qui relie les faits marquants. Pas de liste, pas de puce. Uniquement en FRANÇAIS soutenu.
+
+FAITS MARQUANTS DE L'ANNÉE :
+{FAITS}
+
+LA CHRONIQUE DE L'AN {ANNEE} (3-4 phrases) :"""
+
+
+def chronique_annuelle(annee_txt: str, faits: str) -> dict:
+    """Chronique annuelle embellie (style livre d'histoire). {texte, source}."""
+    if not (faits or "").strip():
+        return {"texte": f"L'an {annee_txt} s'écoula, paisible : nulle grande affaire ne vint "
+                          f"troubler le cours du monde.", "source": "fallback"}
+    prompt = _remplir(TEMPLATE_CHRONIQUE_ANNEE, {"ANNEE": annee_txt, "FAITS": _trim(faits, 1400)})
+    texte = _nettoyer_reponse(_appel_ollama(prompt, temperature=0.85, num_predict=180))
+    if texte:
+        return {"texte": texte, "source": "ollama"}
+    lignes = [l.strip("-• ").strip() for l in faits.splitlines() if l.strip()]
+    return {"texte": "Cette année-là : " + " ; ".join(lignes[:6]) + ".", "source": "fallback"}
+
+
 def resumer_tour(faits: str, date_jeu: str = "264-03") -> dict:
     """Génère un résumé des événements majeurs du tour. {texte, source}."""
     if not (faits or "").strip():

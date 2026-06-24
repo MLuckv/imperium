@@ -41,6 +41,7 @@ export default function App() {
   const [diploTarget, setDiploTarget] = useState(null)
   const [resume, setResume] = useState('')
   const [resumeSource, setResumeSource] = useState('')
+  const [resumeAnnee, setResumeAnnee] = useState(null)  // chronique annuelle (livre d'histoire)
   const [evenements, setEvenements] = useState([])
   const [showChronique, setShowChronique] = useState(false)
   const [msgIA, setMsgIA] = useState(0)  // messages spontanés des dirigeants non lus
@@ -94,6 +95,7 @@ export default function App() {
       setMsgIA((n) => n + evs.filter((e) => e && e.type === 'message_ia').length)
       setResume((r && r.resume) || '')
       setResumeSource((r && r.resume_source) || '')
+      setResumeAnnee((r && r.resume_annee) || null)
       setShowChronique(true)
     } catch (err) { flash('err', err.message || 'Échec de la fin de tour') }
     finally { setBusy(false) }
@@ -214,18 +216,15 @@ export default function App() {
           </div>
         )}
 
-        {/* Chronique du tour : toast après la fin de tour */}
+        {/* Chronique : événements marquants du tour, et belle chronique au passage d'une année */}
         {showChronique && (resume || evenements.length > 0) && (
-          <div className="panel absolute right-3 top-3 z-10 max-w-sm">
+          <div className={'panel absolute right-3 top-3 z-10 ' + (resumeAnnee ? 'max-w-md' : 'max-w-sm')}>
             <div className="flex items-center justify-between">
-              <h2 className="panel-title !mb-0 !border-0 !pb-0">Chronique du tour</h2>
-              <div className="flex items-center gap-2">
-                {resumeSource === 'pause' && <span className="chip" title="Résumé narratif IA désactivé pendant les tests">⏸ IA en pause</span>}
-                <button onClick={() => setShowChronique(false)} className="text-parchment/60 hover:text-parchment">✕</button>
-              </div>
+              <h2 className="panel-title !mb-0 !border-0 !pb-0">{resumeAnnee ? `Chronique de l'an ${resumeAnnee}` : 'Événements'}</h2>
+              <button onClick={() => setShowChronique(false)} className="text-parchment/60 hover:text-parchment">✕</button>
             </div>
             <div className="mt-2" />
-            {resume && <p className="whitespace-pre-wrap text-sm italic leading-relaxed text-parchment/90">{resume}</p>}
+            {resume && <p className={'whitespace-pre-wrap leading-relaxed ' + (resumeAnnee ? 'font-serif text-[15px] text-gold/95 first-letter:float-left first-letter:mr-1 first-letter:font-display first-letter:text-4xl first-letter:leading-none first-letter:text-gold' : 'text-sm italic text-parchment/90')}>{resume}</p>}
             {evenements.length > 0 && (
               <ul className="thin-scroll mt-2 max-h-32 space-y-1 overflow-y-auto border-t border-bronze-dark/40 pt-2 text-xs text-parchment/80">
                 {evenements.map((e, i) => <li key={i}>• {typeof e === 'string' ? e : e.texte || e.nom}</li>)}

@@ -833,8 +833,12 @@ def _avancer_projets(pays: dict, state: dict, evenements: list) -> None:
         typ = (p.get("type") or "").lower()
         if typ in ("espionnage", "garnison", "commerce"):
             p["statut"] = "actif"
-            evenements.append({"type": "conseiller", "faction": pays.get("id"),
-                               "texte": f"« {p.get('nom')} » est désormais opérationnel."})
+            cf = p.get("cible_faction")
+            if typ == "espionnage" and cf:
+                txt = f"Vos espions sont parvenus à {_nom_pays(cf)} et opèrent désormais dans l'ombre (« {p.get('nom')} »)."
+            else:
+                txt = f"« {p.get('nom')} » est désormais opérationnel."
+            evenements.append({"type": "conseiller", "faction": pays.get("id"), "texte": txt})
         else:  # rébellion, sabotage, autre entreprise hostile : effet ponctuel
             _effet_projet_termine(state, pays, p, evenements)
             p["statut"] = "termine"
@@ -1275,12 +1279,21 @@ def _raison_contact(state: dict, fid: str, joueur: str):
     pj = state["pays"].get(joueur, {}); f = state["pays"].get(fid, {})
     rep = f.get("reputation", {}).get(joueur, 0)
     nj = _nom_pays(joueur)
-    # 1) Manœuvre hostile du joueur visant fid (espions/sabotage/rébellion), si détectée.
+    # 1) Manœuvre hostile du joueur visant fid — DÉTECTION probabiliste : l'espionnage
+    # est furtif (souvent indétecté) ; sabotage/rébellion bien plus visibles.
     for p in pj.get("projets", []):
-        if p.get("cible_faction") == fid and (p.get("type") in ("espionnage", "sabotage", "rebellion")
-                                              or "rebel" in (p.get("nom", "").lower())):
-            if p.get("statut") in ("actif", "termine") or random.random() < 0.5:
-                return ("projet_hostile", f"Tes services ont éventé des manœuvres secrètes de {nj} contre toi (« {p.get('nom')} »).")
+        if p.get("cible_faction") != fid:
+            continue
+        typ = (p.get("type") or "").lower()
+        rebelle = "rebel" in (p.get("nom", "").lower())
+        if typ == "espionnage":
+            detecte = p.get("statut") == "actif" and random.random() < 0.35
+        elif typ in ("sabotage", "rebellion") or rebelle:
+            detecte = p.get("statut") in ("actif", "termine") or random.random() < 0.55
+        else:
+            continue
+        if detecte:
+            return ("projet_hostile", f"Tes services ont éventé des manœuvres secrètes de {nj} contre toi (« {p.get('nom')} »).")
     # 2) Le joueur s'en prend à une faction que tu estimes.
     for p in pj.get("projets", []):
         cf = p.get("cible_faction")
@@ -1340,7 +1353,11 @@ def _messages_spontanes_ia(state: dict, evenements: list) -> list[dict]:
             continue
         conversations.ajouter_message(state, fid, role="ia", auteur=res.get("auteur"), texte=msg, tour=tour)
         derniers[fid] = tour
-        _appliquer_intent_diplo(state, fid, joueur, res.get("intent"), evenements)
+        intent = res.get("intent")
+        _appliquer_intent_diplo(state, fid, joueur, intent, evenements)
+        # Message à conséquence : on attend une réponse du joueur (sinon ça escalade).
+        if intent in ("menace", "ultimatum", "alliance", "reproche"):
+            f["attente_reponse"] = {"intent": intent, "tour_msg": tour}
         evenements.append({"type": "message_ia", "faction": fid,
                            "texte": f"✉ {res.get('auteur')} ({_nom_pays(fid)}) vous écrit : « {msg} »"})
         out.append({"faction": fid, "auteur": res.get("auteur"), "texte": msg,
@@ -1374,9 +1391,56 @@ def _appliquer_intent_diplo(state: dict, fid: str, joueur: str, intent: str, eve
                                     f"{', '.join(_nom_pays(h) for h in hostiles)} !"})
 
 
+def _escalader_messages_ignores(state: dict, evenements: list) -> None:
+    """Un message resté SANS RÉPONSE escalade : menace → ultimatum → guerre ; offre
+    d'alliance ignorée → vexation. Répondre (un message du joueur) apaise."""
+    joueur = state.get("meta", {}).get("joueur_pays")
+    tour = state.get("meta", {}).get("tour", 1)
+    for fid, f in state.get("pays", {}).items():
+        if fid == joueur:
+            continue
+        att = f.get("attente_reponse")
+        if not att:
+            continue
+        thread = conversations.get_conversation(state, fid)
+        repondu = any(m.get("role") == "joueur" and (m.get("tour") or 0) > att.get("tour_msg", 0)
+                      for m in thread)
+        rep = f.setdefault("reputation", {})
+        nd = ai_director.nom_dirigeant(fid)
+        if repondu:  # le joueur a répondu : la situation se détend un peu
+            f["attente_reponse"] = None
+            rep[joueur] = min(100, rep.get(joueur, 0) + 5)
+            continue
+        if tour - att.get("tour_msg", tour) < 3:  # on laisse 3 tours pour répondre
+            continue
+        intent = att.get("intent")
+        if intent in ("menace", "reproche"):
+            rep[joueur] = max(-100, rep.get(joueur, 0) - 12)
+            f["attente_reponse"] = {"intent": "ultimatum", "tour_msg": tour}
+            evenements.append({"type": "message_ia", "faction": fid,
+                               "texte": f"✉ Sans réponse de votre part, {nd} ({_nom_pays(fid)}) hausse le ton : c'est un ULTIMATUM."})
+        elif intent == "ultimatum":
+            f["attente_reponse"] = None
+            _appliquer_intent_diplo(state, fid, joueur, "guerre", evenements)
+            evenements.append({"type": "guerre", "faction": fid,
+                               "texte": f"✉ Votre silence valait défi : {nd} passe des menaces aux actes."})
+        elif intent == "alliance":
+            f["attente_reponse"] = None
+            rep[joueur] = max(-100, rep.get(joueur, 0) - 10)
+            evenements.append({"type": "message_ia", "faction": fid,
+                               "texte": f"✉ Lassé de votre silence, {nd} ({_nom_pays(fid)}) retire sa main tendue."})
+        else:
+            f["attente_reponse"] = None
+
+
+def _annee_lisible(annee: int) -> str:
+    return f"{abs(int(annee))} {'av. J.-C.' if int(annee) < 0 else 'ap. J.-C.'}"
+
+
 def end_turn(state: dict) -> dict:
     """Fait avancer le jeu d'un tour. Retourne {state, evenements, messages_diplomatiques}."""
     meta = state.setdefault("meta", {})
+    annee_avant = meta.get("annee")
     evenements: list[dict] = []
     messages: list[dict] = []
 
@@ -1415,7 +1479,8 @@ def end_turn(state: dict) -> dict:
     # 3) Décisions IA (§6 étape 4).
     messages.extend(_decisions_ia(state))
 
-    # 3a) Messages SPONTANÉS des dirigeants IA (ils te contactent d'eux-mêmes).
+    # 3a) Escalade des messages restés sans réponse, puis nouveaux messages SPONTANÉS.
+    _escalader_messages_ignores(state, evenements)
     messages.extend(_messages_spontanes_ia(state, evenements))
 
     # 3b) Analyse des conversations privées : applique les accords conclus.
@@ -1452,8 +1517,21 @@ def end_turn(state: dict) -> dict:
         evenements.append({"type": "chronique", "faction": None,
                            "texte": f"La chronique du monde est mise à jour ({res_ws['source']})."})
 
-    # 9) Résumé narratif des événements MAJEURS du tour écoulé (exigence v2).
-    resume = _generer_resume_tour(state, evenements, messages, accords)
+    # 9) Pas de résumé chaque tour : on accumule les faits MARQUANTS, et on ne rédige une
+    # belle chronique (style livre d'histoire) qu'au PASSAGE D'UNE ANNÉE.
+    NOTABLE = {"guerre", "coalition", "message_ia", "revolte", "catastrophe",
+               "merveille", "projet", "accord", "victoire", "conseiller"}
+    notables = [ev.get("texte") for ev in evenements
+                if isinstance(ev, dict) and ev.get("type") in NOTABLE and ev.get("texte")]
+    chron = state.setdefault("_chronique_annee", [])
+    chron.extend(notables)
+    if meta.get("annee") != annee_avant:  # une année vient de s'achever
+        resume = ai_director.chronique_annuelle(_annee_lisible(annee_avant),
+                                                "\n".join("- " + t for t in chron))
+        resume["annee"] = _annee_lisible(annee_avant)
+        state["_chronique_annee"] = []
+    else:
+        resume = {"texte": "", "source": "none"}
     state["resume_tour"] = resume.get("texte", "")
 
     # Enregistre les événements du tour dans l'état + sauvegarde courante.
@@ -1468,6 +1546,7 @@ def end_turn(state: dict) -> dict:
         "accords": accords,
         "resume": resume.get("texte", ""),
         "resume_source": resume.get("source", "fallback"),
+        "resume_annee": resume.get("annee"),
     }
 
 
