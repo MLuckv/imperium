@@ -40,15 +40,20 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
 
 ## 🚀 Phase 2 (en cours)
 
-- [ ] **Vitesse des réponses IA** — objectif **≤ 5 s** par réponse (actuellement ~7–15 s
-  selon la verbosité du dirigeant + la richesse du contexte). À optimiser plus tard
-  (tokens, contexte allégé, modèle plus rapide/quantisé).
+- [ ] **AMÉLIORER LES PERFORMANCES DE L'IA** — objectif **≤ 5 s** par réponse
+  (actuellement ~7–15 s selon la verbosité + la richesse du contexte). Pistes : moins de
+  tokens générés, contexte/persona allégés, prompt plus court, garder le modèle chaud
+  (keep_alive + warmup au démarrage), modèle plus rapide/quantisé, streaming.
 - [x] **Conseiller dans l'onglet Diplomatie** — chat IA : point sur le royaume, conseils,
   DIRECTIVES libres → « points » sur la carte (coût/durée décidés par l'IA, en mois).
   Espions opérationnels = vrais renseignements sur la cible. Rébellion bien financée =
   une province NON-capitale ennemie fait sécession / rejoint le joueur (capitale
   imprenable). Sabotage = dégâts. Garde-fous : refus des ordres impossibles/magiques.
-- [ ] **Dirigeants qui écrivent au joueur d'eux-mêmes** (reproches, ont repéré un espion…).
+- [x] **Dirigeants qui écrivent au joueur d'eux-mêmes** — déclencheurs (manœuvre hostile
+  détectée, armée trop proche, attaque d'un protégé, hostilité, alliance face à un tiers
+  puissant, joueur affaibli) → message EN CARACTÈRE + conséquence (réputation, guerre,
+  coalition). Affiché dans la chronique + badge sur Diplomatie. Varié (graine + contexte).
+  Reste à faire : la désamorce par réponse du joueur, et lier la guerre au combat (phase combat).
 - [x] **Personas historiques des 4 dirigeants** — fiches recherchées (vie/histoire,
   façon de parler, ennemis, alliés, répliques) dans `game/data/leaders/`, utilisées
   comme mémoire par l'IA. Testé : réponses en caractère, anachronismes traités comme

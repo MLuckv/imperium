@@ -491,6 +491,58 @@ def _repli_diplomatique(faction: str, message: str) -> str:
 
 
 # =====================================================================
+#  Message SPONTANÉ : un dirigeant IA contacte le joueur de lui-même
+# =====================================================================
+TEMPLATE_MESSAGE_SPONTANE = """Tu es {NOM_DIRIGEANT}, dirigeant de {PAYS} en {DATE_JEU}.
+PROFIL : {PROFIL}
+
+Tu écris SPONTANÉMENT, de ta propre initiative, au dirigeant de {PAYS_JOUEUR}.
+RAISON qui te pousse à écrire : {RAISON}
+Ce que tes espions savent de son royaume : {SITUATION_JOUEUR}
+Vos relations actuelles : {RELATION}
+
+Écris un message COURT (2 à 4 phrases), EN CARACTÈRE (ton ton, tes manies), qui colle à
+la RAISON et à ton tempérament. Tu peux menacer, reprocher, lancer un ultimatum, proposer
+une alliance, déclarer la guerre, ou rester mesuré — selon ta personnalité et la gravité.
+Anachronismes du monde moderne = hérésie. Ne sors jamais du rôle.
+
+Réponds en JSON STRICT : {{"message":"<ton message>","intent":"reproche|menace|ultimatum|alliance|guerre|neutre"}}"""
+
+
+def message_spontane(faction: str, raison: str, situation_joueur: str = "",
+                     relation: str = "neutres", date_jeu: str = "5-03",
+                     pays_joueur: str = "rome") -> dict:
+    """Génère un message qu'un dirigeant IA adresse SPONTANÉMENT au joueur.
+    Retourne {message, intent, source}."""
+    auteur = nom_dirigeant(faction)
+    prompt = _remplir(TEMPLATE_MESSAGE_SPONTANE, {
+        "NOM_DIRIGEANT": auteur, "PAYS": _nom_pays(faction),
+        "PAYS_JOUEUR": _nom_pays(pays_joueur), "DATE_JEU": _date_lisible(date_jeu),
+        "PROFIL": _persona_diplomatie(faction) or "(profil indisponible)",
+        "RAISON": raison, "SITUATION_JOUEUR": situation_joueur or "(mal connu)",
+        "RELATION": relation,
+    })
+    brut = _appel_ollama(prompt, temperature=0.95, num_predict=180, format_json=True)
+    if brut:
+        try:
+            data = json.loads(brut)
+        except Exception:
+            m = re.search(r"\{.*\}", brut, re.DOTALL)
+            data = json.loads(m.group(0)) if m else None
+        if isinstance(data, dict) and data.get("message"):
+            intent = str(data.get("intent", "neutre")).lower().strip()
+            if intent not in ("reproche", "menace", "ultimatum", "alliance", "guerre", "neutre"):
+                intent = "neutre"
+            return {"message": _nettoyer_reponse(str(data["message"])), "intent": intent,
+                    "auteur": auteur, "source": "ollama"}
+    # Repli déterministe : ton selon la raison.
+    phrases = _phrases_types(faction)
+    base = phrases[0] if phrases else "Sache que je te surveille."
+    intent = "menace" if ("manœuvre" in raison or "secrè" in raison or "armée" in raison) else "neutre"
+    return {"message": base, "intent": intent, "auteur": auteur, "source": "fallback"}
+
+
+# =====================================================================
 #  2) Décisions IA par tour
 # =====================================================================
 def decision_tour(

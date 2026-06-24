@@ -43,6 +43,7 @@ export default function App() {
   const [resumeSource, setResumeSource] = useState('')
   const [evenements, setEvenements] = useState([])
   const [showChronique, setShowChronique] = useState(false)
+  const [msgIA, setMsgIA] = useState(0)  // messages spontanés des dirigeants non lus
   const [selProv, setSelProv] = useState(null)   // province cliquée {id, faction, nom}
   const [conqueteCost, setConqueteCost] = useState(90)
   const [provNames, setProvNames] = useState({}) // id -> nom
@@ -88,7 +89,9 @@ export default function App() {
     try {
       const r = await endTurn(tours)
       if (r && r.state) setState(r.state)
-      setEvenements((r && r.evenements) || [])
+      const evs = (r && r.evenements) || []
+      setEvenements(evs)
+      setMsgIA((n) => n + evs.filter((e) => e && e.type === 'message_ia').length)
       setResume((r && r.resume) || '')
       setResumeSource((r && r.resume_source) || '')
       setShowChronique(true)
@@ -258,7 +261,10 @@ export default function App() {
         )}
         <button onClick={() => setModal('tech')} className="btn btn-ghost">Technologies</button>
         <button onClick={() => setModal('dogmes')} className="btn btn-ghost">Dogmes</button>
-        <button onClick={() => setModal('civs')} className="btn btn-ghost">Diplomatie</button>
+        <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost relative">
+          Diplomatie
+          {msgIA > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">{msgIA}</span>}
+        </button>
         <button onClick={() => setModal('conseiller')} className="btn btn-ghost">Conseiller</button>
         {impotsOpts.length > 0 && (
           <label className="flex items-center gap-1 text-xs text-parchment/70">

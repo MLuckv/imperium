@@ -1259,6 +1259,121 @@ def verifier_victoire(state: dict) -> dict | None:
 # =====================================================================
 #  Fin de tour
 # =====================================================================
+def _nom_pays(fid: str) -> str:
+    return META_FACTIONS.get(fid, {}).get("nom", fid.capitalize())
+
+
+def _relation_txt(score: int) -> str:
+    if score <= -40: return f"hostiles (réputation {score})"
+    if score < -10: return f"tendues (réputation {score})"
+    if score < 15: return f"neutres (réputation {score})"
+    return f"cordiales (réputation {score})"
+
+
+def _raison_contact(state: dict, fid: str, joueur: str):
+    """Pourquoi le dirigeant `fid` contacterait le joueur. → (clé, texte) ou (None, None)."""
+    pj = state["pays"].get(joueur, {}); f = state["pays"].get(fid, {})
+    rep = f.get("reputation", {}).get(joueur, 0)
+    nj = _nom_pays(joueur)
+    # 1) Manœuvre hostile du joueur visant fid (espions/sabotage/rébellion), si détectée.
+    for p in pj.get("projets", []):
+        if p.get("cible_faction") == fid and (p.get("type") in ("espionnage", "sabotage", "rebellion")
+                                              or "rebel" in (p.get("nom", "").lower())):
+            if p.get("statut") in ("actif", "termine") or random.random() < 0.5:
+                return ("projet_hostile", f"Tes services ont éventé des manœuvres secrètes de {nj} contre toi (« {p.get('nom')} »).")
+    # 2) Le joueur s'en prend à une faction que tu estimes.
+    for p in pj.get("projets", []):
+        cf = p.get("cible_faction")
+        if cf and cf != fid and (p.get("type") in ("sabotage", "rebellion") or "rebel" in (p.get("nom", "").lower())):
+            if f.get("reputation", {}).get(cf, 0) >= 15:
+                return ("allie_attaque", f"{nj} s'en prend à {_nom_pays(cf)}, que tu estimes — cela te déplaît fort.")
+    # 3) Armée du joueur trop proche de tes frontières.
+    terrs_f = set(f.get("territoires", []))
+    for u in pj.get("unites", []):
+        ut = u.get("territoire")
+        if ut in terrs_f or any(a in terrs_f for a in _adjacents(ut)):
+            return ("armee_proche", f"Les armées de {nj} rôdent tout près de tes frontières.")
+    # 4) Relations exécrables → menace.
+    if rep <= -40:
+        return ("hostilite", f"Tes relations avec {nj} sont exécrables.")
+    # 5) Une puissance tierce te dépasse et tu n'es pas hostile au joueur → alliance.
+    if rep >= -10:
+        tailles = {k: len(v.get("territoires", [])) for k, v in state["pays"].items()}
+        gros = max((k for k in tailles if k not in (fid, joueur)), key=lambda k: tailles[k], default=None)
+        if gros and tailles.get(gros, 0) >= tailles.get(fid, 0) + 2:
+            return ("alliance", f"La puissance de {_nom_pays(gros)} t'inquiète ; une alliance avec {nj} serait sage.")
+    # 6) Joueur affaibli + relation non cordiale → opportunisme.
+    if pj.get("stabilite", 60) <= 35 and rep <= 5:
+        return ("faiblesse", f"{nj} est affaibli et instable ; l'occasion de lui poser tes conditions.")
+    return (None, None)
+
+
+_PROBA_CONTACT = {"projet_hostile": 0.85, "allie_attaque": 0.7, "armee_proche": 0.45,
+                  "hostilite": 0.5, "alliance": 0.35, "faiblesse": 0.4}
+
+
+def _messages_spontanes_ia(state: dict, evenements: list) -> list[dict]:
+    """Les dirigeants IA contactent le joueur de leur PROPRE initiative (selon la
+    situation), avec une conséquence diplomatique possible (guerre, alliance, coalition)."""
+    out: list[dict] = []
+    joueur = state.get("meta", {}).get("joueur_pays")
+    if not joueur:
+        return out
+    pj = state["pays"].get(joueur, {})
+    tour = state.get("meta", {}).get("tour", 1)
+    date_jeu = state.get("meta", {}).get("date_jeu", "5-03")
+    derniers = state.setdefault("_derniers_msg_ia", {})
+    situ = ai_director.resume_situation(pj, pj.get("nom", joueur))
+    for fid, f in state.get("pays", {}).items():
+        if fid == joueur:
+            continue
+        if tour - derniers.get(fid, -99) < 4:  # throttle : 1 message / 4 tours / faction
+            continue
+        cle, raison = _raison_contact(state, fid, joueur)
+        if not cle or random.random() > _PROBA_CONTACT.get(cle, 0.4):
+            continue
+        rel = _relation_txt(f.get("reputation", {}).get(joueur, 0))
+        res = ai_director.message_spontane(fid, raison, situation_joueur=situ, relation=rel,
+                                           date_jeu=date_jeu, pays_joueur=joueur)
+        msg = res.get("message")
+        if not msg:
+            continue
+        conversations.ajouter_message(state, fid, role="ia", auteur=res.get("auteur"), texte=msg, tour=tour)
+        derniers[fid] = tour
+        _appliquer_intent_diplo(state, fid, joueur, res.get("intent"), evenements)
+        evenements.append({"type": "message_ia", "faction": fid,
+                           "texte": f"✉ {res.get('auteur')} ({_nom_pays(fid)}) vous écrit : « {msg} »"})
+        out.append({"faction": fid, "auteur": res.get("auteur"), "texte": msg,
+                    "intent": res.get("intent"), "spontane": True, "source": res.get("source")})
+    return out
+
+
+def _appliquer_intent_diplo(state: dict, fid: str, joueur: str, intent: str, evenements: list) -> None:
+    """Conséquence diplomatique de l'intention d'un message IA spontané."""
+    rep = state["pays"][fid].setdefault("reputation", {})
+    cur = rep.get(joueur, 0)
+    if intent == "guerre":
+        ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
+        if not any({g.get("a"), g.get("b")} == {fid, joueur} for g in ga):
+            ga.append({"a": fid, "b": joueur, "depuis": state.get("meta", {}).get("tour")})
+        rep[joueur] = max(-100, cur - 40)
+        evenements.append({"type": "guerre", "faction": fid,
+                           "texte": f"⚔ {ai_director.nom_dirigeant(fid)} déclare la GUERRE à {_nom_pays(joueur)} !"})
+    elif intent in ("ultimatum", "menace"):
+        rep[joueur] = max(-100, cur - 15)
+    elif intent == "reproche":
+        rep[joueur] = max(-100, cur - 8)
+    elif intent == "alliance":
+        rep[joueur] = min(100, cur + 12)
+    hostiles = [k for k, v in state.get("pays", {}).items()
+                if k != joueur and v.get("reputation", {}).get(joueur, 0) <= -40]
+    if len(hostiles) >= 2 and not state.get("_coalition_active"):
+        state["_coalition_active"] = True
+        evenements.append({"type": "coalition",
+                           "texte": f"🛑 Une COALITION se dresse contre {_nom_pays(joueur)} : "
+                                    f"{', '.join(_nom_pays(h) for h in hostiles)} !"})
+
+
 def end_turn(state: dict) -> dict:
     """Fait avancer le jeu d'un tour. Retourne {state, evenements, messages_diplomatiques}."""
     meta = state.setdefault("meta", {})
@@ -1299,6 +1414,9 @@ def end_turn(state: dict) -> dict:
 
     # 3) Décisions IA (§6 étape 4).
     messages.extend(_decisions_ia(state))
+
+    # 3a) Messages SPONTANÉS des dirigeants IA (ils te contactent d'eux-mêmes).
+    messages.extend(_messages_spontanes_ia(state, evenements))
 
     # 3b) Analyse des conversations privées : applique les accords conclus.
     accords = _analyser_conversations(state)
