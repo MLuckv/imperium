@@ -62,7 +62,13 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
   comme mémoire par l'IA. Testé : réponses en caractère, anachronismes traités comme
   hérésie, le fil de conversation est tenu (Ollama llama3.1:8b).
 - [ ] **Conseiller dans l'onglet Diplomatie** — un conseiller qui guide le joueur.
-- [ ] IA adverse + guerre (conquête de provinces ennemies, batailles).
+- [x] **IA adverse qui JOUE** (`ia_faction.py`) — chaque tour : impôts, gouverneurs,
+  fondation de villes, chantiers, recrutement, EXPANSION (annexions payées au même tarif
+  que le joueur), GUERRES (batailles de provinces, capitale imprenable, paix blanche si
+  enlisement), ALLIANCES (Ptolémée↔Alexandre), MERVEILLES (bâtisseurs : Néron, Ptolémée).
+  Priorités par dirigeant : Ptolémée → le Nil (terres fertiles) ; Alexandre → conquête
+  agressive (rival Sparte) ; Léonidas → armée/défense ; Néron → monuments/économie.
+  Les messages de tour racontent les actions RÉELLES. Testé sur 12 ans (plusieurs seeds).
 - [ ] Messagerie / diplomatie active (accords, alliances, trahisons appliqués au jeu).
 - [ ] Conditions de victoire (prestige culturel, domination militaire…).
 - [ ] Feuilles / historique de conversations par IA.

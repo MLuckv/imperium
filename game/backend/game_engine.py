@@ -542,6 +542,12 @@ def _appliquer_production(pays: dict, state: dict | None = None) -> None:
     infl = pays.get("inflation", 0.0)
     if infl > 5 and res.get("or", 0) > 0:
         res["or"] = max(0.0, round(res["or"] * (1 - infl / 100.0 * 0.035), 1))
+    # Les CARRIÈRES extraient aussi un peu de MARBRE (nécessaire aux merveilles).
+    nb_carrieres = sum(1 for v in pays.get("villes", [])
+                       if "carriere" in v.get("batiments", []) and v.get("pacification", 0) <= 0)
+    if nb_carrieres:
+        luxe = pays.setdefault("ressources_luxe", {})
+        luxe["marbre"] = round(luxe.get("marbre", 0) + nb_carrieres * 0.6, 1)
     # Croissance de la population globale et des villes.
     croissance = prod.get("population", 0)
     if croissance:
@@ -1017,11 +1023,15 @@ def _decisions_ia(state: dict) -> list[dict]:
     for fid, p in state.get("pays", {}).items():
         if p.get("est_joueur"):
             continue
-        # Décisions déterministes (rapides) : on réserve les appels Ollama lents
-        # de la fin de tour au résumé narratif et à l'analyse des accords.
-        dec = ai_director.decision_tour(
-            fid, etat_monde=etat_monde, date_jeu=meta.get("date_jeu", "264-03"),
-            utiliser_ia=False)
+        # Si la faction a RÉELLEMENT agi ce tour (ia_faction), le message le raconte ;
+        # sinon repli sur la décision narrative déterministe (rapide, sans Ollama).
+        actions = p.pop("_actions_tour", None)
+        if actions:
+            dec = {"texte": " ; ".join(actions[:4]).capitalize() + ".", "source": "ia_faction"}
+        else:
+            dec = ai_director.decision_tour(
+                fid, etat_monde=etat_monde, date_jeu=meta.get("date_jeu", "264-03"),
+                utiliser_ia=False)
         state.setdefault("historique_actions", []).append({
             "tour": meta.get("tour"), "acteur": fid,
             "texte": dec["texte"], "resultat": f"Décision IA ({dec['source']}).",
@@ -1373,9 +1383,9 @@ def _appliquer_intent_diplo(state: dict, fid: str, joueur: str, intent: str, eve
         ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
         if not any({g.get("a"), g.get("b")} == {fid, joueur} for g in ga):
             ga.append({"a": fid, "b": joueur, "depuis": state.get("meta", {}).get("tour")})
+            evenements.append({"type": "guerre", "faction": fid,
+                               "texte": f"⚔ {ai_director.nom_dirigeant(fid)} déclare la GUERRE à {_nom_pays(joueur)} !"})
         rep[joueur] = max(-100, cur - 40)
-        evenements.append({"type": "guerre", "faction": fid,
-                           "texte": f"⚔ {ai_director.nom_dirigeant(fid)} déclare la GUERRE à {_nom_pays(joueur)} !"})
     elif intent in ("ultimatum", "menace"):
         rep[joueur] = max(-100, cur - 15)
     elif intent == "reproche":
@@ -1479,6 +1489,13 @@ def end_turn(state: dict) -> dict:
     # 3) Décisions IA (§6 étape 4).
     messages.extend(_decisions_ia(state))
 
+    # 2b) Les factions IA JOUENT réellement leur tour : impôts, chantiers, recrutement,
+    # expansion (annexions), guerres (batailles de provinces), alliances, merveilles.
+    import ia_faction
+    for fid, p in state.get("pays", {}).items():
+        if not p.get("est_joueur"):
+            p["_actions_tour"] = ia_faction.jouer(state, fid, evenements)
+
     # 3a) Escalade des messages restés sans réponse, puis nouveaux messages SPONTANÉS.
     _escalader_messages_ignores(state, evenements)
     messages.extend(_messages_spontanes_ia(state, evenements))
@@ -1519,8 +1536,8 @@ def end_turn(state: dict) -> dict:
 
     # 9) Pas de résumé chaque tour : on accumule les faits MARQUANTS, et on ne rédige une
     # belle chronique (style livre d'histoire) qu'au PASSAGE D'UNE ANNÉE.
-    NOTABLE = {"guerre", "coalition", "message_ia", "revolte", "catastrophe",
-               "merveille", "projet", "accord", "victoire", "conseiller"}
+    NOTABLE = {"guerre", "paix", "coalition", "message_ia", "revolte", "catastrophe",
+               "merveille", "projet", "accord", "victoire", "conseiller", "expansion"}
     notables = [ev.get("texte") for ev in evenements
                 if isinstance(ev, dict) and ev.get("type") in NOTABLE and ev.get("texte")]
     chron = state.setdefault("_chronique_annee", [])
