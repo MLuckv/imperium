@@ -1021,7 +1021,7 @@ def _decisions_ia(state: dict) -> list[dict]:
     meta = state.get("meta", {})
     etat_monde = ws.lire_world_state_courant(state)
     for fid, p in state.get("pays", {}).items():
-        if p.get("est_joueur"):
+        if p.get("est_joueur") or p.get("elimine"):
             continue
         # Si la faction a RÉELLEMENT agi ce tour (ia_faction), le message le raconte ;
         # sinon repli sur la décision narrative déterministe (rapide, sans Ollama).
@@ -1226,47 +1226,47 @@ def _recalculer_puissances(state: dict) -> None:
 
 
 def verifier_victoire(state: dict) -> dict | None:
-    """Vérification BASIQUE des conditions de victoire (§17).
-
-    Retourne {gagnant, type, raison} si une condition est remplie, sinon None.
-    """
+    """Trois voies de victoire :
+    - MILITAIRE : éliminer tous les autres dirigeants (leurs capitales sont tombées).
+    - DIPLOMATIQUE : objectif territorial atteint ({OBJECTIF_TERRITOIRES} provinces) +
+      la PAIX conclue avec tous les survivants (aucune guerre, une alliance, réputation ≥ 0).
+    - TOURISTIQUE : les merveilles attirent les curieux ; {TOURISME_OBJECTIF} points de tourisme.
+    Retourne {gagnant, type, raison} (type 'defaite' si le joueur est éliminé)."""
     pays = state.get("pays", {})
-    meta = state.get("meta", {})
-    joueur_id = meta.get("joueur_pays")
+    joueur_id = state.get("meta", {}).get("joueur_pays")
+    vivants = [fid for fid, p in pays.items() if not p.get("elimine")]
 
-    # Survie : dernier pays debout (autres sans ville).
-    vivants = [fid for fid, p in pays.items() if p.get("villes")]
+    # Défaite du joueur : sa capitale est tombée.
+    if joueur_id and pays.get(joueur_id, {}).get("elimine"):
+        return {"gagnant": None, "type": "defaite",
+                "raison": "Votre capitale est tombée : votre lignée s'éteint dans les cendres."}
+
+    # MILITAIRE : dernier dirigeant debout.
     if len(vivants) == 1:
         gid = vivants[0]
-        return {"gagnant": gid, "type": "survie",
-                "raison": f"{pays[gid]['nom']} est la dernière puissance debout."}
+        return {"gagnant": gid, "type": "militaire",
+                "raison": f"{pays[gid]['nom']} a éliminé tous ses rivaux : le monde n'a plus qu'un maître."}
 
-    # Militaire : un pays contrôle les capitales des 2 autres.
-    for fid, p in pays.items():
-        terr = set(p.get("territoires", []))
-        capitales_autres = [
-            _capitale_faction(autre) for autre in pays if autre != fid
-        ]
-        capitales_autres = [c for c in capitales_autres if c]
-        if capitales_autres and all(c in terr for c in capitales_autres):
-            return {"gagnant": fid, "type": "militaire",
-                    "raison": f"{p['nom']} contrôle les capitales adverses."}
-
-    # Économique : 5000 or (les routes commerciales sont simplifiées ici).
-    for fid, p in pays.items():
-        if p.get("ressources", {}).get("or", 0) >= 5000:
-            return {"gagnant": fid, "type": "economique",
-                    "raison": f"{p['nom']} a amassé une fortune dominante (5000+ or)."}
-
-    # Diplomatique : alliances avec les 2 autres + paix (rep >= 60 mutuelle).
-    for fid, p in pays.items():
-        autres = [a for a in pays if a != fid]
-        if all(p.get("reputation", {}).get(a, 0) >= 60
-               and pays[a].get("reputation", {}).get(fid, 0) >= 60
-               for a in autres):
+    traites = state.get("diplomatie", {}).get("traites_actifs", [])
+    guerres = state.get("diplomatie", {}).get("guerres_actives", [])
+    for fid in vivants:
+        p = pays[fid]
+        # TOURISTIQUE : rayonnement des merveilles.
+        if p.get("tourisme", 0) >= TOURISME_OBJECTIF:
+            return {"gagnant": fid, "type": "touristique",
+                    "raison": f"{p['nom']} : ses merveilles attirent le monde entier "
+                              f"({int(p['tourisme'])} points de tourisme)."}
+        # DIPLOMATIQUE : territoire + paix générale + alliance + estime des survivants.
+        autres = [a for a in vivants if a != fid]
+        if (len(p.get("territoires", [])) >= OBJECTIF_TERRITOIRES
+                and autres
+                and not any(fid in (g.get("a"), g.get("b")) for g in guerres)
+                and any(t.get("type") == "alliance" and fid in (t.get("a"), t.get("b"))
+                        for t in traites)
+                and all(pays[a].get("reputation", {}).get(fid, 0) >= 0 for a in autres)):
             return {"gagnant": fid, "type": "diplomatique",
-                    "raison": f"{p['nom']} est allié à toutes les puissances."}
-
+                    "raison": f"{p['nom']} a atteint son objectif territorial "
+                              f"({OBJECTIF_TERRITOIRES} provinces) et fait régner la paix."}
     return None
 
 
@@ -1348,7 +1348,7 @@ def _messages_spontanes_ia(state: dict, evenements: list) -> list[dict]:
     derniers = state.setdefault("_derniers_msg_ia", {})
     situ = ai_director.resume_situation(pj, pj.get("nom", joueur))
     for fid, f in state.get("pays", {}).items():
-        if fid == joueur:
+        if fid == joueur or f.get("elimine"):
             continue
         if tour - derniers.get(fid, -99) < 4:  # throttle : 1 message / 4 tours / faction
             continue
@@ -1401,13 +1401,115 @@ def _appliquer_intent_diplo(state: dict, fid: str, joueur: str, intent: str, eve
                                     f"{', '.join(_nom_pays(h) for h in hostiles)} !"})
 
 
+# =====================================================================
+#  Batailles, prise de capitale, élimination (victoire militaire)
+# =====================================================================
+BONUS_DEF_CAPITALE = 2.5   # la capitale se défend x2.5 (+0.5 si murailles)
+OBJECTIF_TERRITOIRES = 10  # victoire diplomatique : objectif territorial
+TOURISME_OBJECTIF = 1200   # victoire touristique : points de tourisme à atteindre
+
+
+def _force_nationale(pays: dict) -> float:
+    from models.unit import FORCES_UNITES
+    return sum(FORCES_UNITES.get(u.get("type"), 1) * u.get("effectif", 1)
+               for u in pays.get("unites", []))
+
+
+def _perdre_unite(pays: dict) -> None:
+    """Pertes de bataille : la plus faible unité tombe."""
+    from models.unit import FORCES_UNITES
+    if pays.get("unites"):
+        faible = min(pays["unites"], key=lambda u: FORCES_UNITES.get(u.get("type"), 1))
+        pays["unites"] = [u for u in pays["unites"] if u is not faible]
+
+
+def resoudre_bataille(state: dict, att_id: str, def_id: str, prov: str,
+                      evenements: list) -> bool:
+    """Bataille pour une province. La CAPITALE est prenable mais se défend très cher
+    (x{BONUS_DEF_CAPITALE}, + murailles) ; sa chute = ÉLIMINATION du royaume.
+    Retourne True si la province est prise."""
+    att = state["pays"][att_id]; dfn = state["pays"][def_id]
+    nom_a = META_FACTIONS.get(att_id, {}).get("nom", att_id)
+    nom_d = META_FACTIONS.get(def_id, {}).get("nom", def_id)
+    est_cap = prov == _capitale_faction(def_id)
+    fa, fd = _force_nationale(att), _force_nationale(dfn)
+    mult = 1.0
+    if est_cap:
+        mult = BONUS_DEF_CAPITALE
+        if any("murailles" in v.get("batiments", []) for v in dfn.get("villes", [])
+               if v.get("territoire") == prov):
+            mult += 0.5
+    fd_eff = max(1.0, fd * mult + (3.0 if est_cap else 0.0))
+    if fa <= fd_eff:  # assaut repoussé : l'attaquant saigne
+        _perdre_unite(att)
+        if random.random() < 0.4:
+            _perdre_unite(dfn)
+        evenements.append({"type": "guerre", "faction": att_id,
+                           "texte": f"⚔ {nom_a} lance l'assaut sur {_nom_territoire(prov)}"
+                                    f"{' (capitale)' if est_cap else ''} : REPOUSSÉ par {nom_d} !"})
+        return False
+    # Victoire de l'attaquant : pertes des deux côtés.
+    _perdre_unite(dfn)
+    if random.random() < (0.7 if est_cap else 0.35):
+        _perdre_unite(att)
+    if est_cap:
+        _eliminer_faction(state, def_id, att_id, evenements)
+        return True
+    # Transfert de la province (défenseurs refluent vers leur capitale).
+    cap_d = _capitale_faction(def_id)
+    dfn["territoires"] = [t for t in dfn.get("territoires", []) if t != prov]
+    dfn.get("prov_stab", {}).pop(prov, None)
+    for u in dfn.get("unites", []):
+        if u.get("territoire") == prov and cap_d:
+            u["territoire"] = cap_d
+    for v in [v for v in dfn.get("villes", []) if v.get("territoire") == prov]:
+        dfn["villes"].remove(v)
+        v["gouverneur"] = False; v["pacification"] = 8
+        att.setdefault("villes", []).append(v)
+    pop = _population_territoire(prov)
+    att.setdefault("territoires", []).append(prov)
+    att.setdefault("prov_stab", {})[prov] = 22.0
+    att["ressources"]["population"] = round(att["ressources"].get("population", 0) + pop, 1)
+    dfn["ressources"]["population"] = max(0.0, round(dfn["ressources"].get("population", 0) - pop, 1))
+    evenements.append({"type": "guerre", "faction": att_id,
+                       "texte": f"⚔ Bataille : {nom_a} arrache {_nom_territoire(prov)} à {nom_d} !"})
+    return True
+
+
+def _eliminer_faction(state: dict, fid: str, par: str, evenements: list) -> None:
+    """La capitale est tombée : le royaume s'effondre. Le vainqueur prend la capitale
+    et la moitié du trésor ; les autres provinces sombrent dans l'anarchie (neutres)."""
+    p = state["pays"][fid]; v = state["pays"][par]
+    cap = _capitale_faction(fid)
+    nom_p = META_FACTIONS.get(fid, {}).get("nom", fid)
+    nom_v = META_FACTIONS.get(par, {}).get("nom", par)
+    if cap:
+        v.setdefault("territoires", []).append(cap)
+        v.setdefault("prov_stab", {})[cap] = 18.0
+        for ville in [x for x in p.get("villes", []) if x.get("territoire") == cap]:
+            ville["gouverneur"] = False; ville["pacification"] = 12
+            v.setdefault("villes", []).append(ville)
+    butin = round(p.get("ressources", {}).get("or", 0) * 0.5, 1)
+    v["ressources"]["or"] = round(v["ressources"].get("or", 0) + butin, 1)
+    p["elimine"] = True
+    p["territoires"] = []; p["unites"] = []; p["villes"] = []; p["prov_stab"] = {}
+    diplo = state.setdefault("diplomatie", {})
+    diplo["guerres_actives"] = [g for g in diplo.get("guerres_actives", [])
+                                if fid not in (g.get("a"), g.get("b"))]
+    diplo["traites_actifs"] = [t for t in diplo.get("traites_actifs", [])
+                               if fid not in (t.get("a"), t.get("b"))]
+    evenements.append({"type": "guerre", "faction": par,
+                       "texte": f"👑 {_nom_territoire(cap) if cap else 'La capitale'} EST TOMBÉE : "
+                                f"{nom_p} est rayée de la carte par {nom_v} ! (butin : {butin} or)"})
+
+
 def _escalader_messages_ignores(state: dict, evenements: list) -> None:
     """Un message resté SANS RÉPONSE escalade : menace → ultimatum → guerre ; offre
     d'alliance ignorée → vexation. Répondre (un message du joueur) apaise."""
     joueur = state.get("meta", {}).get("joueur_pays")
     tour = state.get("meta", {}).get("tour", 1)
     for fid, f in state.get("pays", {}).items():
-        if fid == joueur:
+        if fid == joueur or f.get("elimine"):
             continue
         att = f.get("attente_reponse")
         if not att:
@@ -1459,8 +1561,13 @@ def end_turn(state: dict) -> dict:
 
     # 1b) Production (DYNAMIQUE), croissance, moral, recherche, stabilité.
     for fid, p in state.get("pays", {}).items():
+        if p.get("elimine"):
+            continue
         p["merveilles_effet"] = merveilles.bonus_actif(p, state)
         p["prestige"] = p["merveilles_effet"].get("prestige", 0)
+        # TOURISME : les merveilles actives attirent les curieux (victoire touristique).
+        # 1 pt/prestige/mois : le Parthénon seul ne suffit pas, il faut BÂTIR/RESTAURER.
+        p["tourisme"] = round(p.get("tourisme", 0) + p["prestige"], 1)
         _maj_guerre_compteur(p, state)
         _maj_corruption(p)
         _maj_inflation(p)
@@ -1493,7 +1600,7 @@ def end_turn(state: dict) -> dict:
     # expansion (annexions), guerres (batailles de provinces), alliances, merveilles.
     import ia_faction
     for fid, p in state.get("pays", {}).items():
-        if not p.get("est_joueur"):
+        if not p.get("est_joueur") and not p.get("elimine"):
             p["_actions_tour"] = ia_faction.jouer(state, fid, evenements)
 
     # 3a) Escalade des messages restés sans réponse, puis nouveaux messages SPONTANÉS.
@@ -1970,8 +2077,26 @@ def deplacer_unite(state: dict, unit_id: str, territoire_cible: str) -> dict:
 
     proprio = _proprietaire(state, territoire_cible)
     if proprio and proprio != joueur:
-        return {"ok": False,
-                "raison": "Province étrangère : la conquête de territoires ennemis viendra plus tard."}
+        # ATTAQUE : entrer chez autrui est un acte de guerre. Déclare la guerre si
+        # besoin, puis bataille (la capitale se défend x2.5 ; sa chute = élimination).
+        ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
+        evs: list[dict] = []
+        if not any({g.get("a"), g.get("b")} == {joueur, proprio} for g in ga):
+            ga.append({"a": joueur, "b": proprio, "depuis": state.get("meta", {}).get("tour")})
+            rep = state["pays"][proprio].setdefault("reputation", {})
+            rep[joueur] = max(-100, rep.get(joueur, 0) - 40)
+            evs.append({"type": "guerre", "faction": joueur,
+                        "texte": f"⚔ {_nom_pays(joueur)} déclare la GUERRE à {_nom_pays(proprio)} !"})
+        unite["a_bouge"] = True
+        prise = resoudre_bataille(state, joueur, proprio, territoire_cible, evs)
+        # Consigne les événements pour la chronique + l'affichage.
+        state.setdefault("_chronique_annee", []).extend(e["texte"] for e in evs)
+        state.setdefault("evenements_tour", []).extend(evs)
+        if prise and any(u.get("id") == unit_id for u in pays.get("unites", [])):
+            unite["territoire"] = territoire_cible  # l'armée entre dans la province conquise
+        ws.sauver_etat_courant(state)
+        return {"ok": True, "raison": " ".join(e["texte"] for e in evs) or "La bataille fait rage.",
+                "bataille": True, "prise": prise, "territoire": territoire_cible}
 
     # DÉPLACEMENT LIBRE : on traverse une province neutre sans la conquérir.
     # L'annexion est une action séparée et optionnelle (cf. annexer_province).

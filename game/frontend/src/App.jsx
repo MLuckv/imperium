@@ -42,6 +42,7 @@ export default function App() {
   const [resume, setResume] = useState('')
   const [resumeSource, setResumeSource] = useState('')
   const [resumeAnnee, setResumeAnnee] = useState(null)  // chronique annuelle (livre d'histoire)
+  const [finPartieVue, setFinPartieVue] = useState(false) // écran victoire/défaite déjà fermé
   const [evenements, setEvenements] = useState([])
   const [showChronique, setShowChronique] = useState(false)
   const [msgIA, setMsgIA] = useState(0)  // messages spontanés des dirigeants non lus
@@ -191,7 +192,8 @@ export default function App() {
 
   const joueurId = state.meta && state.meta.joueur_pays
   const joueur = joueurId && state.pays ? state.pays[joueurId] : null
-  const autres = Object.keys(state.pays || {}).filter((id) => id !== joueurId)
+  const autres = Object.keys(state.pays || {}).filter((id) => id !== joueurId && !(state.pays[id] || {}).elimine)
+  const victoire = state.victoire
 
   // Provinces neutres occupées par une armée du joueur → annexables.
   const ownedAll = new Set()
@@ -298,6 +300,25 @@ export default function App() {
       )}
       {modal === 'conseiller' && (
         <ConseillerModal state={state} onClose={() => setModal(null)} onStateChange={setState} />
+      )}
+      {victoire && !finPartieVue && (
+        <div className="fixed inset-0 z-40 flex items-center justify-center bg-black/80 p-4">
+          <div className="panel max-w-lg text-center">
+            <h2 className="font-display text-3xl font-bold tracking-wide"
+                style={{ color: victoire.type === 'defaite' || (victoire.gagnant && victoire.gagnant !== joueurId) ? '#c0392b' : '#e8c267' }}>
+              {victoire.type === 'defaite' ? '☠ DÉFAITE' : victoire.gagnant === joueurId ? '🏆 VICTOIRE' : '☠ DÉFAITE'}
+            </h2>
+            <div className="mt-1 text-xs uppercase tracking-widest text-bronze">
+              {victoire.type === 'militaire' ? 'Victoire militaire' : victoire.type === 'diplomatique' ? 'Victoire diplomatique'
+                : victoire.type === 'touristique' ? 'Victoire touristique' : 'Fin de partie'}
+            </div>
+            <p className="mt-4 font-serif text-parchment/90">{victoire.raison}</p>
+            <div className="mt-5 flex justify-center gap-2">
+              <button onClick={() => setFinPartieVue(true)} className="btn btn-ghost">Contempler le monde</button>
+              <button onClick={() => setScreen('menu')} className="btn btn-primary">Menu principal</button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

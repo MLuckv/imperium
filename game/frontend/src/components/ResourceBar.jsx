@@ -22,6 +22,7 @@ export default function ResourceBar({ meta, joueur }) {
   const bassesStab = (joueur && joueur.stabilite_basses) || []
   const age = joueur && joueur.age
   const prestige = joueur && joueur.prestige
+  const tourisme = (joueur && joueur.tourisme) || 0
   const corruption = (joueur && joueur.corruption) || 0
   const inflation = (joueur && joueur.inflation) || 0
 
@@ -121,6 +122,7 @@ export default function ResourceBar({ meta, joueur }) {
           {age === 'or' && <span className="ml-1 rounded px-1 text-[10px] font-semibold text-amber-300" style={{ backgroundColor: 'rgba(202,165,61,0.2)' }} title="Âge d'or">☀ Âge d'or</span>}
           {age === 'sombre' && <span className="ml-1 rounded px-1 text-[10px] font-semibold text-red-300" style={{ backgroundColor: 'rgba(192,57,43,0.2)' }} title="Âge sombre">☾ Âge sombre</span>}
           {prestige ? <span className="ml-2 text-xs text-amber-200" title="Prestige (merveilles)">✦ {num(prestige)}</span> : null}
+          {tourisme > 0 ? <span className="ml-1 text-xs text-sky-300" title="Points de tourisme — vos merveilles attirent le monde (victoire à 1200)">🏺 {num(Math.round(tourisme))}</span> : null}
           {corruption > 0 ? <span className="ml-2 text-xs text-orange-300" title="Corruption : réduit le revenu d'or (gouverneurs, forum/agora et droit la font baisser)">☣ {num(corruption)}%</span> : null}
           {inflation > 5 ? <span className="ml-1 text-xs text-fuchsia-300" title="Inflation : l'or thésaurisé se déprécie et tout coûte plus cher — dépensez !">↗ {num(inflation)}%</span> : null}
           <div className="pointer-events-none absolute right-0 top-full z-30 mt-1 hidden w-56 rounded-md border border-bronze-dark/70 bg-night p-2 text-left text-xs shadow-2xl group-hover:block">

@@ -19,25 +19,29 @@ from models.city import COUT_BATIMENTS, COUT_RES_BATIMENTS, DUREE_BATIMENTS
 # Priorités de caractère (cf. fiches data/leaders). agressivite/expansion ∈ [0,1].
 PRIORITES_IA: dict[str, dict] = {
     "rome": {       # Néron : gloire, stabilité, monuments ; expansion mesurée en Italie
-        "agressivite": 0.35, "expansion": 0.55, "armee_cible": 3, "merveilles": True,
+        "agressivite": 0.35, "expansion": 0.55, "armee_cible": 4, "merveilles": True,
+        "unite": "legionnaire",
         "batiments": ["scierie", "ferme", "puits", "carriere", "marche", "aqueduc",
                       "forum", "mine", "grenier"],
         "terrain_prefere": None, "allie": None, "rival": None,
     },
     "macedoine": {  # Alexandre : conquête avant tout, armée de choc
-        "agressivite": 0.9, "expansion": 0.95, "armee_cible": 5, "merveilles": False,
+        "agressivite": 0.9, "expansion": 0.95, "armee_cible": 7, "merveilles": False,
+        "unite": "phalange",
         "batiments": ["scierie", "ferme", "puits", "camp_militaire", "carriere",
                       "mine", "grenier"],
         "terrain_prefere": None, "allie": "carthage", "rival": "sparte",
     },
     "sparte": {     # Léonidas : peu de terres, beaucoup de fer ; défense farouche
-        "agressivite": 0.5, "expansion": 0.3, "armee_cible": 5, "merveilles": False,
+        "agressivite": 0.5, "expansion": 0.3, "armee_cible": 6, "merveilles": False,
+        "unite": "hoplite",
         "batiments": ["scierie", "ferme", "puits", "camp_militaire", "murailles",
                       "carriere", "mine"],
         "terrain_prefere": None, "allie": None, "rival": "macedoine",
     },
     "carthage": {   # Ptolémée : le NIL (terres fertiles), la richesse, l'alliance macédonienne
-        "agressivite": 0.15, "expansion": 0.6, "armee_cible": 2, "merveilles": True,
+        "agressivite": 0.15, "expansion": 0.6, "armee_cible": 3, "merveilles": True,
+        "unite": "infanterie_legere",
         "batiments": ["ferme", "puits", "scierie", "marche", "grenier", "carriere",
                       "agora", "aqueduc"],
         "terrain_prefere": "fertile", "allie": "macedoine", "rival": None,
@@ -56,7 +60,7 @@ def jouer(state: dict, fid: str, evenements: list) -> list[str]:
     _gouverneurs(pays, fid, actions)
     _fonder_ville(state, fid, pays, actions)
     _construire(pays, actions)
-    _recruter(pays, fid, prio, actions)
+    _recruter(pays, fid, prio, actions, en_guerre=bool(_guerres_de(state, fid)))
     if not _mener_guerres(state, fid, pays, prio, actions, evenements):
         _expansion(state, fid, pays, prio, actions, evenements)
     _alliances(state, fid, pays, prio, actions, evenements)
@@ -155,7 +159,8 @@ def _construire(pays: dict, actions: list) -> None:
             return
 
 
-def _recruter(pays: dict, fid: str, prio: dict, actions: list) -> None:
+def _recruter(pays: dict, fid: str, prio: dict, actions: list,
+              en_guerre: bool = False) -> None:
     res = pays.get("ressources", {})
     nb = sum(u.get("effectif", 1) for u in pays.get("unites", []))
     cible = prio.get("armee_cible", 3)
@@ -163,9 +168,18 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list) -> None:
     # d'annexion tant que l'empire est petit.
     if prio.get("expansion", 0) >= 0.55 and len(pays.get("territoires", [])) < 3:
         cible = min(cible, 3)
+    if en_guerre:  # en GUERRE, on mobilise davantage (l'IA se bat pour de bon)
+        cible += 3
     if nb >= cible or not pays.get("territoires"):
         return
-    type_u = "legionnaire" if res.get("fer", 0) >= 6 else "levee"
+    # Unité fétiche du dirigeant (phalange d'Alexandre, hoplites de Léonidas…) si le
+    # fer le permet, sinon levée.
+    from models.unit import TECH_REQUISE_UNITE
+    prefere = prio.get("unite", "legionnaire")
+    tech_req = TECH_REQUISE_UNITE.get(prefere)
+    besoin_fer = COUT_RES_UNITES.get(prefere, {}).get("fer", 0)
+    ok_tech = not tech_req or tech_req in pays.get("technologies", [])
+    type_u = prefere if (ok_tech and res.get("fer", 0) >= besoin_fer) else "levee"
     cout = ge._cout_inflation(pays, COUTS_UNITES.get(type_u, 0))
     cout_pop = COUT_POP_UNITES.get(type_u, 1)
     cout_res = COUT_RES_UNITES.get(type_u, {})
@@ -192,6 +206,11 @@ def _centre(tid: str) -> tuple[float, float]:
             c = t.get("centre") or [0, 0]
             return (c[0], c[1])
     return (0.0, 0.0)
+
+
+def _distance(a: str, b: str) -> float:
+    ca, cb = _centre(a), _centre(b)
+    return ((ca[0] - cb[0]) ** 2 + (ca[1] - cb[1]) ** 2) ** 0.5
 
 
 def _expansion(state: dict, fid: str, pays: dict, prio: dict,
@@ -227,7 +246,9 @@ def _expansion(state: dict, fid: str, pays: dict, prio: dict,
                 evenements.append({"type": "expansion", "faction": fid,
                                    "texte": f"{ge.META_FACTIONS.get(fid, {}).get('nom', fid)} annexe {ge._nom_territoire(tid)}."})
                 return
-    # 2) Sinon, déplace une unité libre vers la meilleure cible neutre adjacente.
+    # 2) Sinon, déplace une unité libre vers la meilleure cible neutre adjacente —
+    # ou, si elle est ENFERMÉE dans l'empire, vers la frontière (province possédée
+    # qui touche une neutre), pour ne jamais rester coincée.
     libre = next((u for u in pays.get("unites", []) if not u.get("a_bouge")), None)
     if not libre:
         return
@@ -236,6 +257,13 @@ def _expansion(state: dict, fid: str, pays: dict, prio: dict,
     if voisins:
         cible = max(voisins, key=score)
         libre["territoire"] = cible
+        libre["a_bouge"] = True
+        return
+    frontiere = [t for t in ge._adjacents(libre.get("territoire", ""))
+                 if t in pays.get("territoires", [])
+                 and any(ge._proprietaire(state, v) is None for v in ge._adjacents(t))]
+    if frontiere:
+        libre["territoire"] = random.choice(frontiere)
         libre["a_bouge"] = True
 
 
@@ -257,76 +285,82 @@ def _allies_entre(state: dict, a: str, b: str) -> bool:
 
 def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
                    actions: list, evenements: list) -> bool:
-    """En guerre : tente de prendre une province ennemie frontalière (JAMAIS la capitale).
-    Bataille simple : il faut un net avantage de force ; pertes des deux côtés."""
+    """En guerre : attaque une province ennemie frontalière via le système de bataille
+    commun. La CAPITALE est visée en dernier (elle se défend x2.5) : il faut un
+    écrasant avantage — sa chute élimine le royaume."""
     guerres = _guerres_de(state, fid)
     if not guerres:
         return False
-    nom_fid = ge.META_FACTIONS.get(fid, {}).get("nom", fid)
     for g in guerres:
         ennemi = g["a"] if g.get("b") == fid else g["b"]
         cible = state.get("pays", {}).get(ennemi)
-        if not cible:
+        if not cible or cible.get("elimine"):
             continue
         cap_e = ge._capitale_faction(ennemi)
-        frontieres = [t for t in cible.get("territoires", []) if t != cap_e
-                      and any(v in pays.get("territoires", []) for v in ge._adjacents(t))]
+        # Le front = provinces ennemies adjacentes à MES territoires OU à MES armées
+        # (une armée en marche peut donc porter la guerre chez l'ennemi).
+        positions = set(pays.get("territoires", []))
+        positions.update(u.get("territoire") for u in pays.get("unites", []))
+        frontieres = [t for t in cible.get("territoires", [])
+                      if any(v in positions for v in ge._adjacents(t))]
+        provinces = [t for t in frontieres if t != cap_e]
         ma_force, sa_force = _force_totale(pays), _force_totale(cible)
-        if not frontieres or ma_force < sa_force * 1.15 or random.random() > 0.6:
-            continue
-        prov = random.choice(frontieres)
-        # Pertes : le défenseur perd sa plus faible unité ; l'attaquant parfois aussi.
-        if cible.get("unites"):
-            faible = min(cible["unites"], key=lambda u: FORCES_UNITES.get(u.get("type"), 1))
-            cible["unites"] = [u for u in cible["unites"] if u is not faible]
-        if pays.get("unites") and random.random() < 0.35:
-            faible = min(pays["unites"], key=lambda u: FORCES_UNITES.get(u.get("type"), 1))
-            pays["unites"] = [u for u in pays["unites"] if u is not faible]
-        # Transfert de la province (les défenseurs refluent vers leur capitale).
-        cible["territoires"] = [t for t in cible["territoires"] if t != prov]
-        cible.get("prov_stab", {}).pop(prov, None)
-        for u in cible.get("unites", []):
-            if u.get("territoire") == prov and cap_e:
-                u["territoire"] = cap_e
-        villes_prises = [v for v in cible.get("villes", []) if v.get("territoire") == prov]
-        cible["villes"] = [v for v in cible.get("villes", []) if v.get("territoire") != prov]
-        for v in villes_prises:
-            v["gouverneur"] = False
-            v["pacification"] = 8
-            pays.setdefault("villes", []).append(v)
-        pop = ge._population_territoire(prov)
-        pays.setdefault("territoires", []).append(prov)
-        pays.setdefault("prov_stab", {})[prov] = 22.0
-        pays["ressources"]["population"] = round(pays["ressources"].get("population", 0) + pop, 1)
-        cible["ressources"]["population"] = max(0.0, round(cible["ressources"].get("population", 0) - pop, 1))
-        actions.append(f"prend {ge._nom_territoire(prov)} à {ge.META_FACTIONS.get(ennemi, {}).get('nom', ennemi)}")
-        evenements.append({"type": "guerre", "faction": fid,
-                           "texte": f"⚔ Bataille : {nom_fid} arrache {ge._nom_territoire(prov)} "
-                                    f"à {ge.META_FACTIONS.get(ennemi, {}).get('nom', ennemi)} !"})
-        return True
+        if provinces:  # d'abord les provinces ordinaires
+            if ma_force >= sa_force * 1.15 and random.random() < 0.6:
+                prov = random.choice(provinces)
+                if ge.resoudre_bataille(state, fid, ennemi, prov, evenements):
+                    actions.append(f"prend {ge._nom_territoire(prov)}")
+                return True
+        elif cap_e in frontieres:  # il ne reste que la capitale : l'assaut final
+            seuil = sa_force * (ge.BONUS_DEF_CAPITALE + 0.6) + 3
+            if ma_force > seuil and random.random() < prio.get("agressivite", 0.3):
+                if ge.resoudre_bataille(state, fid, ennemi, cap_e, evenements):
+                    actions.append(f"renverse {ge.META_FACTIONS.get(ennemi, {}).get('nom', ennemi)}")
+                return True
+        elif cap_e:  # pas de front : les armées MARCHENT vers l'ennemi
+            for u in [x for x in pays.get("unites", []) if not x.get("a_bouge")]:
+                pas = [t for t in ge._adjacents(u.get("territoire", ""))
+                       if ge._proprietaire(state, t) in (None, fid)]
+                if pas:
+                    meilleur = min(pas, key=lambda t: _distance(t, cap_e))
+                    if _distance(meilleur, cap_e) < _distance(u.get("territoire", ""), cap_e):
+                        u["territoire"] = meilleur
+                        u["a_bouge"] = True
     return True  # en guerre : on ne s'étend pas en parallèle
 
 
 def _declarer_guerre(state: dict, fid: str, pays: dict, prio: dict, evenements: list) -> None:
-    """Un dirigeant agressif peut déclarer la guerre à son RIVAL (IA↔IA) s'il domine."""
-    rival = prio.get("rival")
-    if not rival or rival not in state.get("pays", {}):
+    """Un dirigeant agressif déclare la guerre à une proie IA : son RIVAL de cœur en
+    priorité, sinon la faction la plus FAIBLE qu'il domine nettement. (Les guerres
+    contre le joueur passent par les messages spontanés + escalade des silences.)"""
+    if _guerres_de(state, fid):
         return
     joueur = state.get("meta", {}).get("joueur_pays")
-    if rival == joueur:  # les guerres contre le joueur passent par les messages spontanés
+    ma_force = _force_totale(pays)
+    candidats = []
+    rival = prio.get("rival")
+    for cid, cp in state.get("pays", {}).items():
+        if cid in (fid, joueur) or cp.get("elimine") or _allies_entre(state, fid, cid):
+            continue
+        # Pas de guerre sans FRONT : il faut une frontière commune (ou presque).
+        proche = any(v in pays.get("territoires", [])
+                     for t in cp.get("territoires", []) for v in ge._adjacents(t))
+        if not proche:
+            continue
+        seuil = 1.3 if cid == rival else 1.5  # on ose plus facilement contre le rival
+        if ma_force >= _force_totale(cp) * seuil:
+            candidats.append((0 if cid == rival else 1, _force_totale(cp), cid))
+    if not candidats:
         return
-    if _guerres_de(state, fid) or _allies_entre(state, fid, rival):
+    if random.random() > prio.get("agressivite", 0.3) * 0.08:
         return
-    cible = state["pays"][rival]
-    if _force_totale(pays) < _force_totale(cible) * 1.3:
-        return
-    if random.random() > prio.get("agressivite", 0.3) * 0.07:
-        return
+    candidats.sort()
+    proie = candidats[0][2]
     state.setdefault("diplomatie", {}).setdefault("guerres_actives", []).append(
-        {"a": fid, "b": rival, "depuis": state.get("meta", {}).get("tour", 1)})
+        {"a": fid, "b": proie, "depuis": state.get("meta", {}).get("tour", 1)})
     evenements.append({"type": "guerre", "faction": fid,
                        "texte": f"⚔ {ge.META_FACTIONS.get(fid, {}).get('nom', fid)} déclare la GUERRE "
-                                f"à {ge.META_FACTIONS.get(rival, {}).get('nom', rival)} !"})
+                                f"à {ge.META_FACTIONS.get(proie, {}).get('nom', proie)} !"})
 
 
 def _faire_la_paix(state: dict, fid: str, pays: dict, evenements: list) -> None:

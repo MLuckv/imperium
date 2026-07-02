@@ -56,7 +56,25 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
   (menace → ultimatum → guerre) ; **répondre apaise**. Badge sur Diplomatie. Varié.
 - [x] **Chronique** — plus de résumé chaque tour (juste les événements marquants) ; au
   PASSAGE D'UNE ANNÉE, belle chronique embellie « livre d'histoire » (Ollama, variée).
-- [ ] Lier la guerre déclarée au **combat réel** (phase combat).
+- [x] **Combat réel + capitales prenables** — entrer dans une province ennemie = acte de
+  guerre → bataille (`resoudre_bataille`). La capitale se défend x2.5 (+murailles) ; sa
+  chute = ÉLIMINATION (butin, provinces restantes → anarchie). Seuls les REBELLES ne
+  peuvent pas la prendre. L'IA marche vers l'ennemi, mobilise en guerre (+3 unités).
+- [x] **Conditions de victoire** — MILITAIRE (éliminer tous les dirigeants),
+  DIPLOMATIQUE (10 provinces + paix + alliance + estime des survivants),
+  TOURISTIQUE (1200 pts, 1 pt/prestige/mois via les merveilles). Défaite si ta capitale
+  tombe. Écran de fin + tourisme 🏺 dans la barre.
+
+### ⚠️ Déséquilibres relevés (partie test jusqu'à victoire, T413)
+- [ ] La victoire TOURISTIQUE arrive « par défaut » (~30 ans) si personne ne gagne avant :
+  l'Égypte la remporte à chaque simulation. Peut-être exiger 2+ merveilles bâties/restaurées.
+- [ ] Le tourisme du Parthénon (antique, passif) rapporte autant que les merveilles bâties.
+- [ ] Les guerres IA↔IA finissent presque toujours en paix blanche (les capitales-forteresses
+  tiennent) : peu d'éliminations entre IA — le joueur est le principal conquérant possible.
+- [ ] L'or du joueur s'accumule encore en toute fin de partie (5 600 au T361) malgré
+  l'inflation : il manque un usage tardif (mercenaires ? grands projets ?).
+- [ ] Les révoltes limitent l'IA vers ~10-14 provinces (voulu), mais l'Égypte reste
+  systématiquement la plus grosse (le Nil est très rentable).
 - [x] **Personas historiques des 4 dirigeants** — fiches recherchées (vie/histoire,
   façon de parler, ennemis, alliés, répliques) dans `game/data/leaders/`, utilisées
   comme mémoire par l'IA. Testé : réponses en caractère, anachronismes traités comme
