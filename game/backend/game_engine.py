@@ -1335,7 +1335,7 @@ _PROBA_CONTACT = {"projet_hostile": 0.85, "allie_attaque": 0.7, "armee_proche": 
                   "hostilite": 0.5, "alliance": 0.35, "faiblesse": 0.4}
 
 
-def _messages_spontanes_ia(state: dict, evenements: list) -> list[dict]:
+def _messages_spontanes_ia(state: dict, evenements: list, utiliser_ia: bool = True) -> list[dict]:
     """Les dirigeants IA contactent le joueur de leur PROPRE initiative (selon la
     situation), avec une conséquence diplomatique possible (guerre, alliance, coalition)."""
     out: list[dict] = []
@@ -1357,7 +1357,8 @@ def _messages_spontanes_ia(state: dict, evenements: list) -> list[dict]:
             continue
         rel = _relation_txt(f.get("reputation", {}).get(joueur, 0))
         res = ai_director.message_spontane(fid, raison, situation_joueur=situ, relation=rel,
-                                           date_jeu=date_jeu, pays_joueur=joueur)
+                                           date_jeu=date_jeu, pays_joueur=joueur,
+                                           utiliser_ia=utiliser_ia)
         msg = res.get("message")
         if not msg:
             continue
@@ -1549,8 +1550,10 @@ def _annee_lisible(annee: int) -> str:
     return f"{abs(int(annee))} {'av. J.-C.' if int(annee) < 0 else 'ap. J.-C.'}"
 
 
-def end_turn(state: dict) -> dict:
-    """Fait avancer le jeu d'un tour. Retourne {state, evenements, messages_diplomatiques}."""
+def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> dict:
+    """Fait avancer le jeu d'un tour. `ia_messages`/`ia_analyse` à False = mode RAPIDE
+    (avance multi-tours) : replis déterministes, aucun appel Ollama sauf la chronique
+    annuelle. Retourne {state, evenements, messages_diplomatiques}."""
     meta = state.setdefault("meta", {})
     annee_avant = meta.get("annee")
     evenements: list[dict] = []
@@ -1565,9 +1568,9 @@ def end_turn(state: dict) -> dict:
             continue
         p["merveilles_effet"] = merveilles.bonus_actif(p, state)
         p["prestige"] = p["merveilles_effet"].get("prestige", 0)
-        # TOURISME : les merveilles actives attirent les curieux (victoire touristique).
-        # 1 pt/prestige/mois : le Parthénon seul ne suffit pas, il faut BÂTIR/RESTAURER.
-        p["tourisme"] = round(p.get("tourisme", 0) + p["prestige"], 1)
+        # TOURISME : les merveilles attirent les curieux (victoire touristique).
+        # Hérité (antique) = 1 pt/mois ; BÂTI/RESTAURÉ = plein prestige → il faut œuvrer.
+        p["tourisme"] = round(p.get("tourisme", 0) + p["merveilles_effet"].get("tourisme", 0), 1)
         _maj_guerre_compteur(p, state)
         _maj_corruption(p)
         _maj_inflation(p)
@@ -1605,10 +1608,10 @@ def end_turn(state: dict) -> dict:
 
     # 3a) Escalade des messages restés sans réponse, puis nouveaux messages SPONTANÉS.
     _escalader_messages_ignores(state, evenements)
-    messages.extend(_messages_spontanes_ia(state, evenements))
+    messages.extend(_messages_spontanes_ia(state, evenements, utiliser_ia=ia_messages))
 
     # 3b) Analyse des conversations privées : applique les accords conclus.
-    accords = _analyser_conversations(state)
+    accords = _analyser_conversations(state) if ia_analyse else []
     for acc in accords:
         evenements.append({"type": "accord", "faction": acc.get("faction"),
                            "texte": acc.get("resume", "Accord conclu.")})
@@ -1635,9 +1638,10 @@ def end_turn(state: dict) -> dict:
         evenements.append({"type": "victoire", "faction": victoire["gagnant"],
                            "texte": victoire["raison"]})
 
-    # 8) MAJ world_state.md tous les 6 tours (§6 étape 6, §14.3).
+    # 8) MAJ world_state.md tous les 6 tours (§6 étape 6, §14.3). En mode rapide
+    # (avance multi-tours), version déterministe : pas d'appel Ollama.
     if meta.get("tour", 1) % 6 == 0:
-        res_ws = ws.ecrire_world_state(state)
+        res_ws = ws.ecrire_world_state(state, utiliser_ia=ia_messages)
         evenements.append({"type": "chronique", "faction": None,
                            "texte": f"La chronique du monde est mise à jour ({res_ws['source']})."})
 

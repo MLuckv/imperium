@@ -79,13 +79,16 @@ def proprietaire(wid: str, state: dict) -> str | None:
 def bonus_actif(pays: dict, state: dict) -> dict:
     """Somme des bonus des merveilles actives pour cette faction."""
     agg = {"or": 0.0, "nourriture": 0.0, "eau": 0.0, "recherche_pct": 0.0,
-           "stabilite": 0, "prestige": 0, "nb": 0}
+           "stabilite": 0, "prestige": 0, "nb": 0, "tourisme": 0}
     for wid, w in MERVEILLES.items():
         if proprietaire(wid, state) == pays.get("id"):
             for k, v in w.get("bonus", {}).items():
                 agg[k] = agg.get(k, 0) + v
             agg["prestige"] += w.get("prestige", 0)
             agg["nb"] += 1
+            # Tourisme : une merveille HÉRITÉE (antique) attire peu (1 pt/mois) ;
+            # une merveille BÂTIE ou RESTAURÉE par tes soins attire son plein prestige.
+            agg["tourisme"] += 1 if w["type"] == "antique" else w.get("prestige", 0)
     return agg
 
 

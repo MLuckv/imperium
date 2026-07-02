@@ -189,14 +189,22 @@ def end_turn(tours: int = 1):
         raise HTTPException(status_code=404, detail="Aucune partie en cours.")
     n = max(1, min(12, tours))
     evenements, messages, res = [], [], None
-    for _ in range(n):
-        res = game_engine.end_turn(state)
+    chronique = {}
+    for i in range(n):
+        # Avance MULTI-TOURS = mode rapide : aucun appel IA lent (les messages spontanés
+        # utilisent des replis variés, seule la chronique annuelle passe par Ollama).
+        # L'analyse des conversations (accords conclus par chat) tourne au 1er tour.
+        res = game_engine.end_turn(state, ia_messages=(n == 1), ia_analyse=(i == 0))
         evenements.extend(res.get("evenements", []))
         messages.extend(res.get("messages_diplomatiques", []))
+        if res.get("resume"):  # la chronique annuelle peut tomber au milieu du lot
+            chronique = {"resume": res["resume"], "resume_source": res.get("resume_source"),
+                         "resume_annee": res.get("resume_annee")}
         state = res.get("state", state)
     if res is not None:
         res["evenements"] = evenements
         res["messages_diplomatiques"] = messages
+        res.update(chronique or {})
     return res
 
 
@@ -290,10 +298,32 @@ def diplomatie_message(req: MessageReq):
 
     pj = state.get("pays", {}).get(pays_joueur, {})
     situation_joueur = ai_director.resume_situation(pj, pj.get("nom", pays_joueur))
+    # Situation du dirigeant lui-même : son royaume + ses guerres/alliances + son
+    # opinion du joueur → il négocie selon SES intérêts réels.
+    cf = state.get("pays", {}).get(req.cible, {})
+    situation_ia = ai_director.resume_situation(cf, cf.get("nom", req.cible))
+    diplo = state.get("diplomatie", {})
+    rels = []
+    for g in diplo.get("guerres_actives", []):
+        if req.cible in (g.get("a"), g.get("b")):
+            autre = g["a"] if g.get("b") == req.cible else g["b"]
+            nom = state.get("pays", {}).get(autre, {}).get("nom", autre)
+            rels.append(f"Tu es EN GUERRE contre {nom}" + (" (ton interlocuteur !)" if autre == pays_joueur else ""))
+    for t in diplo.get("traites_actifs", []):
+        if t.get("type") == "alliance" and req.cible in (t.get("a"), t.get("b")):
+            autre = t["a"] if t.get("b") == req.cible else t["b"]
+            nom = state.get("pays", {}).get(autre, {}).get("nom", autre)
+            rels.append(f"Tu es ALLIÉ à {nom}" + (" (ton interlocuteur)" if autre == pays_joueur else ""))
+    rep = cf.get("reputation", {}).get(pays_joueur, 0)
+    rels.append("Ton opinion de ton interlocuteur : "
+                + ("haineuse" if rep <= -50 else "hostile" if rep <= -15 else
+                   "méfiante" if rep < 15 else "cordiale" if rep < 50 else "amicale")
+                + f" ({rep:+d})")
+    situation_ia += " " + ". ".join(rels) + "."
     res = ai_director.reponse_diplomatique(
         req.cible, req.texte, etat_monde=etat_monde,
         historique=historique, date_jeu=date_jeu, pays_joueur=pays_joueur,
-        situation_joueur=situation_joueur)
+        situation_joueur=situation_joueur, situation_ia=situation_ia)
 
     conversations.ajouter_message(
         state, req.cible, role="ia", auteur=res["auteur"],
@@ -351,7 +381,7 @@ def conseiller_message(req: ConseilReq):
 
     res = ai_director.conseil(pays_joueur, req.texte, situation, pj.get("projets", []),
                               historique=historique, date_jeu=date_jeu,
-                              renseignements=renseignements)
+                              renseignements=renseignements, pays_data=pj)
     # Filet de sécurité : un ordre impossible/magique ne crée JAMAIS de projet.
     if ai_director.ordre_impossible(req.texte) and res.get("directive"):
         res["directive"] = None

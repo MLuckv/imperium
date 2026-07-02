@@ -11,6 +11,7 @@ const UNIT_LABELS = {
   levee: 'Levée paysanne', infanterie_legere: 'Infanterie légère',
   legionnaire: 'Légionnaire', hoplite: 'Hoplite', phalange: 'Phalange',
   cavalerie: 'Cavalerie', elephant: 'Éléphant de guerre', trireme: 'Trirème',
+  mercenaire: 'Mercenaires (or pur, 0 pop)',
 }
 
 export default function RecruitmentModal({ state, forcedTerr, onClose, onStateChange }) {

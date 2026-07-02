@@ -40,7 +40,7 @@ PRIORITES_IA: dict[str, dict] = {
         "terrain_prefere": None, "allie": None, "rival": "macedoine",
     },
     "carthage": {   # Ptolémée : le NIL (terres fertiles), la richesse, l'alliance macédonienne
-        "agressivite": 0.15, "expansion": 0.6, "armee_cible": 3, "merveilles": True,
+        "agressivite": 0.15, "expansion": 0.5, "armee_cible": 3, "merveilles": True,
         "unite": "infanterie_legere",
         "batiments": ["ferme", "puits", "scierie", "marche", "grenier", "carriere",
                       "agora", "aqueduc"],
@@ -170,6 +170,16 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list,
         cible = min(cible, 3)
     if en_guerre:  # en GUERRE, on mobilise davantage (l'IA se bat pour de bon)
         cible += 3
+        # Trésor de guerre : les riches soldent des MERCENAIRES (or pur, pas de pop).
+        if res.get("or", 0) >= 700:
+            cout_m = ge._cout_inflation(pays, COUTS_UNITES.get("mercenaire", 160))
+            res["or"] = round(res["or"] - cout_m, 1)
+            pays.setdefault("unites", []).append({
+                "id": f"{fid}-mercenaire-{random.randint(1000, 999999)}",
+                "type": "mercenaire", "territoire": pays["territoires"][0],
+                "effectif": 1, "moral": 80, "a_bouge": False,
+            })
+            actions.append("solde des mercenaires")
     if nb >= cible or not pays.get("territoires"):
         return
     # Unité fétiche du dirigeant (phalange d'Alexandre, hoplites de Léonidas…) si le
@@ -311,11 +321,21 @@ def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
                 if ge.resoudre_bataille(state, fid, ennemi, prov, evenements):
                     actions.append(f"prend {ge._nom_territoire(prov)}")
                 return True
-        elif cap_e in frontieres:  # il ne reste que la capitale : l'assaut final
+        elif cap_e in frontieres:  # il ne reste que la capitale : SIÈGE puis assaut final
             seuil = sa_force * (ge.BONUS_DEF_CAPITALE + 0.6) + 3
             if ma_force > seuil and random.random() < prio.get("agressivite", 0.3):
                 if ge.resoudre_bataille(state, fid, ennemi, cap_e, evenements):
                     actions.append(f"renverse {ge.META_FACTIONS.get(ennemi, {}).get('nom', ennemi)}")
+                return True
+            # Attrition du siège : la garnison assiégée fond lentement (famine,
+            # désertions) → les guerres de forteresse finissent par se dénouer.
+            if ma_force > sa_force and random.random() < 0.30:
+                ge._perdre_unite(cible)
+                cible.setdefault("prov_stab", {})[cap_e] = max(
+                    0.0, cible.get("prov_stab", {}).get(cap_e, 50) - 4)
+                evenements.append({"type": "guerre", "faction": fid,
+                                   "texte": f"⚔ {ge.META_FACTIONS.get(fid, {}).get('nom', fid)} assiège "
+                                            f"{ge._nom_territoire(cap_e)} : la garnison s'épuise."})
                 return True
         elif cap_e:  # pas de front : les armées MARCHENT vers l'ennemi
             for u in [x for x in pays.get("unites", []) if not x.get("a_bouge")]:
@@ -347,12 +367,12 @@ def _declarer_guerre(state: dict, fid: str, pays: dict, prio: dict, evenements: 
                      for t in cp.get("territoires", []) for v in ge._adjacents(t))
         if not proche:
             continue
-        seuil = 1.3 if cid == rival else 1.5  # on ose plus facilement contre le rival
+        seuil = 1.15 if cid == rival else 1.35  # on ose plus facilement contre le rival
         if ma_force >= _force_totale(cp) * seuil:
             candidats.append((0 if cid == rival else 1, _force_totale(cp), cid))
     if not candidats:
         return
-    if random.random() > prio.get("agressivite", 0.3) * 0.08:
+    if random.random() > prio.get("agressivite", 0.3) * 0.12:
         return
     candidats.sort()
     proie = candidats[0][2]
@@ -364,10 +384,16 @@ def _declarer_guerre(state: dict, fid: str, pays: dict, prio: dict, evenements: 
 
 
 def _faire_la_paix(state: dict, fid: str, pays: dict, evenements: list) -> None:
-    """Les guerres qui s'enlisent finissent par une paix blanche."""
+    """Les guerres qui s'enlisent finissent par une paix blanche — mais SEULEMENT en
+    cas de vraie impasse : un belligérant qui domine nettement continue la guerre."""
     tour = state.get("meta", {}).get("tour", 1)
     diplo = state.get("diplomatie", {})
     for g in list(_guerres_de(state, fid)):
+        autre_id = g["a"] if g.get("b") == fid else g["b"]
+        autre = state.get("pays", {}).get(autre_id, {})
+        f1, f2 = _force_totale(pays), _force_totale(autre)
+        if max(f1, f2) > min(f1, f2) * 1.5 + 2:
+            continue  # quelqu'un domine : pas de paix, la guerre se poursuit
         if tour - g.get("depuis", tour) >= 18 and random.random() < 0.2:
             diplo["guerres_actives"].remove(g)
             autre = g["a"] if g.get("b") == fid else g["b"]

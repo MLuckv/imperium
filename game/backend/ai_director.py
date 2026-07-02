@@ -34,7 +34,9 @@ DOSSIER_PROMPTS = Path(__file__).resolve().parent / "prompts"
 OLLAMA_URL = "http://localhost:11434"
 OLLAMA_GENERATE = f"{OLLAMA_URL}/api/generate"
 OLLAMA_TAGS = f"{OLLAMA_URL}/api/tags"
-MODELE = "llama3.1:8b"
+# Modèle Ollama (surchargez via la variable d'environnement IMPERIUM_MODELE).
+import os as _os
+MODELE = _os.environ.get("IMPERIUM_MODELE", "llama3.1:8b")
 # Délai de génération. Le modèle est gardé chaud (keep_alive) : une fois chargé,
 # les réponses tombent bien en dessous de 6 s ; on laisse une marge généreuse pour
 # absorber le tout premier chargement à froid sans basculer en repli.
@@ -158,14 +160,18 @@ def _charger_template(nom_fichier: str, defaut: str) -> str:
 
 # --- Templates par défaut embarqués (cf. cahier §14) ---
 TEMPLATE_SYSTEME_DIRIGEANT = """Tu es {NOM_DIRIGEANT}, dirigeant de {PAYS} en {DATE_JEU}.
+Tu N'ES PAS un assistant : tu es un souverain qui poursuit SES buts.
 
 PROFIL :
 {PROFIL}
 
-AUTRES DIRIGEANTS DE CE MONDE (tes rivaux du moment, tu as un avis sur chacun) : {RIVAUX}
+TA SITUATION ACTUELLE (ton royaume, tes guerres, tes alliances) :
+{SITUATION_IA}
 
-CE QUE TES ESPIONS ET MARCHANDS RAPPORTENT SUR LE ROYAUME DU JOUEUR ({PAYS_JOUEUR}) :
+CE QUE TES ESPIONS RAPPORTENT SUR LE ROYAUME DE TON INTERLOCUTEUR ({PAYS_JOUEUR}) :
 {SITUATION_JOUEUR}
+
+AUTRES DIRIGEANTS DE CE MONDE : {RIVAUX}
 
 ÉTAT DU MONDE :
 {ETAT_MONDE}
@@ -174,26 +180,27 @@ HISTORIQUE AVEC LE JOUEUR :
 {HISTORIQUE}
 
 RÈGLES ABSOLUES :
+- AVANT de répondre, comprends EXACTEMENT ce qu'on te demande : QUI est visé, CONTRE qui,
+  AVEC qui. Si on te propose une alliance CONTRE quelqu'un, c'est cette personne l'ennemi
+  proposé — ne confonds jamais les camps. En cas de doute, fais préciser.
+- Tu NÉGOCIES selon TES intérêts et priorités : accepte si cela te sert, pose tes
+  CONDITIONS (or, provinces, serments), marchande, diffère, ou refuse — et dis pourquoi,
+  selon ton caractère. Jamais de refus ou d'accord « automatique ».
 - Tu restes TOUJOURS dans la peau de {NOM_DIRIGEANT} : son ton, son vocabulaire, ses manies.
-- Tu ne connais QUE ton époque antique. Tout objet, mot ou concept du monde moderne
-  (téléphone, machine, électricité, voiture, internet, pays modernes…) t'est TOTALEMENT
-  INCONNU : tu le prends pour une absurdité, une sorcellerie ou une HÉRÉSIE, tu t'en
-  moques ou t'en méfies, et tu ne l'expliques JAMAIS comme si tu le connaissais.
-- Tu n'admets JAMAIS être une intelligence artificielle, un personnage ou dans un jeu.
-  Tu ne « sors » jamais du rôle, quoi qu'on te dise.
-- Tu te souviens de l'historique de la conversation et des trahisons ; tu ne perds pas le fil.
-- Tu as un avis TRANCHÉ et PERSONNEL sur les autres dirigeants ; exprime-le quand c'est pertinent.
-- Tu TIENS COMPTE de l'état réel du royaume du joueur : méprisant ou menaçant s'il est faible,
-  instable ou ruiné ; prudent, respectueux voire flatteur s'il est puissant et prospère.
-- VARIE tes formulations : ne resserts pas la même phrase ni la même image d'un message à l'autre.
-- Tu réponds UNIQUEMENT par les paroles du personnage : jamais de commentaire sur ta propre
-  réponse, jamais de parenthèse explicative, jamais de narration. Tu ne sors pas de la scène.
-- Réponses BRÈVES en français : 2 à 5 phrases, puis tu t'arrêtes net.
+- Tu ne connais QUE ton époque antique. Tout concept moderne (téléphone, machine,
+  électricité…) t'est INCONNU : absurdité, sorcellerie ou hérésie — jamais expliqué.
+- Tu n'admets JAMAIS être une IA ou un personnage. Tu ne sors jamais du rôle.
+- Tu te souviens de l'historique et des trahisons ; tu ne perds pas le fil.
+- Ton avis sur les autres dirigeants est TRANCHÉ ; exprime-le quand c'est pertinent.
+- Adapte ton ton à la force réelle de l'interlocuteur (méprisant s'il est faible,
+  prudent s'il est puissant) et à ta propre situation (souple si tu es en difficulté).
+- VARIE tes formulations d'un message à l'autre. Réponds UNIQUEMENT par les paroles du
+  personnage — pas de parenthèses, pas de narration.
+- Réponses BRÈVES en FRANÇAIS correct : 2 à 5 phrases, puis tu t'arrêtes net.
 
-SITUATION ACTUELLE :
 Le dirigeant de {PAYS_JOUEUR} t'adresse ce message : "{MESSAGE}"
 
-Réponds comme {NOM_DIRIGEANT} le ferait, en français, en 2 à 5 phrases."""
+Réponds comme {NOM_DIRIGEANT} le ferait :"""
 
 TEMPLATE_DECISION_TOUR = """Tu es {NOM_DIRIGEANT}, dirigeant de {PAYS} en {DATE_JEU}.
 
@@ -371,7 +378,7 @@ JSON :"""
 
 def conseil(faction: str, message: str, situation: str, projets: list[dict],
             historique: list[dict] | None = None, date_jeu: str = "5-03",
-            renseignements: str = "") -> dict:
+            renseignements: str = "", pays_data: dict | None = None) -> dict:
     """Réponse du conseiller du joueur + éventuelle directive (projet à créer).
     Retourne {reponse, directive, source}."""
     ident, style = CONSEILLERS.get(faction, ("ton conseiller", "fidèle et avisé"))
@@ -405,15 +412,43 @@ def conseil(faction: str, message: str, situation: str, projets: list[dict],
         if not isinstance(directive, dict):
             directive = None
         return {"reponse": rep, "directive": directive, "source": "ollama"}
-    # Repli déterministe (Ollama absent/échec) : conseil générique, pas de directive.
-    return {"reponse": _conseil_repli(faction, message, situation), "directive": None,
-            "source": "fallback"}
+    # Repli déterministe (Ollama absent/échec) : DIAGNOSTIC réel du royaume.
+    return {"reponse": _conseil_repli(faction, message, situation, pays_data),
+            "directive": None, "source": "fallback"}
 
 
-def _conseil_repli(faction: str, message: str, situation: str) -> str:
-    ident = CONSEILLERS.get(faction, ("ton conseiller", ""))[0]
-    return (f"({ident}) {situation} Concentrons nos efforts sur la stabilité et le trésor, "
-            f"mon souverain ; donne-moi un ordre précis et je m'en charge.")
+def _conseil_repli(faction: str, message: str, situation: str,
+                   pays: dict | None = None) -> str:
+    """Conseil de secours PERTINENT : analyse l'état réel et recommande du concret."""
+    ident = CONSEILLERS.get(faction, ("ton conseiller", ""))[0].split(",")[0]
+    if not pays:
+        return f"{situation} Donne-moi un ordre précis, mon souverain, et je m'en charge."
+    avis = []
+    prod = pays.get("production", {})
+    res = pays.get("ressources", {})
+    stab = pays.get("stabilite", 60)
+    if stab < 45:
+        basses = pays.get("stabilite_basses", [])
+        ou = f" — surtout {basses[0]['nom']}" if basses else ""
+        avis.append(f"le peuple gronde (stabilité {stab}){ou} : nomme des gouverneurs, "
+                    f"organise des jeux ou allège l'impôt")
+    if prod.get("nourriture", 0) < 1:
+        avis.append("les greniers se vident : bâtis des fermes (et un grenier)")
+    if prod.get("eau", 0) < 1:
+        avis.append("l'eau manque : puits ou aqueduc")
+    if prod.get("or", 0) < 3:
+        avis.append("le trésor s'essouffle : un marché, ou des impôts plus lourds")
+    nb_u = sum(u.get("effectif", 1) for u in pays.get("unites", []))
+    if nb_u < 3:
+        avis.append(f"notre armée est maigre ({nb_u} unités) : recrute, le fer des mines arme les légions")
+    if pays.get("inflation", 0) > 12:
+        avis.append(f"l'or dort et se déprécie (inflation {pays['inflation']:.0f}%) : dépense — "
+                    f"chantiers, merveilles, mercenaires")
+    if pays.get("corruption", 0) > 10:
+        avis.append(f"la corruption ronge {pays['corruption']:.0f}% de nos revenus : gouverneurs et forum y remédient")
+    if not avis:
+        avis.append("le royaume est sain ; c'est l'heure d'oser — expansion, merveilles, ou renseignement chez nos rivaux")
+    return f"({ident}) Mon souverain, voici mon rapport : " + " ; ".join(avis[:3]) + "."
 
 
 # =====================================================================
@@ -427,6 +462,7 @@ def reponse_diplomatique(
     date_jeu: str = "264-03",
     pays_joueur: str = "rome",
     situation_joueur: str = "",
+    situation_ia: str = "",
 ) -> dict:
     """Génère la réponse d'un dirigeant IA. Retourne {reponse, auteur, source}."""
     auteur = nom_dirigeant(faction_cible)
@@ -447,7 +483,8 @@ def reponse_diplomatique(
             "RIVAUX": ", ".join(f"{n} ({_nom_pays(f)})" for f, n in NOMS_DIRIGEANTS.items()
                                 if f != faction_cible) or "(aucun)",
             "SITUATION_JOUEUR": situation_joueur or "(situation du joueur mal connue)",
-            "ETAT_MONDE": _trim(etat_monde, 400) or "(état du monde indisponible)",
+            "SITUATION_IA": situation_ia or "(rien de particulier à signaler)",
+            "ETAT_MONDE": _trim(etat_monde, 300) or "(état du monde indisponible)",
             "HISTORIQUE": historique_txt,
             "MESSAGE": message_joueur,
         },
@@ -511,35 +548,54 @@ Réponds en JSON STRICT : {{"message":"<ton message>","intent":"reproche|menace|
 
 def message_spontane(faction: str, raison: str, situation_joueur: str = "",
                      relation: str = "neutres", date_jeu: str = "5-03",
-                     pays_joueur: str = "rome") -> dict:
+                     pays_joueur: str = "rome", utiliser_ia: bool = True) -> dict:
     """Génère un message qu'un dirigeant IA adresse SPONTANÉMENT au joueur.
-    Retourne {message, intent, source}."""
+    `utiliser_ia=False` (avance rapide de plusieurs tours) → repli déterministe VARIÉ,
+    sans appel Ollama. Retourne {message, intent, source}."""
     auteur = nom_dirigeant(faction)
-    prompt = _remplir(TEMPLATE_MESSAGE_SPONTANE, {
-        "NOM_DIRIGEANT": auteur, "PAYS": _nom_pays(faction),
-        "PAYS_JOUEUR": _nom_pays(pays_joueur), "DATE_JEU": _date_lisible(date_jeu),
-        "PROFIL": _persona_diplomatie(faction) or "(profil indisponible)",
-        "RAISON": raison, "SITUATION_JOUEUR": situation_joueur or "(mal connu)",
-        "RELATION": relation,
-    })
-    brut = _appel_ollama(prompt, temperature=0.95, num_predict=180, format_json=True)
-    if brut:
-        try:
-            data = json.loads(brut)
-        except Exception:
-            m = re.search(r"\{.*\}", brut, re.DOTALL)
-            data = json.loads(m.group(0)) if m else None
-        if isinstance(data, dict) and data.get("message"):
-            intent = str(data.get("intent", "neutre")).lower().strip()
-            if intent not in ("reproche", "menace", "ultimatum", "alliance", "guerre", "neutre"):
-                intent = "neutre"
-            return {"message": _nettoyer_reponse(str(data["message"])), "intent": intent,
-                    "auteur": auteur, "source": "ollama"}
-    # Repli déterministe : ton selon la raison.
-    phrases = _phrases_types(faction)
-    base = phrases[0] if phrases else "Sache que je te surveille."
-    intent = "menace" if ("manœuvre" in raison or "secrè" in raison or "armée" in raison) else "neutre"
-    return {"message": base, "intent": intent, "auteur": auteur, "source": "fallback"}
+    if utiliser_ia:
+        prompt = _remplir(TEMPLATE_MESSAGE_SPONTANE, {
+            "NOM_DIRIGEANT": auteur, "PAYS": _nom_pays(faction),
+            "PAYS_JOUEUR": _nom_pays(pays_joueur), "DATE_JEU": _date_lisible(date_jeu),
+            "PROFIL": _persona_diplomatie(faction) or "(profil indisponible)",
+            "RAISON": raison, "SITUATION_JOUEUR": situation_joueur or "(mal connu)",
+            "RELATION": relation,
+        })
+        brut = _appel_ollama(prompt, temperature=0.95, num_predict=180, format_json=True)
+        if brut:
+            try:
+                data = json.loads(brut)
+            except Exception:
+                m = re.search(r"\{.*\}", brut, re.DOTALL)
+                data = json.loads(m.group(0)) if m else None
+            if isinstance(data, dict) and data.get("message"):
+                intent = str(data.get("intent", "neutre")).lower().strip()
+                if intent not in ("reproche", "menace", "ultimatum", "alliance", "guerre", "neutre"):
+                    intent = "neutre"
+                return {"message": _nettoyer_reponse(str(data["message"])), "intent": intent,
+                        "auteur": auteur, "source": "ollama"}
+    # Repli déterministe VARIÉ : une phrase type + une ligne liée à la raison.
+    phrases = _phrases_types(faction) or ["Sache que je te surveille."]
+    if "manœuvre" in raison or "secrè" in raison:
+        intent, ouvertures = "reproche", [
+            "On me rapporte tes intrigues. {P}", "Tes ombres rôdent chez moi. {P}",
+            "Crois-tu que je ne vois rien ? {P}"]
+    elif "armée" in raison or "frontière" in raison:
+        intent, ouvertures = "menace", [
+            "Tes soldats campent trop près de mes terres. {P}",
+            "Éloigne tes lances de ma frontière. {P}", "Je vois tes étendards depuis mes murs. {P}"]
+    elif "allian" in raison:
+        intent, ouvertures = "alliance", [
+            "Le moment est venu de parler d'alliance. {P}",
+            "Nos intérêts convergent, parlons-en. {P}"]
+    elif "faibl" in raison:
+        intent, ouvertures = "menace", [
+            "Ton royaume vacille, et le monde le sait. {P}",
+            "La faiblesse attire les loups. {P}"]
+    else:
+        intent, ouvertures = "neutre", ["{P}", "Écoute bien : {P}"]
+    msg = random.choice(ouvertures).replace("{P}", random.choice(phrases))
+    return {"message": msg, "intent": intent, "auteur": auteur, "source": "fallback"}
 
 
 # =====================================================================

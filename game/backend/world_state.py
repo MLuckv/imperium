@@ -219,7 +219,7 @@ def _template_deterministe(state: dict) -> str:
     )
 
 
-def generer_world_state(state: dict) -> tuple[str, str]:
+def generer_world_state(state: dict, utiliser_ia: bool = True) -> tuple[str, str]:
     """Génère le contenu Markdown du world_state.
 
     Retourne (contenu_markdown, source) où source ∈ {"ollama", "fallback"}.
@@ -229,7 +229,8 @@ def generer_world_state(state: dict) -> tuple[str, str]:
     date_jeu = meta.get("date_jeu", "5-03")
     date_txt = date_lisible(date_jeu, meta.get("annee"))
 
-    res = ai_director.generer_monde_narratif(_donnees_factuelles(state), date_jeu)
+    res = (ai_director.generer_monde_narratif(_donnees_factuelles(state), date_jeu)
+           if utiliser_ia else {"source": "fallback"})
     if res.get("source") == "ollama" and res.get("texte"):
         corps = res["texte"]
         if not corps.lstrip().startswith("#"):
@@ -239,7 +240,7 @@ def generer_world_state(state: dict) -> tuple[str, str]:
     return _template_deterministe(state), "fallback"
 
 
-def ecrire_world_state(state: dict, ecraser: bool = True) -> dict:
+def ecrire_world_state(state: dict, ecraser: bool = True, utiliser_ia: bool = True) -> dict:
     """Génère et écrit le world_state.md. Retourne {fichier, source}.
 
     Si `ecraser` est False et qu'un fichier existe déjà pour cette date, on le
@@ -250,7 +251,7 @@ def ecrire_world_state(state: dict, ecraser: bool = True) -> dict:
     chemin = chemin_world_state(state.get("meta", {}).get("date_jeu", "264-03"))
     if not ecraser and chemin.exists():
         return {"fichier": str(chemin.relative_to(RACINE)), "source": "existant"}
-    contenu, source = generer_world_state(state)
+    contenu, source = generer_world_state(state, utiliser_ia=utiliser_ia)
     try:
         chemin.write_text(contenu, encoding="utf-8")
     except Exception:

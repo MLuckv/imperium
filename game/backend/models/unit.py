@@ -35,6 +35,7 @@ FORCES_UNITES: dict[str, int] = {
     "phalange": 8,
     "cavalerie": 6,
     "elephant": 12,
+    "mercenaire": 6,
     "trireme": FORCE_NAVALE_TRIREME,  # force navale nominale (cf. docstring)
 }
 
@@ -47,6 +48,7 @@ COUTS_UNITES: dict[str, int] = {
     "phalange": 60,
     "cavalerie": 70,
     "elephant": 150,
+    "mercenaire": 160,  # cher : payé en OR uniquement (puits d'or tardif)
     "trireme": 80,
 }
 
@@ -59,13 +61,15 @@ COUT_RES_UNITES: dict[str, dict[str, int]] = {
     "cavalerie": {"fer": 5},
     "elephant": {"fer": 12},
     "trireme": {"bois": 20},
-    # levee : pas de fer (paysans armés de fortune)
+    # levee : pas de fer (paysans) ; mercenaire : rien — tout est payé en or
+
 }
 
 # Coût en POPULATION par effectif recruté (l'armée se lève dans la population).
 # Recruter consomme de l'or ET de la population (cf. demande v5).
 COUT_POP_UNITES: dict[str, int] = {
     "levee": 1,
+    "mercenaire": 0,  # étrangers soldés : ne prélève PAS ta population
     "infanterie_legere": 1,
     "legionnaire": 2,
     "hoplite": 2,
