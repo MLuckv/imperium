@@ -40,10 +40,10 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
 
 ## 🚀 Phase 2 (en cours)
 
-- [ ] **AMÉLIORER LES PERFORMANCES DE L'IA** — objectif **≤ 5 s** par réponse
-  (actuellement ~7–15 s selon la verbosité + la richesse du contexte). Pistes : moins de
-  tokens générés, contexte/persona allégés, prompt plus court, garder le modèle chaud
-  (keep_alive + warmup au démarrage), modèle plus rapide/quantisé, streaming.
+- [ ] **AMÉLIORER LES PERFORMANCES DE L'IA** — objectif **≤ 5 s** par réponse de chat
+  (actuellement ~8-10 s). Benchmark qwen2.5:7b vs llama3.1:8b EN COURS (téléchargement) ;
+  modèle surchargeable via `IMPERIUM_MODELE`. FAIT : tours de jeu instantanés (mode
+  rapide multi-tours : plus d'appels Ollama sauf chronique annuelle — +1 an : 47 s → 10 s).
 - [x] **Conseiller dans l'onglet Diplomatie** — chat IA : point sur le royaume, conseils,
   DIRECTIVES libres → « points » sur la carte (coût/durée décidés par l'IA, en mois).
   Espions opérationnels = vrais renseignements sur la cible. Rébellion bien financée =
@@ -65,16 +65,18 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
   TOURISTIQUE (1200 pts, 1 pt/prestige/mois via les merveilles). Défaite si ta capitale
   tombe. Écran de fin + tourisme 🏺 dans la barre.
 
-### ⚠️ Déséquilibres relevés (partie test jusqu'à victoire, T413)
-- [ ] La victoire TOURISTIQUE arrive « par défaut » (~30 ans) si personne ne gagne avant :
-  l'Égypte la remporte à chaque simulation. Peut-être exiger 2+ merveilles bâties/restaurées.
-- [ ] Le tourisme du Parthénon (antique, passif) rapporte autant que les merveilles bâties.
-- [ ] Les guerres IA↔IA finissent presque toujours en paix blanche (les capitales-forteresses
-  tiennent) : peu d'éliminations entre IA — le joueur est le principal conquérant possible.
-- [ ] L'or du joueur s'accumule encore en toute fin de partie (5 600 au T361) malgré
-  l'inflation : il manque un usage tardif (mercenaires ? grands projets ?).
-- [ ] Les révoltes limitent l'IA vers ~10-14 provinces (voulu), mais l'Égypte reste
-  systématiquement la plus grosse (le Nil est très rentable).
+### ✅ Déséquilibres corrigés (v19)
+- [x] Victoire touristique passive → merveille HÉRITÉE (antique) = 1 pt/mois, BÂTIE ou
+  RESTAURÉE = plein prestige. Retesté : plus aucune victoire par défaut à T300.
+- [x] Guerres IA↔IA en paix blanche → paix SEULEMENT si impasse (forces proches) +
+  SIÈGE avec attrition quand il ne reste que la capitale ; seuils de guerre assouplis.
+- [x] Or de fin de partie → MERCENAIRES (160 or, 0 pop, 0 fer), joueur + IA en guerre.
+- [x] Conseils génériques en repli → diagnostic RÉEL (stabilité + provinces instables,
+  vivres, eau, or, armée, inflation, corruption) avec recommandations concrètes.
+- [x] Égypte dominante → expansion 0,6 → 0,5 (le Nil reste un avantage, assumé).
+- [x] Roleplay : le dirigeant connaît SA situation (guerres, alliances, opinion de toi),
+  négocie selon SES intérêts (conditions/marchandage/refus motivé), consigne
+  anti-contresens (alliance CONTRE X ≠ AVEC X — bug Léonidas corrigé).
 - [x] **Personas historiques des 4 dirigeants** — fiches recherchées (vie/histoire,
   façon de parler, ennemis, alliés, répliques) dans `game/data/leaders/`, utilisées
   comme mémoire par l'IA. Testé : réponses en caractère, anachronismes traités comme
