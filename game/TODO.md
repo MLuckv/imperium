@@ -40,10 +40,17 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
 
 ## 🚀 Phase 2 (en cours)
 
-- [ ] **AMÉLIORER LES PERFORMANCES DE L'IA** — objectif **≤ 5 s** par réponse de chat
-  (actuellement ~8-10 s). Benchmark qwen2.5:7b vs llama3.1:8b EN COURS (téléchargement) ;
-  modèle surchargeable via `IMPERIUM_MODELE`. FAIT : tours de jeu instantanés (mode
-  rapide multi-tours : plus d'appels Ollama sauf chronique annuelle — +1 an : 47 s → 10 s).
+- [x] **Benchmark modèles** — qwen2.5:7b RETENU (compréhension des camps correcte,
+  français fluide, JSON fiable) ; llama3.1:8b supprimé. Surcharge : `IMPERIUM_MODELE`.
+- [x] **Fiches dirigeants v2 (« ressentis »)** — renommées (rome_neron, macedoine_alexandre,
+  carthage_ptolemee, sparte_leonidas), 1re personne, SANS dates ni mort (simulation
+  anachronique assumée), ressentis humains envers chaque rival (jalousie, tendresse,
+  mépris…), réactions (flatterie/menace/trahison/offres), liens style Obsidian.
+  Phrases prédéfinies reléguées au repli hors-ligne uniquement.
+- [ ] **Vitesse chat ≤ 5 s** — actuellement ~9-13 s (persona riche = gros prompt).
+  Pistes : persona résumé en cache, streaming, quantisation plus agressive.
+- [ ] **Événements aléatoires** (étape suivante convenue).
+  FAIT : tours de jeu instantanés (mode rapide multi-tours — +1 an : 47 s → 10 s).
 - [x] **Conseiller dans l'onglet Diplomatie** — chat IA : point sur le royaume, conseils,
   DIRECTIVES libres → « points » sur la carte (coût/durée décidés par l'IA, en mois).
   Espions opérationnels = vrais renseignements sur la cible. Rébellion bien financée =

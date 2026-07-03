@@ -35,18 +35,20 @@ OLLAMA_URL = "http://localhost:11434"
 OLLAMA_GENERATE = f"{OLLAMA_URL}/api/generate"
 OLLAMA_TAGS = f"{OLLAMA_URL}/api/tags"
 # Modèle Ollama (surchargez via la variable d'environnement IMPERIUM_MODELE).
+# qwen2.5:7b retenu après benchmark : compréhension et français nettement meilleurs
+# que llama3.1:8b (camps d'alliance corrects, ton en caractère), vitesse équivalente.
 import os as _os
-MODELE = _os.environ.get("IMPERIUM_MODELE", "llama3.1:8b")
+MODELE = _os.environ.get("IMPERIUM_MODELE", "qwen2.5:7b")
 # Délai de génération. Le modèle est gardé chaud (keep_alive) : une fois chargé,
 # les réponses tombent bien en dessous de 6 s ; on laisse une marge généreuse pour
 # absorber le tout premier chargement à froid sans basculer en repli.
 TIMEOUT_S = 18.0
 
-# Mapping faction -> fichier de profil dirigeant.
+# Mapping faction -> fichier de profil dirigeant (fiches « ressentis », 1re personne).
 FICHIERS_DIRIGEANTS: dict[str, str] = {
-    "carthage": "carthage_hamilcar.md",
-    "macedoine": "macedoine_antigone.md",
-    "rome": "rome_scipio.md",
+    "carthage": "carthage_ptolemee.md",
+    "macedoine": "macedoine_alexandre.md",
+    "rome": "rome_neron.md",
     "sparte": "sparte_leonidas.md",
 }
 
@@ -138,7 +140,8 @@ def _phrases_types(faction: str) -> list[str]:
     profil = charger_profil(faction)
     if not profil:
         return []
-    bloc = re.search(r"##\s*Phrases types\s*(.+?)(?:\n##|\Z)", profil, re.DOTALL)
+    bloc = re.search(r"##\s*(?:Phrases types|Éclats de voix[^\n]*)\s*(.+?)(?:\n##|\Z)",
+                     profil, re.DOTALL)
     if not bloc:
         return []
     phrases = re.findall(r'"([^"]+)"', bloc.group(1))
@@ -194,8 +197,12 @@ RÈGLES ABSOLUES :
 - Ton avis sur les autres dirigeants est TRANCHÉ ; exprime-le quand c'est pertinent.
 - Adapte ton ton à la force réelle de l'interlocuteur (méprisant s'il est faible,
   prudent s'il est puissant) et à ta propre situation (souple si tu es en difficulté).
-- VARIE tes formulations d'un message à l'autre. Réponds UNIQUEMENT par les paroles du
-  personnage — pas de parenthèses, pas de narration.
+- VARIE tes formulations : ne commence JAMAIS deux réponses par la même formule
+  d'adresse ; la plupart du temps, réponds directement, sans salutation. Jamais
+  d'onomatopées ni de raclements de gorge (« Ahem », « Hum », « Eh bien »).
+- Les FAITS ci-dessus (ta situation, les rivaux et leurs royaumes) sont la VÉRITÉ :
+  ne réattribue jamais un royaume ou un titre à un autre dirigeant.
+- Réponds UNIQUEMENT par les paroles du personnage — pas de parenthèses, pas de narration.
 - Réponses BRÈVES en FRANÇAIS correct : 2 à 5 phrases, puis tu t'arrêtes net.
 
 Le dirigeant de {PAYS_JOUEUR} t'adresse ce message : "{MESSAGE}"
@@ -1006,23 +1013,28 @@ def _section_profil(faction: str, titre: str) -> str:
 def _persona_diplomatie(faction: str) -> str:
     """Persona RICHE pour la conversation : personnalité + façon de parler + relations +
     répliques. Plus fourni que le brief → réponses bien plus en caractère."""
-    perso = _trim(_section_profil(faction, "Personnalité"), 420)
-    parler = _trim(_section_profil(faction, "Façon de parler"), 520)
-    opinions = _trim(_section_profil(faction, "Opinions sur les autres dirigeants"), 650)
-    enn = _trim(_section_profil(faction, "Ennemis"), 180)
-    phrases = _phrases_types(faction)
+    vie = _trim(_section_profil(faction, "Ma vie, telle que je la raconte"), 700)
+    caractere = _trim(_section_profil(faction, "Caractère profond")
+                      or _section_profil(faction, "Personnalité"), 650)
+    parler = _trim(_section_profil(faction, "Façon de parler"), 450)
+    ressentis = _trim(_section_profil(faction, "Ressentis envers les autres dirigeants")
+                      or _section_profil(faction, "Opinions sur les autres dirigeants"), 900)
+    reactions = _trim(_section_profil(faction, "Ce qui me fait réagir"), 550)
+    buts = _trim(_section_profil(faction, "Mes buts dans cette partie")
+                 or _section_profil(faction, "Priorités"), 280)
     parties = []
-    if perso:
-        parties.append(f"PERSONNALITÉ : {perso}")
+    if vie:
+        parties.append(f"MA VIE (telle que je la raconte, sans dates — je ne connais pas ma fin) : {vie}")
+    if caractere:
+        parties.append(f"MON CARACTÈRE (désirs, peurs, blessures — ce qui me meut vraiment) : {caractere}")
     if parler:
-        parties.append(f"FAÇON DE PARLER (imite ce style, sans copier mot pour mot) : {parler}")
-    if opinions:
-        parties.append(f"TON AVIS SUR LES AUTRES DIRIGEANTS (exprime-le quand on t'en parle) : {opinions}")
-    if enn:
-        parties.append(f"ENNEMIS HISTORIQUES : {enn}")
-    if phrases:
-        parties.append("EXEMPLES DE TON (ne les répète PAS mot pour mot, inspire-t'en) : "
-                        + " / ".join(f"« {p} »" for p in phrases[:5]))
+        parties.append(f"MA FAÇON DE PARLER (imite ce style, sans phrases toutes faites) : {parler}")
+    if ressentis:
+        parties.append(f"MES RESSENTIS envers les autres dirigeants (émotions réelles, à faire vivre) : {ressentis}")
+    if reactions:
+        parties.append(f"CE QUI ME FAIT RÉAGIR (flatterie, menace, trahison, offres…) : {reactions}")
+    if buts:
+        parties.append(f"MES BUTS : {buts}")
     return "\n".join(parties) or _trim(charger_profil(faction), 900)
 
 
