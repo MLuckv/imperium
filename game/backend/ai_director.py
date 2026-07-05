@@ -39,10 +39,11 @@ OLLAMA_TAGS = f"{OLLAMA_URL}/api/tags"
 # que llama3.1:8b (camps d'alliance corrects, ton en caractère), vitesse équivalente.
 import os as _os
 MODELE = _os.environ.get("IMPERIUM_MODELE", "qwen2.5:7b")
-# Délai de génération. Le modèle est gardé chaud (keep_alive) : une fois chargé,
-# les réponses tombent bien en dessous de 6 s ; on laisse une marge généreuse pour
-# absorber le tout premier chargement à froid sans basculer en repli.
-TIMEOUT_S = 18.0
+# Délai de génération. Sur cette machine (M2, mode éco possible), une réponse peut
+# prendre ~20-25 s : mieux vaut attendre que basculer en repli générique. Le chat
+# joueur passe par le STREAMING (premiers mots en ~2 s), donc ce délai ne concerne
+# que les appels internes (conseiller, analyse d'accords, messages spontanés).
+TIMEOUT_S = 35.0
 
 # Mapping faction -> fichier de profil dirigeant (fiches « ressentis », 1re personne).
 FICHIERS_DIRIGEANTS: dict[str, str] = {
@@ -162,52 +163,34 @@ def _charger_template(nom_fichier: str, defaut: str) -> str:
 
 
 # --- Templates par défaut embarqués (cf. cahier §14) ---
-TEMPLATE_SYSTEME_DIRIGEANT = """Tu es {NOM_DIRIGEANT}, dirigeant de {PAYS} en {DATE_JEU}.
-Tu N'ES PAS un assistant : tu es un souverain qui poursuit SES buts.
+TEMPLATE_SYSTEME_DIRIGEANT = """Tu es {NOM_DIRIGEANT}, souverain de {PAYS} ({DATE_JEU}) — pas un assistant : un roi qui poursuit SES buts.
 
-PROFIL :
 {PROFIL}
 
-TA SITUATION ACTUELLE (ton royaume, tes guerres, tes alliances) :
-{SITUATION_IA}
+MA SITUATION : {SITUATION_IA}
+L'INTERLOCUTEUR ({PAYS_JOUEUR}), selon mes espions : {SITUATION_JOUEUR}
+LES AUTRES ROIS : {RIVAUX}
 
-CE QUE TES ESPIONS RAPPORTENT SUR LE ROYAUME DE TON INTERLOCUTEUR ({PAYS_JOUEUR}) :
-{SITUATION_JOUEUR}
-
-AUTRES DIRIGEANTS DE CE MONDE : {RIVAUX}
-
-ÉTAT DU MONDE :
-{ETAT_MONDE}
-
-HISTORIQUE AVEC LE JOUEUR :
+FIL DE LA CONVERSATION :
 {HISTORIQUE}
 
-RÈGLES ABSOLUES :
-- AVANT de répondre, comprends EXACTEMENT ce qu'on te demande : QUI est visé, CONTRE qui,
-  AVEC qui. Si on te propose une alliance CONTRE quelqu'un, c'est cette personne l'ennemi
-  proposé — ne confonds jamais les camps. En cas de doute, fais préciser.
-- Tu NÉGOCIES selon TES intérêts et priorités : accepte si cela te sert, pose tes
-  CONDITIONS (or, provinces, serments), marchande, diffère, ou refuse — et dis pourquoi,
-  selon ton caractère. Jamais de refus ou d'accord « automatique ».
-- Tu restes TOUJOURS dans la peau de {NOM_DIRIGEANT} : son ton, son vocabulaire, ses manies.
-- Tu ne connais QUE ton époque antique. Tout concept moderne (téléphone, machine,
-  électricité…) t'est INCONNU : absurdité, sorcellerie ou hérésie — jamais expliqué.
-- Tu n'admets JAMAIS être une IA ou un personnage. Tu ne sors jamais du rôle.
-- Tu te souviens de l'historique et des trahisons ; tu ne perds pas le fil.
-- Ton avis sur les autres dirigeants est TRANCHÉ ; exprime-le quand c'est pertinent.
-- Adapte ton ton à la force réelle de l'interlocuteur (méprisant s'il est faible,
-  prudent s'il est puissant) et à ta propre situation (souple si tu es en difficulté).
-- VARIE tes formulations : ne commence JAMAIS deux réponses par la même formule
-  d'adresse ; la plupart du temps, réponds directement, sans salutation. Jamais
-  d'onomatopées ni de raclements de gorge (« Ahem », « Hum », « Eh bien »).
-- Les FAITS ci-dessus (ta situation, les rivaux et leurs royaumes) sont la VÉRITÉ :
-  ne réattribue jamais un royaume ou un titre à un autre dirigeant.
-- Réponds UNIQUEMENT par les paroles du personnage — pas de parenthèses, pas de narration.
-- Réponses BRÈVES en FRANÇAIS correct : 2 à 5 phrases, puis tu t'arrêtes net.
+RÈGLES :
+- Comprends QUI est visé (alliance CONTRE X = X est l'ennemi proposé ; ne confonds jamais
+  les camps) ; les faits ci-dessus sont la vérité, ne réattribue aucun royaume.
+- NÉGOCIE selon tes intérêts : accepte, pose des conditions, marchande ou refuse en le
+  motivant. Adapte le ton aux forces en présence. Souviens-toi du fil et des trahisons.
+- Un accord qui sert CLAIREMENT tes intérêts mérite d'être accepté — ne refuse pas par
+  posture. Quand tu conclus, énonce-le SANS ambiguïté (« Marché conclu : je donne X, tu
+  donnes Y ») ; quand tu refuses, motive-le en une phrase. Pas d'entre-deux flou.
+- Tu ne connais que l'Antiquité (concept moderne = sorcellerie/hérésie, jamais expliqué) ;
+  tu n'es ni une IA ni un personnage, tu ne sors jamais du rôle.
+- VARIE tes ouvertures (jamais deux fois la même adresse, pas d'onomatopées), paroles
+  directes sans narration ni parenthèses.
+- FRANÇAIS impeccable UNIQUEMENT (alphabet latin, aucun autre), 1 à 3 phrases denses.
 
-Le dirigeant de {PAYS_JOUEUR} t'adresse ce message : "{MESSAGE}"
+{PAYS_JOUEUR} te dit : "{MESSAGE}"
 
-Réponds comme {NOM_DIRIGEANT} le ferait :"""
+{NOM_DIRIGEANT} répond :"""
 
 TEMPLATE_DECISION_TOUR = """Tu es {NOM_DIRIGEANT}, dirigeant de {PAYS} en {DATE_JEU}.
 
@@ -461,6 +444,74 @@ def _conseil_repli(faction: str, message: str, situation: str,
 # =====================================================================
 #  1) Réponse diplomatique d'un dirigeant à un message joueur
 # =====================================================================
+def prompt_diplomatique(
+    faction_cible: str,
+    message_joueur: str,
+    etat_monde: str = "",
+    historique: list[dict] | None = None,
+    date_jeu: str = "264-03",
+    pays_joueur: str = "rome",
+    situation_joueur: str = "",
+    situation_ia: str = "",
+) -> str:
+    """Construit le prompt complet d'une réponse de dirigeant (partagé stream/non-stream)."""
+    template = _charger_template("systeme_dirigeant.md", TEMPLATE_SYSTEME_DIRIGEANT)
+    return _remplir(
+        template,
+        {
+            "NOM_DIRIGEANT": nom_dirigeant(faction_cible),
+            "PAYS": _nom_pays(faction_cible),
+            "PAYS_JOUEUR": _nom_pays(pays_joueur),
+            "DATE_JEU": _date_lisible(date_jeu),
+            "PROFIL": _persona_diplomatie(faction_cible) or "(profil indisponible)",
+            "RIVAUX": ", ".join(f"{n} ({_nom_pays(f)})" for f, n in NOMS_DIRIGEANTS.items()
+                                if f != faction_cible) or "(aucun)",
+            "SITUATION_JOUEUR": situation_joueur or "(situation du joueur mal connue)",
+            "SITUATION_IA": situation_ia or "(rien de particulier à signaler)",
+            "ETAT_MONDE": "",  # retiré du template (redondant avec les situations)
+            "HISTORIQUE": _formater_historique(historique),
+            "MESSAGE": message_joueur,
+        },
+    )
+
+
+def flux_ollama(prompt: str, temperature: float = 0.72, num_predict: int = 90):
+    """Générateur : chunks de texte streamés depuis Ollama (vide si indisponible).
+    Permet d'afficher les premiers mots en ~1-2 s au lieu d'attendre la fin."""
+    if not modele_pret():
+        return
+    try:
+        with httpx.stream("POST", OLLAMA_GENERATE, json={
+            "model": MODELE, "prompt": prompt, "stream": True, "keep_alive": "30m",
+            "options": {"temperature": temperature, "num_predict": num_predict,
+                        "seed": random.randint(1, 2_000_000_000),
+                        "top_p": 0.92, "repeat_penalty": 1.18},
+        }, timeout=90.0) as r:
+            if r.status_code != 200:
+                return
+            for ligne in r.iter_lines():
+                if not ligne:
+                    continue
+                try:
+                    d = json.loads(ligne)
+                except Exception:
+                    continue
+                morceau = d.get("response") or ""
+                if morceau:
+                    # Garde anti-glissement : si un caractère non latin (CJK…)
+                    # apparaît, on coupe et on ARRÊTE le flux proprement.
+                    m = re.search(r"[　-ヿ一-鿿가-힯＀-￯]", morceau)
+                    if m:
+                        if m.start() > 0:
+                            yield morceau[:m.start()]
+                        return
+                    yield morceau
+                if d.get("done"):
+                    return
+    except Exception:
+        return
+
+
 def reponse_diplomatique(
     faction_cible: str,
     message_joueur: str,
@@ -471,33 +522,13 @@ def reponse_diplomatique(
     situation_joueur: str = "",
     situation_ia: str = "",
 ) -> dict:
-    """Génère la réponse d'un dirigeant IA. Retourne {reponse, auteur, source}."""
+    """Génère la réponse d'un dirigeant IA (non-stream). {reponse, auteur, source}."""
     auteur = nom_dirigeant(faction_cible)
-    nom_pays = _nom_pays(faction_cible)
-
-    historique_txt = _formater_historique(historique)
-    template = _charger_template("systeme_dirigeant.md", TEMPLATE_SYSTEME_DIRIGEANT)
-    prompt = _remplir(
-        template,
-        {
-            "NOM_DIRIGEANT": auteur,
-            "PAYS": nom_pays,
-            "PAYS_JOUEUR": _nom_pays(pays_joueur),
-            "DATE_JEU": _date_lisible(date_jeu),
-            # Persona riche (personnalité + façon de parler + relations + répliques)
-            # pour des réponses bien plus en caractère ; état du monde tronqué.
-            "PROFIL": _persona_diplomatie(faction_cible) or "(profil indisponible)",
-            "RIVAUX": ", ".join(f"{n} ({_nom_pays(f)})" for f, n in NOMS_DIRIGEANTS.items()
-                                if f != faction_cible) or "(aucun)",
-            "SITUATION_JOUEUR": situation_joueur or "(situation du joueur mal connue)",
-            "SITUATION_IA": situation_ia or "(rien de particulier à signaler)",
-            "ETAT_MONDE": _trim(etat_monde, 300) or "(état du monde indisponible)",
-            "HISTORIQUE": historique_txt,
-            "MESSAGE": message_joueur,
-        },
-    )
-
-    texte = _nettoyer_reponse(_appel_ollama(prompt, temperature=0.9, num_predict=150))
+    prompt = prompt_diplomatique(faction_cible, message_joueur, etat_monde, historique,
+                                 date_jeu, pays_joueur, situation_joueur, situation_ia)
+    # Température modérée : moins de « glissements » de style/faits, tout en gardant
+    # de la variété (la graine aléatoire par appel fait le reste).
+    texte = _nettoyer_reponse(_appel_ollama(prompt, temperature=0.72, num_predict=110))
     if texte:
         return {"reponse": texte, "auteur": auteur, "source": "ollama"}
 
@@ -568,7 +599,7 @@ def message_spontane(faction: str, raison: str, situation_joueur: str = "",
             "RAISON": raison, "SITUATION_JOUEUR": situation_joueur or "(mal connu)",
             "RELATION": relation,
         })
-        brut = _appel_ollama(prompt, temperature=0.95, num_predict=180, format_json=True)
+        brut = _appel_ollama(prompt, temperature=0.85, num_predict=120, format_json=True)
         if brut:
             try:
                 data = json.loads(brut)
@@ -803,28 +834,54 @@ def _repli_analyse_accords(conversation: list[dict]) -> dict:
 # =====================================================================
 #  5) Résumé narratif du tour écoulé
 # =====================================================================
-TEMPLATE_CHRONIQUE_ANNEE = """Tu es le grand chroniqueur de ce monde antique.
-Rédige, dans le style somptueux et embelli d'un livre d'histoire ancien, un TRÈS BREF
-résumé de l'année {ANNEE} : 3 à 4 phrases, UN SEUL paragraphe continu, élégant et imagé,
-qui relie les faits marquants. Pas de liste, pas de puce. Uniquement en FRANÇAIS soutenu.
-
-FAITS MARQUANTS DE L'ANNÉE :
-{FAITS}
-
-LA CHRONIQUE DE L'AN {ANNEE} (3-4 phrases) :"""
+# Chronique annuelle 100 % CODE (aucun appel IA : fin de tour instantanée).
+# Le style « livre d'histoire » vient de viviers de tournures piochés au hasard.
+_CHRONIQUE_OUVERTURES = [
+    "L'an {A} restera gravé dans les mémoires.",
+    "Ainsi passa l'an {A}, et les chroniqueurs veillaient.",
+    "En l'an {A}, le destin battit les cartes des royaumes.",
+    "Que l'on retienne de l'an {A} ceci :",
+    "L'an {A} fut de ceux dont parlent longtemps les vieillards.",
+]
+_CHRONIQUE_LIAISONS = [". Dans le même temps, ", ". Puis ", ". On rapporte aussi ceci : ",
+                       ". Les mois suivants, ", ". Et tandis que le monde retenait son souffle, "]
+_CHRONIQUE_CLOTURES = [
+    "Ainsi vont les empires : de bruit, d'or et de poussière.",
+    "Les dieux seuls savent ce que la suite réserve.",
+    "Le reste appartient déjà à la légende.",
+    "Et le monde, une fois encore, changea de visage.",
+]
+_CHRONIQUE_PAISIBLE = [
+    "L'an {A} s'écoula, paisible : les moissons rentrèrent, les frontières dormirent.",
+    "Nulle grande affaire en l'an {A} — et les peuples, pour une fois, s'en réjouirent.",
+    "L'an {A} passa sans fracas : on bâtit, on négocia, on attendit.",
+]
 
 
 def chronique_annuelle(annee_txt: str, faits: str) -> dict:
-    """Chronique annuelle embellie (style livre d'histoire). {texte, source}."""
-    if not (faits or "").strip():
-        return {"texte": f"L'an {annee_txt} s'écoula, paisible : nulle grande affaire ne vint "
-                          f"troubler le cours du monde.", "source": "fallback"}
-    prompt = _remplir(TEMPLATE_CHRONIQUE_ANNEE, {"ANNEE": annee_txt, "FAITS": _trim(faits, 1400)})
-    texte = _nettoyer_reponse(_appel_ollama(prompt, temperature=0.85, num_predict=180))
-    if texte:
-        return {"texte": texte, "source": "ollama"}
-    lignes = [l.strip("-• ").strip() for l in faits.splitlines() if l.strip()]
-    return {"texte": "Cette année-là : " + " ; ".join(lignes[:6]) + ".", "source": "fallback"}
+    """Chronique annuelle rédigée PAR CODE (déterministe + tournures variées)."""
+    lignes = [l.strip("-• ").strip().rstrip(" .!") for l in (faits or "").splitlines() if l.strip()]
+    # Nettoie les emojis/préfixes techniques pour une prose propre.
+    lignes = [re.sub(r"^[⚔🕊🤝✦👑✉\s]+", "", l) for l in lignes if len(l) > 8][:5]
+    if not lignes:
+        return {"texte": random.choice(_CHRONIQUE_PAISIBLE).format(A=annee_txt), "source": "code"}
+    _PROPRES = ("Rome", "Égypte", "Macédoine", "Sparte", "Néron", "Ptolémée",
+                "Alexandre", "Léonidas", "RÉVOLTE", "Mutinerie", "Merveille")
+    def _cas(l: str, debut_phrase: bool) -> str:
+        premier = l.split(" ", 1)[0]
+        if debut_phrase or premier in _PROPRES or premier.isupper():
+            return l
+        return l[0].lower() + l[1:]
+    corps = lignes[0]
+    derniere = None
+    for l in lignes[1:]:
+        choix = [x for x in _CHRONIQUE_LIAISONS if x != derniere] or _CHRONIQUE_LIAISONS
+        liaison = random.choice(choix)
+        derniere = liaison
+        corps += liaison + _cas(l, liaison.rstrip().endswith((".", ":")))
+    texte = re.sub(r"  +", " ", random.choice(_CHRONIQUE_OUVERTURES).format(A=annee_txt) + " " + corps + ". "
+             + random.choice(_CHRONIQUE_CLOTURES))
+    return {"texte": texte, "source": "code"}
 
 
 def resumer_tour(faits: str, date_jeu: str = "264-03") -> dict:
@@ -890,6 +947,11 @@ def _nettoyer_reponse(texte: str | None) -> str | None:
         i = t.find(sep)
         if i > 40:
             t = t[:i]
+    # GLISSEMENT de langue (qwen peut dériver vers le chinois) : on coupe net au
+    # premier caractère non latin (CJK, kana, hangul…).
+    m = re.search(r"[　-ヿ一-鿿가-힯＀-￯]", t)
+    if m:
+        t = t[:m.start()]
     t = t.strip()
     # Si la réponse a été tronquée en plein milieu (cap de tokens), on la ramène à la
     # dernière phrase complète — fin nette, jamais de mot coupé.
@@ -950,7 +1012,7 @@ def _date_lisible(date_jeu: str) -> str:
         return f"{date_jeu} av. J.C."
 
 
-def _formater_historique(historique: list[dict] | None, recents: int = 14) -> str:
+def _formater_historique(historique: list[dict] | None, recents: int = 10) -> str:
     """Formate l'historique pour le prompt SANS perdre le fil sur les longues
     conversations : on garde TOUTES les paroles du JOUEUR (elles portent les faits —
     noms, offres, accords) + les `recents` derniers échanges intégralement ; on ne
@@ -968,7 +1030,7 @@ def _formater_historique(historique: list[dict] | None, recents: int = 14) -> st
             qui = "Toi" if est_ia else "Le joueur"
             txt = h.get("texte", "")
             if not recent:
-                txt = _trim(txt, 200)  # compresse les anciens messages du joueur
+                txt = _trim(txt, 140)  # compresse les anciens messages du joueur
             lignes.append(f"- {qui} : {txt}")
         else:  # entrée d'historique_actions
             lignes.append(f"- [{h.get('acteur', '?')}] {h.get('texte', '')}")
@@ -1013,26 +1075,26 @@ def _section_profil(faction: str, titre: str) -> str:
 def _persona_diplomatie(faction: str) -> str:
     """Persona RICHE pour la conversation : personnalité + façon de parler + relations +
     répliques. Plus fourni que le brief → réponses bien plus en caractère."""
-    vie = _trim(_section_profil(faction, "Ma vie, telle que je la raconte"), 700)
+    vie = _trim(_section_profil(faction, "Ma vie, telle que je la raconte"), 340)
     caractere = _trim(_section_profil(faction, "Caractère profond")
-                      or _section_profil(faction, "Personnalité"), 650)
-    parler = _trim(_section_profil(faction, "Façon de parler"), 450)
+                      or _section_profil(faction, "Personnalité"), 320)
+    parler = _trim(_section_profil(faction, "Façon de parler"), 230)
     ressentis = _trim(_section_profil(faction, "Ressentis envers les autres dirigeants")
-                      or _section_profil(faction, "Opinions sur les autres dirigeants"), 900)
-    reactions = _trim(_section_profil(faction, "Ce qui me fait réagir"), 550)
+                      or _section_profil(faction, "Opinions sur les autres dirigeants"), 500)
+    reactions = _trim(_section_profil(faction, "Ce qui me fait réagir"), 260)
     buts = _trim(_section_profil(faction, "Mes buts dans cette partie")
-                 or _section_profil(faction, "Priorités"), 280)
+                 or _section_profil(faction, "Priorités"), 150)
     parties = []
     if vie:
-        parties.append(f"MA VIE (telle que je la raconte, sans dates — je ne connais pas ma fin) : {vie}")
+        parties.append(f"MA VIE (je ne connais pas ma fin) : {vie}")
     if caractere:
-        parties.append(f"MON CARACTÈRE (désirs, peurs, blessures — ce qui me meut vraiment) : {caractere}")
+        parties.append(f"MON CARACTÈRE : {caractere}")
     if parler:
-        parties.append(f"MA FAÇON DE PARLER (imite ce style, sans phrases toutes faites) : {parler}")
+        parties.append(f"MA FAÇON DE PARLER (à imiter) : {parler}")
     if ressentis:
-        parties.append(f"MES RESSENTIS envers les autres dirigeants (émotions réelles, à faire vivre) : {ressentis}")
+        parties.append(f"MES RESSENTIS envers les autres rois : {ressentis}")
     if reactions:
-        parties.append(f"CE QUI ME FAIT RÉAGIR (flatterie, menace, trahison, offres…) : {reactions}")
+        parties.append(f"MES RÉACTIONS (flatterie/menace/trahison/offres) : {reactions}")
     if buts:
         parties.append(f"MES BUTS : {buts}")
     return "\n".join(parties) or _trim(charger_profil(faction), 900)

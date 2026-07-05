@@ -270,6 +270,75 @@ def province_annex(req: AnnexReq):
     return {"ok": res.get("ok", False), "raison": res.get("raison", ""), "state": state}
 
 
+def _situations_diplomatiques(state: dict, cible: str, pays_joueur: str) -> tuple[str, str]:
+    """(situation_joueur, situation_ia) : le dirigeant connaît SON royaume, ses guerres,
+    ses alliances et son opinion du joueur → il négocie selon ses intérêts réels."""
+    pj = state.get("pays", {}).get(pays_joueur, {})
+    situation_joueur = ai_director.resume_situation(pj, pj.get("nom", pays_joueur))
+    cf = state.get("pays", {}).get(cible, {})
+    situation_ia = ai_director.resume_situation(cf, cf.get("nom", cible))
+    diplo = state.get("diplomatie", {})
+    rels = []
+    for g in diplo.get("guerres_actives", []):
+        if cible in (g.get("a"), g.get("b")):
+            autre = g["a"] if g.get("b") == cible else g["b"]
+            nom = state.get("pays", {}).get(autre, {}).get("nom", autre)
+            rels.append(f"Tu es EN GUERRE contre {nom}" + (" (ton interlocuteur !)" if autre == pays_joueur else ""))
+    for t in diplo.get("traites_actifs", []):
+        if t.get("type") == "alliance" and cible in (t.get("a"), t.get("b")):
+            autre = t["a"] if t.get("b") == cible else t["b"]
+            nom = state.get("pays", {}).get(autre, {}).get("nom", autre)
+            rels.append(f"Tu es ALLIÉ à {nom}" + (" (ton interlocuteur)" if autre == pays_joueur else ""))
+    rep = cf.get("reputation", {}).get(pays_joueur, 0)
+    rels.append("Ton opinion de ton interlocuteur : "
+                + ("haineuse" if rep <= -50 else "hostile" if rep <= -15 else
+                   "méfiante" if rep < 15 else "cordiale" if rep < 50 else "amicale")
+                + f" ({rep:+d})")
+    return situation_joueur, situation_ia + " " + ". ".join(rels) + "."
+
+
+@app.post("/api/diplomatie/message/stream")
+def diplomatie_message_stream(req: MessageReq):
+    """Réponse diplomatique en STREAMING (texte brut, chunk par chunk) : les premiers
+    mots apparaissent en ~1-2 s. Le fil est mis à jour à la fin du flux."""
+    from fastapi.responses import StreamingResponse
+    state = ws.charger_etat_courant()
+    if state is None:
+        raise HTTPException(status_code=404, detail="Aucune partie en cours.")
+    etat_monde = ws.lire_world_state_courant(state)
+    date_jeu = state.get("meta", {}).get("date_jeu", "5-03")
+    pays_joueur = state.get("meta", {}).get("joueur_pays", "rome")
+    tour = state.get("meta", {}).get("tour")
+    conversations.ajouter_message(
+        state, req.cible, role="joueur",
+        auteur=state.get("pays", {}).get(pays_joueur, {}).get("nom", pays_joueur),
+        texte=req.texte, tour=tour)
+    historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
+    situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
+    prompt = ai_director.prompt_diplomatique(
+        req.cible, req.texte, etat_monde=etat_monde, historique=historique,
+        date_jeu=date_jeu, pays_joueur=pays_joueur,
+        situation_joueur=situation_joueur, situation_ia=situation_ia)
+    auteur = ai_director.nom_dirigeant(req.cible)
+
+    def flux():
+        morceaux: list[str] = []
+        for chunk in ai_director.flux_ollama(prompt, temperature=0.72, num_predict=110):
+            morceaux.append(chunk)
+            yield chunk
+        if not morceaux:  # Ollama indisponible : repli déterministe
+            repli = ai_director._repli_diplomatique(req.cible, req.texte)
+            morceaux.append(repli)
+            yield repli
+        texte = ai_director._nettoyer_reponse("".join(morceaux)) or "…"
+        conversations.ajouter_message(state, req.cible, role="ia", auteur=auteur,
+                                      texte=texte, tour=tour)
+        ws.sauver_etat_courant(state)
+
+    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8",
+                             headers={"X-Auteur": auteur})
+
+
 @app.post("/api/diplomatie/message")
 def diplomatie_message(req: MessageReq):
     """Réponse diplomatique d'un dirigeant IA, avec mémoire de la conversation.
@@ -296,30 +365,7 @@ def diplomatie_message(req: MessageReq):
         texte=req.texte, tour=tour)
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
 
-    pj = state.get("pays", {}).get(pays_joueur, {})
-    situation_joueur = ai_director.resume_situation(pj, pj.get("nom", pays_joueur))
-    # Situation du dirigeant lui-même : son royaume + ses guerres/alliances + son
-    # opinion du joueur → il négocie selon SES intérêts réels.
-    cf = state.get("pays", {}).get(req.cible, {})
-    situation_ia = ai_director.resume_situation(cf, cf.get("nom", req.cible))
-    diplo = state.get("diplomatie", {})
-    rels = []
-    for g in diplo.get("guerres_actives", []):
-        if req.cible in (g.get("a"), g.get("b")):
-            autre = g["a"] if g.get("b") == req.cible else g["b"]
-            nom = state.get("pays", {}).get(autre, {}).get("nom", autre)
-            rels.append(f"Tu es EN GUERRE contre {nom}" + (" (ton interlocuteur !)" if autre == pays_joueur else ""))
-    for t in diplo.get("traites_actifs", []):
-        if t.get("type") == "alliance" and req.cible in (t.get("a"), t.get("b")):
-            autre = t["a"] if t.get("b") == req.cible else t["b"]
-            nom = state.get("pays", {}).get(autre, {}).get("nom", autre)
-            rels.append(f"Tu es ALLIÉ à {nom}" + (" (ton interlocuteur)" if autre == pays_joueur else ""))
-    rep = cf.get("reputation", {}).get(pays_joueur, 0)
-    rels.append("Ton opinion de ton interlocuteur : "
-                + ("haineuse" if rep <= -50 else "hostile" if rep <= -15 else
-                   "méfiante" if rep < 15 else "cordiale" if rep < 50 else "amicale")
-                + f" ({rep:+d})")
-    situation_ia += " " + ". ".join(rels) + "."
+    situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
     res = ai_director.reponse_diplomatique(
         req.cible, req.texte, etat_monde=etat_monde,
         historique=historique, date_jeu=date_jeu, pays_joueur=pays_joueur,

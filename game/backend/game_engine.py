@@ -1638,10 +1638,10 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
         evenements.append({"type": "victoire", "faction": victoire["gagnant"],
                            "texte": victoire["raison"]})
 
-    # 8) MAJ world_state.md tous les 6 tours (§6 étape 6, §14.3). En mode rapide
-    # (avance multi-tours), version déterministe : pas d'appel Ollama.
+    # 8) MAJ world_state.md tous les 6 tours — TOUJOURS déterministe (résumé par code :
+    # aucune IA dans la fin de tour, cf. demande v20).
     if meta.get("tour", 1) % 6 == 0:
-        res_ws = ws.ecrire_world_state(state, utiliser_ia=ia_messages)
+        res_ws = ws.ecrire_world_state(state, utiliser_ia=False)
         evenements.append({"type": "chronique", "faction": None,
                            "texte": f"La chronique du monde est mise à jour ({res_ws['source']})."})
 

@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { getConversation, sendDiplomaticMessage } from '../api'
+import { getConversation, streamDiplomaticMessage } from '../api'
 import { factionColor } from '../lib/format'
 
 // Messagerie moderne (style Instagram / app de messagerie) pour le fil privé
@@ -54,12 +54,28 @@ export default function MessageThread({ cible, leaderName, joueurName }) {
     ])
     setTyping(true)
     try {
-      const r = await sendDiplomaticMessage(cible, contenu)
-      // Le backend renvoie tout le fil à jour : on l'utilise comme source de vérité.
-      if (r && Array.isArray(r.conversation)) {
-        setMessages(r.conversation)
-      } else if (r) {
-        setMessages((m) => [...m, { role: 'ia', auteur: r.auteur, texte: r.reponse }])
+      // STREAMING : les mots du dirigeant apparaissent au fil de la génération.
+      let bulleCreee = false
+      await streamDiplomaticMessage(cible, contenu, (texteCumule) => {
+        if (!bulleCreee) { bulleCreee = true; setTyping(false) }
+        setMessages((m) => {
+          const copie = [...m]
+          const dernier = copie[copie.length - 1]
+          if (dernier && dernier.role === 'ia' && dernier.enCours) {
+            copie[copie.length - 1] = { ...dernier, texte: texteCumule }
+          } else {
+            copie.push({ role: 'ia', auteur: leaderName, texte: texteCumule, enCours: true })
+          }
+          return copie
+        })
+      })
+      // Fin du flux : resynchronise avec le fil serveur (texte nettoyé/finalisé).
+      try {
+        const d = await getConversation(cible)
+        if (d && Array.isArray(d.messages) && d.messages.length) setMessages(d.messages)
+        else setMessages((m) => m.map((x) => (x.enCours ? { ...x, enCours: false } : x)))
+      } catch {
+        setMessages((m) => m.map((x) => (x.enCours ? { ...x, enCours: false } : x)))
       }
     } catch (err) {
       setErreur(err.message || 'Échec de l’envoi')

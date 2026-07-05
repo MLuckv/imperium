@@ -89,6 +89,27 @@ export const sendDiplomaticMessage = (cible, texte, opts) =>
 export const sendConseillerMessage = (texte, opts) =>
   request('/api/conseiller/message', { method: 'POST', body: { texte }, ...opts })
 
+// Réponse diplomatique en STREAMING : onChunk(texteCumulé) est appelé au fil des
+// tokens (premiers mots en ~1-2 s). Résout avec le texte complet.
+export async function streamDiplomaticMessage(cible, texte, onChunk) {
+  const res = await fetch(`${API_BASE}/api/diplomatie/message/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ cible, texte }),
+  })
+  if (!res.ok || !res.body) throw new ApiError('Échec du flux', { status: res.status })
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let plein = ''
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    plein += dec.decode(value, { stream: true })
+    if (onChunk) onChunk(plein)
+  }
+  return plein
+}
+
 export const moveUnit = (unitId, territoire, opts) =>
   request('/api/unit/move', { method: 'POST', body: { unit_id: unitId, territoire }, ...opts })
 

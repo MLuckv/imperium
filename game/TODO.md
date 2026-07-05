@@ -47,8 +47,18 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
   anachronique assumée), ressentis humains envers chaque rival (jalousie, tendresse,
   mépris…), réactions (flatterie/menace/trahison/offres), liens style Obsidian.
   Phrases prédéfinies reléguées au repli hors-ligne uniquement.
-- [ ] **Vitesse chat ≤ 5 s** — actuellement ~9-13 s (persona riche = gros prompt).
-  Pistes : persona résumé en cache, streaming, quantisation plus agressive.
+- [x] **Vitesse chat** — STREAMING : les mots apparaissent dès ~2-6 s (1er message d'un
+  fil : ~12-15 s à cause du préchargement, puis ~5-7 s) ; prompt compressé 6154 → ~3150
+  caractères SANS perte de cohérence (batterie de tests avant/après) ; chronique annuelle
+  et world_state 100 % CODE → fin de tour SANS AUCUN appel IA (+1 an : 0,0 s).
+  ⚠ Le MODE ÉCONOMIE D'ÉNERGIE macOS est ACTIVÉ et divise la vitesse par ~2 :
+  le désactiver (Réglages Système → Batterie) ≈ premiers mots en ~2-3 s.
+- [x] **Conversations → effets sur la carte** — vérifié de bout en bout : pacte de
+  non-agression négocié par chat (Ptolémée a exigé des garanties, accepté l'or) →
+  traité inscrit + 80 or réellement transférés à la fin du tour.
+- [x] **Glissements quasi éliminés** — température 0,72, règles resserrées, coupe
+  anti-alphabets étrangers (qwen glissait en chinois : corrigé net, flux + stockage),
+  fin à la dernière phrase complète. Résiduel : rare mot moderne (« chèque ») — limite 7B.
 - [ ] **Événements aléatoires** (étape suivante convenue).
   FAIT : tours de jeu instantanés (mode rapide multi-tours — +1 an : 47 s → 10 s).
 - [x] **Conseiller dans l'onglet Diplomatie** — chat IA : point sur le royaume, conseils,
