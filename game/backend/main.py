@@ -322,10 +322,27 @@ def diplomatie_message_stream(req: MessageReq):
     auteur = ai_director.nom_dirigeant(req.cible)
 
     def flux():
+        import re as _re
         morceaux: list[str] = []
+        tampon = ""          # bufferise le début pour couper les tics d'ouverture
+        demarre = False
         for chunk in ai_director.flux_ollama(prompt, temperature=0.72, num_predict=110):
+            if not demarre:
+                tampon += chunk
+                if len(tampon) < 12:
+                    continue
+                tampon = _re.sub(r"^(?:Ahem|Hum+|Hmm+|Euh|Eh bien)\s*[,.!…]*\s*", "",
+                                 tampon, flags=_re.I)
+                demarre = True
+                morceaux.append(tampon)
+                yield tampon
+                tampon = ""
+                continue
             morceaux.append(chunk)
             yield chunk
+        if not demarre and tampon:
+            morceaux.append(tampon)
+            yield tampon
         if not morceaux:  # Ollama indisponible : repli déterministe
             repli = ai_director._repli_diplomatique(req.cible, req.texte)
             morceaux.append(repli)

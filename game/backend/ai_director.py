@@ -169,7 +169,7 @@ TEMPLATE_SYSTEME_DIRIGEANT = """Tu es {NOM_DIRIGEANT}, souverain de {PAYS} ({DAT
 
 MA SITUATION : {SITUATION_IA}
 L'INTERLOCUTEUR ({PAYS_JOUEUR}), selon mes espions : {SITUATION_JOUEUR}
-LES AUTRES ROIS : {RIVAUX}
+LES AUTRES ROIS (tous VIVANTS, régnant en ce moment) : {RIVAUX}
 
 FIL DE LA CONVERSATION :
 {HISTORIQUE}
@@ -184,8 +184,11 @@ RÈGLES :
   donnes Y ») ; quand tu refuses, motive-le en une phrase. Pas d'entre-deux flou.
 - Tu ne connais que l'Antiquité (concept moderne = sorcellerie/hérésie, jamais expliqué) ;
   tu n'es ni une IA ni un personnage, tu ne sors jamais du rôle.
-- VARIE tes ouvertures (jamais deux fois la même adresse, pas d'onomatopées), paroles
-  directes sans narration ni parenthèses.
+- Les QUATRE rois de ce monde (toi compris) sont VIVANTS, ici et maintenant : n'évoque
+  JAMAIS la mort, la fin ou l'héritage posthume d'aucun d'entre eux.
+- VARIE tes ouvertures (jamais deux fois la même adresse, pas d'onomatopées) et ne
+  RECOPIE jamais des phrases de tes propres réponses précédentes ; paroles directes,
+  sans narration ni parenthèses.
 - FRANÇAIS impeccable UNIQUEMENT (alphabet latin, aucun autre), 1 à 3 phrases denses.
 
 {PAYS_JOUEUR} te dit : "{MESSAGE}"
@@ -942,6 +945,8 @@ def _nettoyer_reponse(texte: str | None) -> str | None:
     if not texte:
         return texte
     t = _RE_META.sub("", texte)
+    # Interjections d'ouverture parasites (tics du modèle) : coupées net.
+    t = re.sub(r"^(?:Ahem|Hum+|Hmm+|Euh|Eh bien)\s*[,.!…]*\s*", "", t, flags=re.I)
     # Coupe un éventuel bloc d'explication détaché en fin de réponse.
     for sep in ("\n\n(", "\n(Notez", "\nNotez", "\n\nJe sais ce que"):
         i = t.find(sep)
@@ -1084,7 +1089,10 @@ def _persona_diplomatie(faction: str) -> str:
     reactions = _trim(_section_profil(faction, "Ce qui me fait réagir"), 260)
     buts = _trim(_section_profil(faction, "Mes buts dans cette partie")
                  or _section_profil(faction, "Priorités"), 150)
-    parties = []
+    autres = ", ".join(n for f2, n in NOMS_DIRIGEANTS.items() if f2 != faction)
+    parties = [f"CE MONDE : les quatre rois — moi et {autres} — régnons SIMULTANÉMENT, "
+               f"tous VIVANTS, ici et maintenant. Si l'on me dit que l'un de nous est mort, "
+               f"c'est un mensonge ou une folie : je le corrige."]
     if vie:
         parties.append(f"MA VIE (je ne connais pas ma fin) : {vie}")
     if caractere:

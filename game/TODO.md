@@ -58,7 +58,11 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
   traité inscrit + 80 or réellement transférés à la fin du tour.
 - [x] **Glissements quasi éliminés** — température 0,72, règles resserrées, coupe
   anti-alphabets étrangers (qwen glissait en chinois : corrigé net, flux + stockage),
-  fin à la dernière phrase complète. Résiduel : rare mot moderne (« chèque ») — limite 7B.
+  fin à la dernière phrase complète, interjections d'ouverture bannies (« Ahem »),
+  MONDE VIVANT verrouillé : ligne « les 4 rois sont vivants » en tête de persona +
+  règle + fiche Ptolémée purgée de la mort d'Alexandre — pièges frontaux déjoués
+  (« Alexandre est vivant et règne toujours »). Résiduel : rare épithète décalée — limite 7B.
+- [x] **Vitesse (mode éco désactivé)** — premiers mots ~2,5-6 s, réponse complète ~8-11 s.
 - [ ] **Événements aléatoires** (étape suivante convenue).
   FAIT : tours de jeu instantanés (mode rapide multi-tours — +1 an : 47 s → 10 s).
 - [x] **Conseiller dans l'onglet Diplomatie** — chat IA : point sur le royaume, conseils,
