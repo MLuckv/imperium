@@ -229,6 +229,7 @@ def new_game(joueur_pays: str = "rome") -> dict:
             "joueur_pays": joueur_pays, "ere": "republique",
         },
         "pays": pays,
+        "hordes": [],  # hordes barbares/rebelles actives
         "merveilles": merveilles.etat_initial(),
         "diplomatie": {"traites_actifs": [], "guerres_actives": []},
         "historique_actions": [
@@ -894,6 +895,246 @@ def _effet_projet_termine(state: dict, pays: dict, projet: dict, evenements: lis
     else:
         evenements.append({"type": "projet", "faction": pays.get("id"),
                            "texte": f"« {nomp} » est mené à bien."})
+
+
+# =====================================================================
+#  Événements MAJEURS (incendie, éruption, rébellion armée, hordes, aubaines)
+# =====================================================================
+def _dist_terr(a: str, b: str) -> float:
+    ca = cb = (0.0, 0.0)
+    for t in charger_territoires().get("territoires", []):
+        if t["id"] == a: ca = tuple(t.get("centre") or (0, 0))
+        if t["id"] == b: cb = tuple(t.get("centre") or (0, 0))
+    return ((ca[0] - cb[0]) ** 2 + (ca[1] - cb[1]) ** 2) ** 0.5
+
+
+def _de(nom: str) -> str:
+    """« de Rome », « d'Égypte » : élision correcte devant voyelle."""
+    return f"d'{nom}" if nom[:1].upper() in "AEIOUYÉÈÀÎÔÛ" else f"de {nom}"
+
+
+def horde_sur(state: dict, territoire: str) -> dict | None:
+    """Horde présente sur cette province, s'il y en a une."""
+    return next((h for h in state.get("hordes", []) if h.get("territoire") == territoire), None)
+
+
+def combattre_horde(state: dict, faction: str, horde: dict, evenements: list) -> bool:
+    """Une armée régulière charge une horde. True si la horde est détruite."""
+    pays = state["pays"][faction]
+    f_att = _force_nationale(pays)
+    nom_f = _nom_pays(faction)
+    if f_att > horde.get("force", 10):
+        state.get("hordes", []).remove(horde)
+        if random.random() < 0.5:
+            _perdre_unite(pays)
+        pays["prestige"] = pays.get("prestige", 0) + 1
+        evenements.append({"type": "barbares", "faction": faction,
+                           "texte": f"⚔ {nom_f} ÉCRASE les {horde.get('nom', 'barbares')} "
+                                    f"à {_nom_territoire(horde.get('territoire'))} !"})
+        return True
+    # Charge repoussée : l'armée saigne, la horde aussi.
+    horde["force"] = round(horde.get("force", 10) * 0.8, 1)
+    _perdre_unite(pays)
+    evenements.append({"type": "barbares", "faction": faction,
+                       "texte": f"⚔ La charge {_de(nom_f)} sur les {horde.get('nom', 'barbares')} "
+                                f"est repoussée : nos rangs s'éclaircissent."})
+    return False
+
+
+def _evenements_majeurs(state: dict, evenements: list) -> None:
+    """Événements rares mais MARQUANTS : ils changent la partie, pas juste un chiffre."""
+    pays_vivants = {f: p for f, p in state.get("pays", {}).items() if not p.get("elimine")}
+    if not pays_vivants:
+        return
+    tour = state.get("meta", {}).get("tour", 1)
+
+    # 🔥 GRAND INCENDIE : une ville (capitale plus probable) perd 1-2 bâtiments.
+    if random.random() < 0.007:
+        fid = random.choice(list(pays_vivants))
+        p = pays_vivants[fid]
+        villes = [v for v in p.get("villes", []) if v.get("batiments")]
+        if villes:
+            cap = _capitale_faction(fid)
+            ville = next((v for v in villes if v.get("territoire") == cap), None) \
+                if random.random() < 0.6 else None
+            ville = ville or random.choice(villes)
+            perdus = random.sample(ville["batiments"], k=min(len(ville["batiments"]),
+                                                             random.choice((1, 2))))
+            for b in perdus:
+                ville["batiments"].remove(b)
+            p.setdefault("prov_modif", {}).setdefault(ville.get("territoire"), []).append(
+                {"nom": "Incendie", "malus": -15, "tours": 3})
+            noms = ", ".join(_nom_batiment(b) for b in perdus)
+            evenements.append({"type": "catastrophe", "faction": fid,
+                               "texte": f"🔥 Un GRAND INCENDIE ravage {ville.get('nom')} : "
+                                        f"{noms} partent en fumée ! Il faudra rebâtir."})
+
+    # 🌋 ÉRUPTION VOLCANIQUE : une province est dévastée (bâtiments, population).
+    if random.random() < 0.003:
+        fid = random.choice(list(pays_vivants))
+        p = pays_vivants[fid]
+        if p.get("territoires"):
+            tid = random.choice(p["territoires"])
+            ville = next((v for v in p.get("villes", []) if v.get("territoire") == tid), None)
+            detail = ""
+            if ville and ville.get("batiments"):
+                perdus = ville["batiments"][:2]
+                ville["batiments"] = ville["batiments"][2:]
+                detail = f" {ville.get('nom')} perd {len(perdus)} bâtiment(s)."
+            res = p.setdefault("ressources", {})
+            perte_pop = round(res.get("population", 0) * 0.12, 1)
+            res["population"] = max(1.0, res.get("population", 0) - perte_pop)
+            if ville:
+                ville["population"] = max(1, int(ville.get("population", 1) * 0.8))
+            p.setdefault("prov_modif", {}).setdefault(tid, []).append(
+                {"nom": "Éruption", "malus": -25, "tours": 4})
+            evenements.append({"type": "catastrophe", "faction": fid,
+                               "texte": f"🌋 ÉRUPTION : le feu de la terre dévaste "
+                                        f"{_nom_territoire(tid)} (−{perte_pop} habitants).{detail}"})
+
+    # ⚔ RÉBELLION ARMÉE : chez une faction instable, une province fait sécession et
+    # lève une ARMÉE rebelle (horde) qui se retourne contre elle.
+    if random.random() < 0.006:
+        candidats = [(f, p) for f, p in pays_vivants.items() if p.get("stabilite", 60) < 45]
+        if candidats:
+            fid, p = random.choice(candidats)
+            cap = _capitale_faction(fid)
+            cibles = [t for t in p.get("territoires", []) if t != cap]
+            if cibles:
+                tid = min(cibles, key=lambda t: p.get("prov_stab", {}).get(t, 50))
+                p["territoires"].remove(tid)
+                p.get("prov_stab", {}).pop(tid, None)
+                p["villes"] = [v for v in p.get("villes", []) if v.get("territoire") != tid]
+                state.setdefault("hordes", []).append({
+                    "id": f"horde-{tour}-{random.randint(100, 999)}",
+                    "nom": "Rebelles", "territoire": tid,
+                    "force": 9 + tour // 12, "cible_faction": fid,
+                    "cible_territoire": _capitale_faction(fid),
+                })
+                evenements.append({"type": "barbares", "faction": fid,
+                                   "texte": f"⚔ RÉBELLION ARMÉE : {_nom_territoire(tid)} se soulève "
+                                            f"et lève une armée contre {_nom_pays(fid)} !"})
+
+    # ⚔ HORDE BARBARE : surgit en terre neutre et marche sur la civilisation la plus proche.
+    if tour >= 18 and len(state.get("hordes", [])) < 2 and random.random() < 0.010:
+        fid = random.choice(list(pays_vivants))
+        p = pays_vivants[fid]
+        frontieres = {v for t in p.get("territoires", []) for v in _adjacents(t)
+                      if _proprietaire(state, v) is None}
+        if frontieres:
+            tid = random.choice(sorted(frontieres))
+            state.setdefault("hordes", []).append({
+                "id": f"horde-{tour}-{random.randint(100, 999)}",
+                "nom": "Barbares", "territoire": tid,
+                "force": 11 + tour // 10, "cible_faction": fid,
+                "cible_territoire": _capitale_faction(fid),
+            })
+            evenements.append({"type": "barbares", "faction": fid,
+                               "texte": f"⚔ Des BARBARES déferlent sur {_nom_territoire(tid)} : "
+                                        f"la horde marche vers {_nom_pays(fid)} !"})
+
+    # 🌾 / ⛏ AUBAINES : moisson exceptionnelle, filon d'or.
+    for fid, p in pays_vivants.items():
+        if random.random() < 0.012:
+            gain = random.randint(18, 32)
+            res = p.setdefault("ressources", {})
+            res["nourriture"] = round(res.get("nourriture", 0) + gain, 1)
+            evenements.append({"type": "aubaine", "faction": fid,
+                               "texte": f"🌾 Moisson exceptionnelle en {_nom_pays(fid)} : +{gain} nourriture."})
+        if random.random() < 0.007:
+            gain = random.randint(70, 140)
+            res = p.setdefault("ressources", {})
+            res["or"] = round(res.get("or", 0) + gain, 1)
+            evenements.append({"type": "aubaine", "faction": fid,
+                               "texte": f"⛏ Un filon d'or est découvert en {_nom_pays(fid)} : +{gain} or."})
+
+
+def _tour_hordes(state: dict, evenements: list) -> None:
+    """Les hordes marchent vers leur cible et RAVAGENT ce qu'elles prennent. Elles
+    s'épuisent avec le temps ; les armées (joueur ou IA) peuvent les détruire."""
+    hordes = state.setdefault("hordes", [])
+    for h in list(hordes):
+        h["force"] = round(h.get("force", 10) - 0.4, 1)  # attrition naturelle
+        if h["force"] <= 3:
+            hordes.remove(h)
+            evenements.append({"type": "barbares", "faction": None,
+                               "texte": f"Les {h.get('nom', 'barbares')} de "
+                                        f"{_nom_territoire(h.get('territoire'))} se dispersent, épuisés."})
+            continue
+        # Re-cible la faction vivante la plus proche.
+        vivants = [f for f, p in state.get("pays", {}).items() if not p.get("elimine")]
+        if not vivants:
+            continue
+        if h.get("cible_faction") not in vivants:
+            h["cible_faction"] = min(vivants, key=lambda f: _dist_terr(
+                h["territoire"], _capitale_faction(f) or h["territoire"]))
+            h["cible_territoire"] = _capitale_faction(h["cible_faction"])
+        cible_id = h["cible_faction"]
+        cap_c = _capitale_faction(cible_id)
+        cible = state["pays"][cible_id]
+        # Pas suivant : la province adjacente qui rapproche de la capitale cible.
+        pas = _adjacents(h.get("territoire", ""))
+        if not pas or not cap_c:
+            continue
+        prochain = min(pas, key=lambda t: _dist_terr(t, cap_c))
+        proprio = _proprietaire(state, prochain)
+        if proprio is None:
+            h["territoire"] = prochain
+            continue
+        # La horde attaque la province possédée (peu importe le propriétaire).
+        defenseur = state["pays"][proprio]
+        est_cap = prochain == _capitale_faction(proprio)
+        # Défense = armée + milice locale (les habitants et les murs se battent aussi),
+        # afin qu'un jeune royaume ne soit pas balayé sans recours.
+        ville = next((v for v in defenseur.get("villes", []) if v.get("territoire") == prochain), None)
+        milice = 4.0 + (ville.get("population", 0) * 0.25 if ville else 0.0)
+        if ville and "murailles" in ville.get("batiments", []):
+            milice += 8.0
+        f_def = _force_nationale(defenseur) * 0.9 + milice
+        if est_cap:
+            f_def *= BONUS_DEF_CAPITALE
+        if h["force"] <= f_def:
+            # Repoussée : la horde saigne, le défenseur perd parfois une unité.
+            h["force"] = round(h["force"] * 0.55, 1)
+            if random.random() < 0.4:
+                _perdre_unite(defenseur)
+            evenements.append({"type": "barbares", "faction": proprio,
+                               "texte": f"⚔ {_nom_pays(proprio)} repousse les {h['nom']} aux portes "
+                                        f"{_de(_nom_territoire(prochain))} !"})
+            continue
+        res = defenseur.setdefault("ressources", {})
+        _perdre_unite(defenseur)
+        h["force"] = round(h["force"] * 0.8, 1)
+        if est_cap:
+            # SAC DE LA CAPITALE : pillage terrible, mais la grande cité TIENT — une
+            # horde ne raye jamais un royaume de la carte (seul un roi le peut).
+            butin = round(res.get("or", 0) * 0.35, 1)
+            res["or"] = max(0.0, round(res.get("or", 0) - butin, 1))
+            perte_pop = round(min(res.get("population", 0) * 0.10, 12), 1)
+            res["population"] = max(2.0, round(res.get("population", 0) - perte_pop, 1))
+            if ville and ville.get("batiments"):
+                ville["batiments"].pop()
+            defenseur.setdefault("prov_modif", {}).setdefault(prochain, []).append(
+                {"nom": f"Sac ({h['nom']})", "malus": -20, "tours": 4})
+            h["force"] = round(h["force"] * 0.7, 1)  # le siège coûte cher aux assaillants
+            evenements.append({"type": "barbares", "faction": proprio,
+                               "texte": f"🔥 Les {h['nom']} SACCAGENT {_nom_territoire(prochain)}, capitale de "
+                                        f"{_nom_pays(proprio)} : −{butin} or, −{perte_pop} habitants. La cité tient."})
+            continue
+        # RAVAGE d'une province ordinaire : elle est arrachée et pillée (personne ne la garde).
+        defenseur["territoires"] = [t for t in defenseur.get("territoires", []) if t != prochain]
+        defenseur.get("prov_stab", {}).pop(prochain, None)
+        defenseur["villes"] = [v for v in defenseur.get("villes", []) if v.get("territoire") != prochain]
+        perte_pop = round(min((ville.get("population", 0) if ville else _population_territoire(prochain) / 2),
+                              res.get("population", 0) * 0.25), 1)
+        res["population"] = max(2.0, round(res.get("population", 0) - perte_pop, 1))
+        for u in defenseur.get("unites", []):
+            if u.get("territoire") == prochain and cap_c:
+                u["territoire"] = _capitale_faction(proprio) or prochain
+        h["territoire"] = prochain
+        evenements.append({"type": "barbares", "faction": proprio,
+                           "texte": f"🔥 Les {h['nom']} RAVAGENT {_nom_territoire(prochain)} "
+                                    f"({_nom_pays(proprio)}) : pillages, {perte_pop} habitants perdus."})
 
 
 def _verifier_revolte(pays: dict, evenements: list) -> None:
@@ -1593,6 +1834,11 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     # 1c) Catastrophes locales (séisme, peste…) → malus de stabilité par province.
     _declencher_catastrophes(state, evenements)
 
+    # 1d) Événements MAJEURS (incendie, éruption, rébellion armée, hordes, aubaines)
+    # et marche des hordes barbares.
+    _evenements_majeurs(state, evenements)
+    _tour_hordes(state, evenements)
+
     # 2) Événements aléatoires (§16) — peuvent poser des modificateurs durables.
     evenements.extend(_declencher_evenements(state))
 
@@ -1648,7 +1894,8 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     # 9) Pas de résumé chaque tour : on accumule les faits MARQUANTS, et on ne rédige une
     # belle chronique (style livre d'histoire) qu'au PASSAGE D'UNE ANNÉE.
     NOTABLE = {"guerre", "paix", "coalition", "message_ia", "revolte", "catastrophe",
-               "merveille", "projet", "accord", "victoire", "conseiller", "expansion"}
+               "merveille", "projet", "accord", "victoire", "conseiller", "expansion",
+               "barbares", "aubaine"}
     notables = [ev.get("texte") for ev in evenements
                 if isinstance(ev, dict) and ev.get("type") in NOTABLE and ev.get("texte")]
     chron = state.setdefault("_chronique_annee", [])
@@ -2078,6 +2325,22 @@ def deplacer_unite(state: dict, unit_id: str, territoire_cible: str) -> dict:
         if TECH_NAVIGATION not in pays.get("technologies", []):
             return {"ok": False,
                     "raison": "Traversée maritime impossible : recherchez « Navigation maritime »."}
+
+    # HORDE sur la province ciblée : on charge les barbares/rebelles (acte de guerre
+    # contre personne — ils n'appartiennent à aucun royaume).
+    horde = horde_sur(state, territoire_cible)
+    if horde is not None:
+        evs: list[dict] = []
+        unite["a_bouge"] = True
+        detruite = combattre_horde(state, joueur, horde, evs)
+        if detruite and any(u.get("id") == unit_id for u in pays.get("unites", [])):
+            unite["territoire"] = territoire_cible
+        state.setdefault("_chronique_annee", []).extend(e["texte"] for e in evs)
+        state.setdefault("evenements_tour", []).extend(evs)
+        ws.sauver_etat_courant(state)
+        return {"ok": True, "raison": " ".join(e["texte"] for e in evs),
+                "bataille": True, "horde": True, "detruite": detruite,
+                "territoire": territoire_cible}
 
     proprio = _proprietaire(state, territoire_cible)
     if proprio and proprio != joueur:

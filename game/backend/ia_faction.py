@@ -61,7 +61,9 @@ def jouer(state: dict, fid: str, evenements: list) -> list[str]:
     _fonder_ville(state, fid, pays, actions)
     _construire(pays, actions)
     _recruter(pays, fid, prio, actions, en_guerre=bool(_guerres_de(state, fid)))
-    if not _mener_guerres(state, fid, pays, prio, actions, evenements):
+    if _chasser_hordes(state, fid, pays, prio, actions, evenements):
+        pass  # la horde aux portes passe avant tout le reste
+    elif not _mener_guerres(state, fid, pays, prio, actions, evenements):
         _expansion(state, fid, pays, prio, actions, evenements)
     _alliances(state, fid, pays, prio, actions, evenements)
     _declarer_guerre(state, fid, pays, prio, evenements)
@@ -291,6 +293,33 @@ def _guerres_de(state: dict, fid: str) -> list[dict]:
 def _allies_entre(state: dict, a: str, b: str) -> bool:
     return any(t.get("type") == "alliance" and {a, b} == {t.get("a"), t.get("b")}
                for t in state.get("diplomatie", {}).get("traites_actifs", []))
+
+
+def _chasser_hordes(state: dict, fid: str, pays: dict, prio: dict,
+                    actions: list, evenements: list) -> bool:
+    """Une horde campée aux portes du royaume est une urgence : l'IA envoie ses
+    troupes si elle se sent assez forte. True si elle a agi ce tour."""
+    mes_terres = set(pays.get("territoires", []))
+    if not mes_terres:
+        return False
+    menaces = [h for h in state.get("hordes", [])
+               if h.get("territoire") in mes_terres
+               or any(v in mes_terres for v in ge._adjacents(h.get("territoire", "")))]
+    if not menaces:
+        return False
+    horde = max(menaces, key=lambda h: h.get("force", 0))
+    ma_force = _force_totale(pays)
+    if ma_force <= horde.get("force", 10) * 1.1:
+        return False  # trop faible : on se terre derrière les murs
+    if ge.combattre_horde(state, fid, horde, evenements):
+        actions.append(f"écrase les {horde.get('nom', 'barbares')}")
+        libre = next((u for u in pays.get("unites", []) if not u.get("a_bouge")), None)
+        if libre:
+            libre["territoire"] = horde.get("territoire", libre["territoire"])
+            libre["a_bouge"] = True
+    else:
+        actions.append(f"affronte les {horde.get('nom', 'barbares')}")
+    return True
 
 
 def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,

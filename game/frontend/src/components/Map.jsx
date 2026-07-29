@@ -178,6 +178,34 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       star.anchor.set(0.5, 0.5); star.position.set(c[0], c[1] - 2); star.eventMode = 'none'; labels.addChild(star)
     }
 
+    // Hordes barbares / rebelles : campement menaçant + trait vers leur proie.
+    const hordes = (stateRef.current && stateRef.current.hordes) || []
+    for (const h of hordes) {
+      const c = centreOf(h.territoire)
+      if (!c) continue
+      const cible = h.cible_territoire && centreOf(h.cible_territoire)
+      if (cible) {  // flèche pointillée rouge vers la civilisation visée
+        const g = new Graphics()
+        const steps = 16
+        for (let i = 0; i < steps; i += 2) {
+          const x1 = c[0] + (cible[0] - c[0]) * (i / steps), y1 = c[1] + (cible[1] - c[1]) * (i / steps)
+          const x2 = c[0] + (cible[0] - c[0]) * ((i + 1) / steps), y2 = c[1] + (cible[1] - c[1]) * ((i + 1) / steps)
+          g.moveTo(x1, y1); g.lineTo(x2, y2)
+        }
+        g.stroke({ width: 1.6, color: 0xc0392b, alpha: 0.75 }); g.eventMode = 'none'; labels.addChild(g)
+      }
+      const dot = new Graphics(); dot.circle(c[0], c[1], 9)
+      dot.fill({ color: 0x3b1512, alpha: 0.85 }); dot.stroke({ width: 2, color: 0xc0392b })
+      dot.eventMode = 'none'; labels.addChild(dot)
+      const ic = new Text({ text: '⚔', style: { fontFamily: 'Georgia, serif', fontSize: 12, fill: 0xf5d9a0 } })
+      ic.anchor.set(0.5, 0.5); ic.position.set(c[0], c[1]); ic.eventMode = 'none'; labels.addChild(ic)
+      const lab = new Text({
+        text: `${h.nom} (${Math.round(h.force)})`,
+        style: { fontFamily: 'Georgia, serif', fontSize: 11, fontWeight: '700', fill: 0xe07a68, stroke: { color: 0x14110c, width: 3 } },
+      })
+      lab.anchor.set(0.5, 1); lab.position.set(c[0], c[1] - 11); lab.eventMode = 'none'; labels.addChild(lab)
+    }
+
     // Projets du conseiller (espions, garnisons…) : point à l'origine + trait vers la cible.
     const stPl = stateRef.current; const jid = joueurId()
     const mesProjets = (stPl && stPl.pays && stPl.pays[jid] && stPl.pays[jid].projets) || []

@@ -63,8 +63,18 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
   règle + fiche Ptolémée purgée de la mort d'Alexandre — pièges frontaux déjoués
   (« Alexandre est vivant et règne toujours »). Résiduel : rare épithète décalée — limite 7B.
 - [x] **Vitesse (mode éco désactivé)** — premiers mots ~2,5-6 s, réponse complète ~8-11 s.
-- [ ] **Événements aléatoires** (étape suivante convenue).
-  FAIT : tours de jeu instantanés (mode rapide multi-tours — +1 an : 47 s → 10 s).
+- [x] **Événements aléatoires** — 100 % code, sans IA :
+  🔥 **GRAND INCENDIE** (une ville perd 1-2 bâtiments → il faut REBÂTIR, malus local) ;
+  🌋 **ÉRUPTION** (province dévastée : bâtiments, −12 % population, malus 4 tours) ;
+  ⚔ **RÉBELLION ARMÉE** (royaume instable : une province fait sécession ET lève une
+  horde contre son ancien maître) ; ⚔ **HORDES BARBARES** (apparaissent en terre
+  NEUTRE et marchent sur la civilisation la plus proche, ravagent les provinces
+  traversées, **saccagent** une capitale sans jamais l'anéantir — seul un roi le peut) ;
+  🌾 moisson exceptionnelle et ⛏ filon d'or (aubaines).
+  Hordes combattables : le joueur charge en déplaçant une armée dessus, l'IA défend ses
+  terres en priorité. Défense = armée + milice (population + murailles) ; les hordes
+  s'épuisent (attrition) et se dispersent. Affichées sur la carte (cercle rouge + force
+  + flèche vers leur proie). Testé : 600 tours sans erreur, ~3 invasions / 20 ans.
 - [x] **Conseiller dans l'onglet Diplomatie** — chat IA : point sur le royaume, conseils,
   DIRECTIVES libres → « points » sur la carte (coût/durée décidés par l'IA, en mois).
   Espions opérationnels = vrais renseignements sur la cible. Rébellion bien financée =
