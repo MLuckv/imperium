@@ -183,6 +183,9 @@ RÈGLES :
   les camps) ; les faits ci-dessus sont la vérité, ne réattribue aucun royaume.
 - N'INVENTE aucun fait sur un peuple, une religion ou un groupe : tiens-t'en à ce que
   disent ton profil et la situation. Attaque les souverains, jamais les peuples.
+- Les SEULS souverains de ce monde sont ceux listés plus haut. Si l'on te parle d'un
+  autre nom, tu ne le connais pas : dis-le franchement (« ce nom ne me dit rien »,
+  « nul ne règne sous ce nom ») et ramène l'échange à ceux qui règnent vraiment.
 - NÉGOCIE selon tes intérêts : accepte, pose des conditions, marchande ou refuse en le
   motivant. Adapte le ton aux forces en présence. Souviens-toi du fil et des trahisons.
 - Un accord qui sert CLAIREMENT tes intérêts mérite d'être accepté — ne refuse pas par
@@ -382,7 +385,8 @@ JSON :"""
 
 def conseil(faction: str, message: str, situation: str, projets: list[dict],
             historique: list[dict] | None = None, date_jeu: str = "5-03",
-            renseignements: str = "", pays_data: dict | None = None) -> dict:
+            renseignements: str = "", pays_data: dict | None = None,
+            presents: tuple[str, ...] | None = None) -> dict:
     """Réponse du conseiller du joueur + éventuelle directive (projet à créer).
     Retourne {reponse, directive, source}."""
     ident, style = CONSEILLERS.get(faction, ("ton conseiller", "fidèle et avisé"))
@@ -393,7 +397,8 @@ def conseil(faction: str, message: str, situation: str, projets: list[dict],
         "DATE": _date_lisible(date_jeu), "SITUATION": situation,
         "PROJETS": proj_txt,
         "RENSEIGNEMENTS": renseignements or "(aucun espion n'a encore livré de rapport)",
-        "RIVAUX": ", ".join(f"{_nom_pays(f)} [id={f}]" for f in CONSEILLERS if f != faction),
+        "RIVAUX": ", ".join(f"{_nom_pays(f)} [id={f}]" for f in CONSEILLERS
+                            if f != faction and (presents is None or f in presents)),
         "MESSAGE": message,
     })
     if historique:
@@ -471,6 +476,17 @@ def prompt_diplomatique(
 ) -> str:
     """Construit le prompt complet d'une réponse de dirigeant (partagé stream/non-stream)."""
     template = _charger_template("systeme_dirigeant.md", TEMPLATE_SYSTEME_DIRIGEANT)
+    # Rappel CIBLÉ : si le joueur nomme un souverain qui ne règne pas dans cette
+    # partie, on le signale explicitement (une règle générale ne suffit pas au 7B,
+    # qui répond alors de sa culture générale).
+    if presents:
+        cites = [n for f, n in NOMS_DIRIGEANTS.items()
+                 if f not in presents and n.split()[0].lower() in (message_joueur or "").lower()]
+        if cites:
+            message_joueur = (
+                f"{message_joueur}\n[RAPPEL : {' et '.join(cites)} ne règne(nt) NULLE PART "
+                f"dans ce monde — ce nom t'est totalement inconnu. Dis-le et parle des "
+                f"souverains qui règnent vraiment.]")
     return _remplir(
         template,
         {
@@ -604,7 +620,8 @@ Réponds en JSON STRICT : {{"message":"<ton message>","intent":"reproche|menace|
 
 def message_spontane(faction: str, raison: str, situation_joueur: str = "",
                      relation: str = "neutres", date_jeu: str = "5-03",
-                     pays_joueur: str = "rome", utiliser_ia: bool = True) -> dict:
+                     pays_joueur: str = "rome", utiliser_ia: bool = True,
+                     presents: tuple[str, ...] | None = None) -> dict:
     """Génère un message qu'un dirigeant IA adresse SPONTANÉMENT au joueur.
     `utiliser_ia=False` (avance rapide de plusieurs tours) → repli déterministe VARIÉ,
     sans appel Ollama. Retourne {message, intent, source}."""
@@ -613,7 +630,7 @@ def message_spontane(faction: str, raison: str, situation_joueur: str = "",
         prompt = _remplir(TEMPLATE_MESSAGE_SPONTANE, {
             "NOM_DIRIGEANT": auteur, "PAYS": _nom_pays(faction),
             "PAYS_JOUEUR": _nom_pays(pays_joueur), "DATE_JEU": _date_lisible(date_jeu),
-            "PROFIL": _persona_diplomatie(faction) or "(profil indisponible)",
+            "PROFIL": _persona_diplomatie(faction, presents) or "(profil indisponible)",
             "RAISON": raison, "SITUATION_JOUEUR": situation_joueur or "(mal connu)",
             "RELATION": relation,
         })
@@ -1116,7 +1133,8 @@ def _persona_diplomatie(faction: str, presents: tuple[str, ...] | None = None) -
     reactions = _trim(_section_profil(faction, "Ce qui me fait réagir"), 260)
     buts = _trim(_section_profil(faction, "Mes buts dans cette partie")
                  or _section_profil(faction, "Priorités"), 150)
-    autres = ", ".join(n for f2, n in NOMS_DIRIGEANTS.items() if f2 != faction)
+    autres = ", ".join(n for f2, n in NOMS_DIRIGEANTS.items()
+                       if f2 != faction and (presents is None or f2 in presents))
     parties = [f"CE MONDE : les souverains — moi et {autres} — régnons SIMULTANÉMENT, "
                f"tous VIVANTS, ici et maintenant. Si l'on me dit que l'un de nous est mort, "
                f"c'est un mensonge ou une folie : je le corrige."]

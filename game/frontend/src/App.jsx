@@ -222,6 +222,9 @@ export default function App() {
   const joueur = joueurId && state.pays ? state.pays[joueurId] : null
   const autres = Object.keys(state.pays || {}).filter((id) => id !== joueurId && !(state.pays[id] || {}).elimine)
   const victoire = state.victoire
+  // Armées qui peuvent encore marcher ce tour-ci (évite de terminer son tour
+  // en oubliant des troupes immobiles).
+  const armeesPretes = ((joueur && joueur.unites) || []).filter((u) => !u.a_bouge).length
 
   // Provinces neutres occupées par une armée du joueur → annexables.
   const ownedAll = new Set()
@@ -278,16 +281,20 @@ export default function App() {
 
       {/* Barre d'action en bas (n'empiète plus sur la carte) */}
       <div className="flex flex-wrap items-center justify-center gap-2 border-t border-bronze-dark/60 bg-night px-3 py-2">
-        {monProv ? (
-          <>
-            <span className="mr-1 text-xs text-parchment/70">{monProv.nom} :</span>
-            <button onClick={() => setModal('production')} className="btn btn-ghost">Production</button>
-            <button onClick={() => setModal('recrutement')} className="btn btn-ghost">Armée</button>
-            <span className="mx-1 h-6 w-px bg-bronze-dark/50" />
-          </>
-        ) : (
-          <span className="mr-1 text-xs italic text-parchment/45">Cliquez une de vos provinces pour la gérer</span>
-        )}
+        {/* Emplacement de largeur STABLE : les boutons suivants ne sautent plus
+            quand on sélectionne ou désélectionne une province. */}
+        <div className="flex min-w-[19rem] items-center justify-end gap-2">
+          {monProv ? (
+            <>
+              <span className="mr-1 truncate text-xs text-parchment/70">{monProv.nom} :</span>
+              <button onClick={() => setModal('production')} className="btn btn-ghost">Production</button>
+              <button onClick={() => setModal('recrutement')} className="btn btn-ghost">Armée</button>
+            </>
+          ) : (
+            <span className="text-xs italic text-parchment/45">Cliquez une de vos provinces pour la gérer</span>
+          )}
+        </div>
+        <span className="mx-1 h-6 w-px bg-bronze-dark/50" />
         <button onClick={() => setModal('tech')} className="btn btn-ghost">Technologies</button>
         <button onClick={() => setModal('dogmes')} className="btn btn-ghost">Dogmes</button>
         <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost relative">
@@ -308,7 +315,15 @@ export default function App() {
         <button onClick={handleSave} disabled={busy} className="btn btn-ghost btn-sm">Sauver</button>
         <button onClick={() => setScreen('menu')} className="btn btn-ghost btn-sm">Menu</button>
         <div className="flex items-stretch gap-px overflow-hidden rounded-md">
-          <button onClick={() => handleEndTurn(1)} disabled={busy} className="btn btn-primary rounded-none" title="Avancer d'un mois">{busy ? 'Le monde avance…' : 'Fin de tour ▸'}</button>
+          <button onClick={() => handleEndTurn(1)} disabled={busy} className="btn btn-primary rounded-none"
+                  title={armeesPretes > 0 ? `${armeesPretes} armée(s) peuvent encore marcher` : "Avancer d'un mois"}>
+            {busy ? 'Le monde avance…' : 'Fin de tour ▸'}
+            {!busy && armeesPretes > 0 && (
+              <span className="ml-2 rounded-full bg-ink/30 px-1.5 text-[11px] font-bold" title="Armées encore disponibles">
+                ⚔ {armeesPretes}
+              </span>
+            )}
+          </button>
           <button onClick={() => handleEndTurn(3)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer de 3 mois">+3 mois</button>
           <button onClick={() => handleEndTurn(12)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer d'un an (12 mois)">+1 an</button>
         </div>

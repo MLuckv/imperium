@@ -380,8 +380,20 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   }
 
   function onArmyTap(a) {
-    selUnitTerrRef.current = selUnitTerrRef.current === a.territoire ? null : a.territoire
+    // Si une armée est DÉJÀ sélectionnée et que l'on clique une garnison voisine
+    // atteignable, c'est un ordre de marche (on ne « désélectionne » pas bêtement).
+    const dep = selUnitTerrRef.current
+    if (dep && dep !== a.territoire && reachable(dep).all.has(a.territoire)) {
+      onProvinceTap(terrById(a.territoire) || { id: a.territoire }, a.faction)
+      return
+    }
+    selUnitTerrRef.current = dep === a.territoire ? null : a.territoire
     selProvRef.current = a.territoire
+    // Cliquer son armée sélectionne AUSSI sa province : les boutons de gestion
+    // (Production / Armée) apparaissent, comme le promet l'aide en bas d'écran.
+    const t = terrById(a.territoire)
+    if (t && typeof onSelectProvince === 'function')
+      onSelectProvince({ id: t.id, faction: a.faction, nom: t.nom })
     draw()
   }
 
@@ -496,10 +508,10 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       {loading && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-parchment/80">Chargement de la carte…</div>}
       {error && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1c1813]/85 px-6 text-center"><p className="text-lg font-semibold text-terracotta">Carte indisponible</p><p className="max-w-sm text-sm text-parchment/80">{error}</p></div>}
       <MapLegend stateData={stateData} naval={hasNaval()} />
-      <div className="absolute bottom-2 right-2 flex flex-col gap-1">
-        <button onClick={() => zoomCenter(1.25)} className="h-8 w-8 rounded-md bg-night/85 text-lg font-bold text-parchment shadow hover:bg-ink-soft">+</button>
-        <button onClick={() => zoomCenter(1 / 1.25)} className="h-8 w-8 rounded-md bg-night/85 text-lg font-bold text-parchment shadow hover:bg-ink-soft">−</button>
-        <button onClick={() => layout(true)} title="Recentrer" className="h-8 w-8 rounded-md bg-night/85 text-sm text-parchment shadow hover:bg-ink-soft">⤢</button>
+      <div className="absolute right-2 top-2 flex flex-col gap-1 rounded-lg border border-bronze-dark/50 bg-night/90 p-1 shadow-lg">
+        <button onClick={() => zoomCenter(1.25)} title="Zoomer" className="h-8 w-8 rounded-md text-lg font-bold text-parchment hover:bg-ink-soft">+</button>
+        <button onClick={() => zoomCenter(1 / 1.25)} title="Dézoomer" className="h-8 w-8 rounded-md text-lg font-bold text-parchment hover:bg-ink-soft">−</button>
+        <button onClick={() => layout(true)} title="Recentrer sur mes terres" className="h-8 w-8 rounded-md text-sm text-parchment hover:bg-ink-soft">⤢</button>
       </div>
     </div>
   )

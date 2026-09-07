@@ -1761,9 +1761,10 @@ def _messages_spontanes_ia(state: dict, evenements: list, utiliser_ia: bool = Tr
         if not cle or random.random() > _PROBA_CONTACT.get(cle, 0.4):
             continue
         rel = _relation_txt(f.get("reputation", {}).get(joueur, 0))
+        presents = tuple(f for f, q in state.get("pays", {}).items() if not q.get("elimine"))
         res = ai_director.message_spontane(fid, raison, situation_joueur=situ, relation=rel,
                                            date_jeu=date_jeu, pays_joueur=joueur,
-                                           utiliser_ia=utiliser_ia)
+                                           utiliser_ia=utiliser_ia, presents=presents)
         msg = res.get("message")
         if not msg:
             continue

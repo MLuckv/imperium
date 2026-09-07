@@ -448,9 +448,11 @@ def conseiller_message(req: ConseilReq):
         auteur=pj.get("nom", pays_joueur), texte=req.texte, tour=tour)
     historique = conversations.historique_pour_prompt(state, "_conseiller", limite=40)
 
+    presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
     res = ai_director.conseil(pays_joueur, req.texte, situation, pj.get("projets", []),
                               historique=historique, date_jeu=date_jeu,
-                              renseignements=renseignements, pays_data=pj)
+                              renseignements=renseignements, pays_data=pj,
+                              presents=presents)
     # Filet de sécurité : un ordre impossible/magique ne crée JAMAIS de projet.
     if ai_director.ordre_impossible(req.texte) and res.get("directive"):
         res["directive"] = None
