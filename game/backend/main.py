@@ -77,6 +77,8 @@ async def _handler_http(request, exc):
 # =====================================================================
 class NewGameReq(BaseModel):
     joueur_pays: str = "rome"
+    nb_ia: int | None = None            # nb d'adversaires (None = tous)
+    adversaires: list[str] | None = None  # ou liste explicite
 
 
 class ActionReq(BaseModel):
@@ -131,10 +133,9 @@ def get_map():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Carte introuvable : {e}")
     # Résout la couleur de faction sur chaque territoire (pratique pour le front).
-    couleurs = {
-        "rome": "#b03a2e", "carthage": "#c9a227", "macedoine": "#1e8449",
-        "sparte": "#2e6da4", None: "#7f8c8d", "neutre": "#7f8c8d",
-    }
+    from models.country import META_FACTIONS  # source unique des couleurs
+    couleurs = {f: m["couleur"] for f, m in META_FACTIONS.items()}
+    couleurs.update({None: "#7f8c8d", "neutre": "#7f8c8d"})
     for t in data.get("territoires", []):
         t["couleur"] = couleurs.get(t.get("faction"), "#7f8c8d")
     # Marque les provinces qui abritent une merveille (pour le repère sur la carte).
@@ -176,7 +177,8 @@ def get_state():
 @app.post("/api/new-game")
 def new_game(req: NewGameReq):
     """Crée une nouvelle partie et retourne le GameState initial."""
-    state = game_engine.new_game(req.joueur_pays)
+    state = game_engine.new_game(req.joueur_pays, nb_ia=req.nb_ia,
+                                 adversaires=req.adversaires)
     return state
 
 
@@ -315,10 +317,12 @@ def diplomatie_message_stream(req: MessageReq):
         texte=req.texte, tour=tour)
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
     situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
+    presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
     prompt = ai_director.prompt_diplomatique(
         req.cible, req.texte, etat_monde=etat_monde, historique=historique,
         date_jeu=date_jeu, pays_joueur=pays_joueur,
-        situation_joueur=situation_joueur, situation_ia=situation_ia)
+        situation_joueur=situation_joueur, situation_ia=situation_ia,
+        presents=presents)
     auteur = ai_director.nom_dirigeant(req.cible)
 
     def flux():
@@ -383,10 +387,12 @@ def diplomatie_message(req: MessageReq):
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
 
     situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
+    presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
     res = ai_director.reponse_diplomatique(
         req.cible, req.texte, etat_monde=etat_monde,
         historique=historique, date_jeu=date_jeu, pays_joueur=pays_joueur,
-        situation_joueur=situation_joueur, situation_ia=situation_ia)
+        situation_joueur=situation_joueur, situation_ia=situation_ia,
+        presents=presents)
 
     conversations.ajouter_message(
         state, req.cible, role="ia", auteur=res["auteur"],

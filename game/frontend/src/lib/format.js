@@ -7,6 +7,8 @@ export const FACTION_COLORS = {
   carthage: '#c9a227',
   macedoine: '#1e8449',
   sparte: '#2e6da4',
+  francs: '#7048a8',
+  bretons: '#0d8c8c',
   neutre: '#7f8c8d',
 }
 
@@ -27,6 +29,8 @@ const FACTION_LABELS = {
   macedoine: 'Macédoine',
   sparte: 'Sparte',
   neutre: 'Neutre',
+  francs: 'Francs',
+  bretons: 'Bretons',
 }
 
 export function factionLabel(factionId, nom) {
@@ -42,6 +46,8 @@ const LEADER_NAMES = {
   carthage: 'Ptolémée',
   macedoine: 'Alexandre le Grand',
   sparte: 'Léonidas',
+  francs: "Jeanne d'Arc",
+  bretons: 'Arthur',
 }
 
 export function leaderName(factionId) {

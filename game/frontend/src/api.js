@@ -70,8 +70,12 @@ export const getState = (opts) => request('/api/state', opts)
 export const getConversation = (cible, opts) =>
   request(`/api/diplomatie/conversation?cible=${encodeURIComponent(cible)}`, opts)
 
-export const newGame = (joueurPays = 'rome', opts) =>
-  request('/api/new-game', { method: 'POST', body: { joueur_pays: joueurPays }, ...opts })
+export const newGame = (joueurPays = 'rome', nbIa = null, opts) =>
+  request('/api/new-game', {
+    method: 'POST',
+    body: nbIa == null ? { joueur_pays: joueurPays } : { joueur_pays: joueurPays, nb_ia: nbIa },
+    ...opts,
+  })
 
 export const endTurn = (tours = 1, opts) =>
   request(`/api/end-turn?tours=${tours}`, { method: 'POST', ...opts })

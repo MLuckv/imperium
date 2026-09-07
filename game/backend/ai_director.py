@@ -51,6 +51,8 @@ FICHIERS_DIRIGEANTS: dict[str, str] = {
     "macedoine": "macedoine_alexandre.md",
     "rome": "rome_neron.md",
     "sparte": "sparte_leonidas.md",
+    "francs": "francs_jeanne.md",
+    "bretons": "bretons_arthur.md",
 }
 
 # Noms d'affichage des dirigeants (extraits/secours). Distribution ANACHRONIQUE.
@@ -59,6 +61,8 @@ NOMS_DIRIGEANTS: dict[str, str] = {
     "macedoine": "Alexandre le Grand",
     "rome": "Néron",
     "sparte": "Léonidas",
+    "francs": "Jeanne d'Arc",
+    "bretons": "Arthur",
 }
 
 
@@ -177,15 +181,18 @@ FIL DE LA CONVERSATION :
 RÈGLES :
 - Comprends QUI est visé (alliance CONTRE X = X est l'ennemi proposé ; ne confonds jamais
   les camps) ; les faits ci-dessus sont la vérité, ne réattribue aucun royaume.
+- N'INVENTE aucun fait sur un peuple, une religion ou un groupe : tiens-t'en à ce que
+  disent ton profil et la situation. Attaque les souverains, jamais les peuples.
 - NÉGOCIE selon tes intérêts : accepte, pose des conditions, marchande ou refuse en le
   motivant. Adapte le ton aux forces en présence. Souviens-toi du fil et des trahisons.
 - Un accord qui sert CLAIREMENT tes intérêts mérite d'être accepté — ne refuse pas par
   posture. Quand tu conclus, énonce-le SANS ambiguïté (« Marché conclu : je donne X, tu
   donnes Y ») ; quand tu refuses, motive-le en une phrase. Pas d'entre-deux flou.
-- Tu ne connais que l'Antiquité (concept moderne = sorcellerie/hérésie, jamais expliqué) ;
-  tu n'es ni une IA ni un personnage, tu ne sors jamais du rôle.
-- Les QUATRE rois de ce monde (toi compris) sont VIVANTS, ici et maintenant : n'évoque
-  JAMAIS la mort, la fin ou l'héritage posthume d'aucun d'entre eux.
+- Tu ne connais que TON époque (celle de ta propre vie) : tout ce qui vient d'un monde
+  plus tardif ou moderne t'est INCONNU — sorcellerie, hérésie ou folie, jamais expliqué.
+  Tu n'es ni une IA ni un personnage : tu ne sors jamais du rôle.
+- TOUS les souverains de ce monde (toi compris) sont VIVANTS, ici et maintenant, même
+  ceux d'autres siècles : n'évoque JAMAIS la mort ni la fin d'aucun d'entre eux.
 - VARIE tes ouvertures (jamais deux fois la même adresse, pas d'onomatopées) et ne
   RECOPIE jamais des phrases de tes propres réponses précédentes ; paroles directes,
   sans narration ni parenthèses.
@@ -318,6 +325,10 @@ CONSEILLERS = {
                "tranchantes ; méprise le luxe ; parle de discipline, de fer et de liberté."),
     "carthage": ("Manéthon, vizir d'Égypte", "vizir lettré et calculateur ; parle du Nil, du "
                  "grain, de l'or, des scribes et de la Bibliothèque ; appelle le joueur « Pharaon »."),
+    "francs": ("frère Ambroise, chapelain", "clerc dévoué et pratique ; parle de la couronne, "
+               "du sacre, des vilains et des moissons ; appelle le joueur « ma Dame » ou « Sire »."),
+    "bretons": ("Merlin", "vieux conseiller malicieux et énigmatique ; parle de présages, de "
+                "serments et de la Table ; appelle le joueur « mon roi », taquine volontiers."),
 }
 
 TEMPLATE_CONSEILLER = """Tu es {IDENTITE}, le conseiller fidèle du souverain de {PAYS} en {DATE}.
@@ -456,6 +467,7 @@ def prompt_diplomatique(
     pays_joueur: str = "rome",
     situation_joueur: str = "",
     situation_ia: str = "",
+    presents: tuple[str, ...] | None = None,
 ) -> str:
     """Construit le prompt complet d'une réponse de dirigeant (partagé stream/non-stream)."""
     template = _charger_template("systeme_dirigeant.md", TEMPLATE_SYSTEME_DIRIGEANT)
@@ -466,9 +478,10 @@ def prompt_diplomatique(
             "PAYS": _nom_pays(faction_cible),
             "PAYS_JOUEUR": _nom_pays(pays_joueur),
             "DATE_JEU": _date_lisible(date_jeu),
-            "PROFIL": _persona_diplomatie(faction_cible) or "(profil indisponible)",
+            "PROFIL": _persona_diplomatie(faction_cible, presents) or "(profil indisponible)",
             "RIVAUX": ", ".join(f"{n} ({_nom_pays(f)})" for f, n in NOMS_DIRIGEANTS.items()
-                                if f != faction_cible) or "(aucun)",
+                                if f != faction_cible
+                                and (presents is None or f in presents)) or "(aucun)",
             "SITUATION_JOUEUR": situation_joueur or "(situation du joueur mal connue)",
             "SITUATION_IA": situation_ia or "(rien de particulier à signaler)",
             "ETAT_MONDE": "",  # retiré du template (redondant avec les situations)
@@ -524,11 +537,13 @@ def reponse_diplomatique(
     pays_joueur: str = "rome",
     situation_joueur: str = "",
     situation_ia: str = "",
+    presents: tuple[str, ...] | None = None,
 ) -> dict:
     """Génère la réponse d'un dirigeant IA (non-stream). {reponse, auteur, source}."""
     auteur = nom_dirigeant(faction_cible)
     prompt = prompt_diplomatique(faction_cible, message_joueur, etat_monde, historique,
-                                 date_jeu, pays_joueur, situation_joueur, situation_ia)
+                                 date_jeu, pays_joueur, situation_joueur, situation_ia,
+                                 presents)
     # Température modérée : moins de « glissements » de style/faits, tout en gardant
     # de la variété (la graine aléatoire par appel fait le reste).
     texte = _nettoyer_reponse(_appel_ollama(prompt, temperature=0.72, num_predict=110))
@@ -1076,21 +1091,33 @@ def _section_profil(faction: str, titre: str) -> str:
     return m.group(1).strip() if m else ""
 
 
-@lru_cache(maxsize=8)
-def _persona_diplomatie(faction: str) -> str:
+def _filtrer_ressentis(bloc: str, presents: tuple[str, ...] | None) -> str:
+    """Ne conserve que les ressentis visant des souverains PRÉSENTS dans la partie
+    (inutile de parler de rois écartés — et cela laisse de la place aux autres)."""
+    if not bloc or not presents:
+        return bloc
+    noms = {NOMS_DIRIGEANTS[f].split()[0] for f in presents if f in NOMS_DIRIGEANTS}
+    gardees = [l for l in bloc.splitlines()
+               if not l.strip().startswith("-") or any(n in l for n in noms)]
+    return "\n".join(gardees)
+
+
+@lru_cache(maxsize=16)
+def _persona_diplomatie(faction: str, presents: tuple[str, ...] | None = None) -> str:
     """Persona RICHE pour la conversation : personnalité + façon de parler + relations +
     répliques. Plus fourni que le brief → réponses bien plus en caractère."""
     vie = _trim(_section_profil(faction, "Ma vie, telle que je la raconte"), 340)
     caractere = _trim(_section_profil(faction, "Caractère profond")
                       or _section_profil(faction, "Personnalité"), 320)
     parler = _trim(_section_profil(faction, "Façon de parler"), 230)
-    ressentis = _trim(_section_profil(faction, "Ressentis envers les autres dirigeants")
-                      or _section_profil(faction, "Opinions sur les autres dirigeants"), 500)
+    ressentis = _trim(_filtrer_ressentis(
+        _section_profil(faction, "Ressentis envers les autres dirigeants")
+        or _section_profil(faction, "Opinions sur les autres dirigeants"), presents), 1250)
     reactions = _trim(_section_profil(faction, "Ce qui me fait réagir"), 260)
     buts = _trim(_section_profil(faction, "Mes buts dans cette partie")
                  or _section_profil(faction, "Priorités"), 150)
     autres = ", ".join(n for f2, n in NOMS_DIRIGEANTS.items() if f2 != faction)
-    parties = [f"CE MONDE : les quatre rois — moi et {autres} — régnons SIMULTANÉMENT, "
+    parties = [f"CE MONDE : les souverains — moi et {autres} — régnons SIMULTANÉMENT, "
                f"tous VIVANTS, ici et maintenant. Si l'on me dit que l'un de nous est mort, "
                f"c'est un mensonge ou une folie : je le corrige."]
     if vie:

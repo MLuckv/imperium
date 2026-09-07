@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getHealth, getState, newGame, endTurn, saveGame, loadGame, moveUnit, annexProvince, getCatalog, getMap, postAction, ApiError } from './api'
 import Map from './components/Map'
 import ResourceBar from './components/ResourceBar'
@@ -22,6 +22,10 @@ const CIVS = [
     desc: 'Hoplites d\'élite, discipline d\'airain, défense farouche.', bonus: 'Armée & Défense' },
   { id: 'carthage', nom: 'Égypte', leader: 'Ptolémée', style: 'Commerce & savoir',
     desc: 'Or du Nil, grain, merveilles et bibliothèques.', bonus: 'Or & Luxe' },
+  { id: 'francs', nom: 'Francs', leader: "Jeanne d'Arc", style: 'Foi & délivrance',
+    desc: 'Bannière, sacre de Reims, armée disciplinée et pieuse.', bonus: 'Moral & Défense' },
+  { id: 'bretons', nom: 'Bretons', leader: 'Arthur', style: 'Justice & serment',
+    desc: 'Camelot, la Table Ronde, une île que nul ne prend.', bonus: 'Loyauté & Terrain' },
 ]
 
 export default function App() {
@@ -50,6 +54,8 @@ export default function App() {
   const [conqueteCost, setConqueteCost] = useState(90)
   const [provNames, setProvNames] = useState({}) // id -> nom
   const [impotsOpts, setImpotsOpts] = useState([])
+  const [nbIa, setNbIa] = useState(5)   // adversaires IA (5 = toutes les autres civs)
+  const nbIaRef = useRef(5)             // toujours à jour, même si l'on clique très vite
 
   useEffect(() => {
     getCatalog().then((c) => { if (c) { if (c.conquete) setConqueteCost(c.conquete.cout_or); if (c.impots) setImpotsOpts(c.impots) } }).catch(() => {})
@@ -79,9 +85,11 @@ export default function App() {
   async function startGame(civId) {
     setBusy(true); setBanner(null)
     try {
-      const s = await newGame(civId)
+      const s = await newGame(civId, nbIaRef.current)
       setState(s); setHasSavedGame(true); setEvenements([]); setResume(''); setShowChronique(false)
-      setScreen('game'); flash('ok', `Vous incarnez ${factionLabel(civId, s.pays[civId] && s.pays[civId].nom)}.`)
+      const rivaux = Object.keys(s.pays || {}).filter((id) => id !== civId).length
+      setScreen('game')
+      flash('ok', `Vous incarnez ${factionLabel(civId, s.pays[civId] && s.pays[civId].nom)} — ${rivaux} rival${rivaux > 1 ? 'aux' : ''} en lice.`)
     } catch (err) { flash('err', err.message || 'Échec de la création') }
     finally { setBusy(false) }
   }
@@ -169,6 +177,26 @@ export default function App() {
       <div className="menu-screen">
         <div className="menu-title" style={{ fontSize: 'clamp(1.8rem,4vw,2.8rem)' }}>Choisissez votre civilisation</div>
         <p className="menu-subtitle">Vous débuterez avec une seule province et tout à bâtir.</p>
+
+        {/* Nombre d'adversaires : les civilisations écartées n'existent pas dans la partie */}
+        <div className="mt-6 flex flex-col items-center gap-2">
+          <div className="text-xs uppercase tracking-widest text-bronze">Adversaires</div>
+          <div className="flex items-center gap-1.5">
+            {[1, 2, 3, 4, 5].map((n) => (
+              <button key={n} onClick={() => { setNbIa(n); nbIaRef.current = n }}
+                      className={'h-9 w-9 rounded-md border text-sm font-semibold transition ' +
+                        (nbIa === n
+                          ? 'border-gold bg-gold/20 text-gold'
+                          : 'border-bronze-dark/60 text-parchment/70 hover:border-bronze')}>
+                {n}
+              </button>
+            ))}
+          </div>
+          <div className="text-[11px] text-parchment/50">
+            {nbIa === 5 ? 'Toutes les civilisations entrent en lice.'
+                        : `${nbIa} rival${nbIa > 1 ? 'aux' : ''} tiré${nbIa > 1 ? 's' : ''} au sort ; les autres n'existeront pas.`}
+          </div>
+        </div>
         <div className="mt-8 grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-3">
           {CIVS.map((c) => (
             <button key={c.id} onClick={() => startGame(c.id)} disabled={busy}

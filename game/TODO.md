@@ -168,3 +168,46 @@ macOS bloquait les bibliothèques natives (`library load disallowed by system po
 pydantic (backend), esbuild/rollup/lightningcss (frontend) portaient un attribut
 **`com.apple.quarantine`**. Résolu par `xattr -dr com.apple.quarantine` sur `.venv` et
 `node_modules`. À refaire si l'erreur réapparaît.
+
+
+---
+
+## 🆕 v22 — Deux civilisations, choix des adversaires, UX de jeu
+
+### Nouvelles civilisations
+- **Francs — Jeanne d'Arc** (violet, capitale **Reims**/Marne). Fiche « ressentis » complète :
+  les voix, Orléans, le sacre, la bannière plutôt que l'épée ; discipline et refus du pillage.
+- **Bretons — Arthur** (turquoise, capitale **Camelot**/Powys). Excalibur, la Table Ronde,
+  Merlin, Guenièvre ; la justice avant la conquête, une île qu'on ne prend pas.
+- **Relations fictives inventées** dans les deux sens : Jeanne ↔ Arthur (fraternité méfiante),
+  et l'avis de chacun des 4 anciens sur les 2 nouveaux (Néron fasciné/irrité par
+  l'incorruptible, Alexandre admiratif de l'audace de Jeanne, Léonidas respect bourru,
+  Ptolémée dérouté par qui ne s'achète pas).
+- Conseillers dédiés : **frère Ambroise** (Francs), **Merlin** (Bretons).
+- Priorités d'IA : Jeanne = délivrance/discipline (rivale des Bretons) ; Arthur = défense,
+  peu d'hommes mais irréprochables. Testé : Jeanne prend 7-8 provinces, Arthur reste
+  compact mais très stable et riche — chacun joue son caractère.
+- Prompt corrigé : « ton époque » au lieu de « l'Antiquité » (Jeanne et Arthur sont
+  médiévaux), et TOUS les souverains sont vivants (plus « les quatre rois »).
+
+### Choix du nombre d'adversaires
+- Écran de civilisation : sélecteur **1 à 5 adversaires** (5 par défaut). Les civilisations
+  écartées **n'existent pas** dans la partie — leur capitale redevient neutre sur la carte.
+- `new_game(joueur, nb_ia=…, adversaires=[…])` + endpoint et client mis à jour.
+
+### UI/UX de jeu
+- **Animation de marche façon Risk** : la colonne glisse de la province de départ vers sa
+  destination (traînée, halo, badge qui suit), durée proportionnelle à la distance ;
+  elle part IMMÉDIATEMENT au clic pendant que l'ordre voyage vers le serveur.
+- **Sélection tolérante** : cliquer SA province suffit à prendre sa garnison (le petit
+  jeton n'était quasiment pas cliquable) + zone de clic élargie autour du jeton.
+- **La carte s'ouvre sur VOS terres** : on démarrait sur la Méditerranée, donc sur une mer
+  vide quand on jouait les Francs ou les Bretons.
+- Emblèmes : fleur de lys (Francs), Excalibur couronnée (Bretons).
+
+### Bugs de persona corrigés
+- Avec 5 rivaux, la section « ressentis » dépassait la troncature : Arthur répondait
+  « je ne connais pas cette Jeanne d'Arc » alors que sa fiche en parlait. Budget élargi
+  ET ressentis **filtrés sur les souverains réellement en jeu**.
+- Garde-fou anti-invention : le modèle avait inventé un détail diffamatoire sur un peuple.
+  Règle ajoutée — on attaque les souverains, jamais les peuples.

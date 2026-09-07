@@ -180,13 +180,29 @@ def _capitale_faction(faction: str) -> str | None:
 # =====================================================================
 #  Nouvelle partie
 # =====================================================================
-def new_game(joueur_pays: str = "rome") -> dict:
-    """Construit le GameState initial depuis starting_positions.json."""
+def new_game(joueur_pays: str = "rome", nb_ia: int | None = None,
+             adversaires: list[str] | None = None) -> dict:
+    """Construit le GameState initial depuis starting_positions.json.
+
+    `adversaires` : liste explicite des factions IA à faire jouer.
+    `nb_ia` : sinon, nombre d'adversaires tirés au sort (toutes les autres par défaut).
+    Les factions écartées n'existent tout simplement pas dans la partie."""
     if joueur_pays not in META_FACTIONS:
         joueur_pays = "rome"
 
     start = _starting_positions()
     terr_map = _territoires_par_faction()
+
+    # Sélection des adversaires : explicite, ou tirage aléatoire du nombre demandé.
+    tous_autres = [f for f in start if f != joueur_pays]
+    if adversaires is not None:
+        retenus = [f for f in adversaires if f in start and f != joueur_pays]
+    elif nb_ia is not None:
+        n = max(0, min(len(tous_autres), int(nb_ia)))
+        retenus = random.sample(tous_autres, n)
+    else:
+        retenus = tous_autres
+    start = {f: b for f, b in start.items() if f == joueur_pays or f in retenus}
 
     pays: dict[str, dict] = {}
     for fid, base in start.items():

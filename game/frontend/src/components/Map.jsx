@@ -30,6 +30,8 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   const labelLayerRef = useRef(null)
   const unitLayerRef = useRef(null)
   const arrowLayerRef = useRef(null)
+  const marcheLayerRef = useRef(null)   // colonne en marche (animation)
+  const marcheRef = useRef(null)        // {from,to,t0,duree,col,effectif}
   const dataRef = useRef(null)
   const stateRef = useRef(stateData)
   const hoveredRef = useRef(null)
@@ -50,14 +52,27 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   }
   function hasNaval() { return playerTechs().has(TECH_NAVALE) }
 
+  // Centre des terres du joueur (pour ouvrir la carte chez lui).
+  function centreJoueur() {
+    const st = stateRef.current; const j = joueurId()
+    const terrs = (st && st.pays && st.pays[j] && st.pays[j].territoires) || []
+    const pts = terrs.map((id) => centreOf(id)).filter(Boolean)
+    if (!pts.length) return null
+    return [pts.reduce((s, p) => s + p[0], 0) / pts.length,
+            pts.reduce((s, p) => s + p[1], 0) / pts.length]
+  }
+
   function resolveFaction(t) {
     const st = stateRef.current
+    // Partie en cours : l'ÉTAT fait foi. Une province que personne ne possède est
+    // neutre — y compris la capitale d'une civilisation écartée de cette partie.
     if (st && st.pays) {
       for (const [pid, p] of Object.entries(st.pays)) {
         if (Array.isArray(p.territoires) && p.territoires.includes(t.id)) return pid
       }
+      return null
     }
-    return t.faction || null
+    return t.faction || null   // aperçu hors partie (menu)
   }
   function terrById(id) { return ((dataRef.current && dataRef.current.territoires) || []).find((x) => x.id === id) }
   function centreOf(id) { const t = terrById(id); return t && (t.centre || polygonCentroid(t.polygone)) }
@@ -96,6 +111,51 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   }
 
   function fillFor(factionId) { return factionId ? hexToNumber(factionColor(factionId)) : LAND_NEUTRAL }
+
+  // --- Animation de MARCHE : la colonne glisse de la province de départ vers sa
+  // destination (façon Risk), avec une traînée et un badge qui suit. Purement
+  // visuel : l'état réel est mis à jour par l'API en parallèle.
+  function lancerMarche(from, to, col, effectif) {
+    if (!from || !to) return
+    const dist = Math.hypot(to[0] - from[0], to[1] - from[1])
+    marcheRef.current = {
+      from, to, t0: performance.now(),
+      duree: Math.min(900, Math.max(380, dist * 3.2)),   // plus c'est loin, plus c'est long
+      col, effectif,
+    }
+  }
+
+  function animerMarche() {
+    const layer = marcheLayerRef.current
+    if (!layer) return
+    const m = marcheRef.current
+    if (!m) { if (layer.children.length) layer.removeChildren(); return }
+    layer.removeChildren()
+    const av = Math.min(1, (performance.now() - m.t0) / m.duree)
+    // Adoucissement : départ vif, arrivée en douceur.
+    const e = 1 - Math.pow(1 - av, 3)
+    const x = m.from[0] + (m.to[0] - m.from[0]) * e
+    const y = m.from[1] + (m.to[1] - m.from[1]) * e
+
+    // Traînée : le chemin déjà parcouru s'estompe derrière la colonne.
+    const trail = new Graphics()
+    trail.moveTo(m.from[0], m.from[1]); trail.lineTo(x, y)
+    trail.stroke({ width: 3, color: m.col, alpha: 0.45 * (1 - e) + 0.15 })
+    trail.eventMode = 'none'; layer.addChild(trail)
+
+    // Halo de progression + badge de la colonne.
+    const halo = new Graphics(); halo.circle(x, y, 15 - 5 * e)
+    halo.fill({ color: m.col, alpha: 0.30 * (1 - e) })
+    halo.eventMode = 'none'; layer.addChild(halo)
+
+    const badge = new Graphics(); badge.roundRect(x - 13, y - 30, 26, 18, 5)
+    badge.fill({ color: m.col, alpha: 0.98 }); badge.stroke({ width: 2, color: ARROW_LAND })
+    badge.eventMode = 'none'; layer.addChild(badge)
+    const txt = new Text({ text: `⚔ ${m.effectif}`, style: { fontFamily: 'Georgia, serif', fontSize: 12, fontWeight: '700', fill: 0xfdf6e3, stroke: { color: 0x14110c, width: 2 } } })
+    txt.anchor.set(0.5); txt.position.set(x, y - 21); txt.eventMode = 'none'; layer.addChild(txt)
+
+    if (av >= 1) { marcheRef.current = null; layer.removeChildren(); draw() }
+  }
 
   function draw() {
     const world = worldRef.current, labels = labelLayerRef.current
@@ -235,14 +295,23 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       lab.anchor.set(0.5, 1); lab.position.set(o[0], o[1] - 8); lab.eventMode = 'none'; labels.addChild(lab)
     })
 
+    const enMarche = marcheRef.current
     for (const a of collectArmies()) {
+      if (enMarche && a.pos && Math.hypot(a.pos[0] - enMarche.from[0], a.pos[1] - enMarche.from[1]) < 2) continue
       const [x, y] = a.pos; const mine = a.faction === joueurId()
       const col = hexToNumber(factionColor(a.faction)); const sel = mine && selUnitTerrRef.current === a.territoire
       const badge = new Graphics(); badge.roundRect(x - 13, y - 30, 26, 18, 5)
       badge.fill({ color: col, alpha: 0.97 }); badge.stroke({ width: sel ? 2.5 : 1.4, color: sel ? ARROW_LAND : 0x14110c })
-      badge.eventMode = mine ? 'static' : 'none'; badge.cursor = mine ? 'pointer' : 'default'
-      if (mine) badge.on('pointertap', (e) => { e.stopPropagation && e.stopPropagation(); onArmyTap(a) })
+      badge.eventMode = 'none'
       units.addChild(badge)
+      if (mine) {
+        // Zone de clic GÉNÉREUSE autour du jeton (le badge seul était trop petit).
+        const zone = new Graphics(); zone.circle(x, y - 20, 24)
+        zone.fill({ color: 0xffffff, alpha: 0.001 })
+        zone.eventMode = 'static'; zone.cursor = 'pointer'
+        zone.on('pointertap', (e) => { e.stopPropagation && e.stopPropagation(); onArmyTap(a) })
+        units.addChild(zone)
+      }
       const txt = new Text({ text: `⚔ ${a.effectif}`, style: { fontFamily: 'Georgia, serif', fontSize: 12, fontWeight: '700', fill: 0xfdf6e3, stroke: { color: 0x14110c, width: 2 } } })
       txt.anchor.set(0.5); txt.position.set(x, y - 21); txt.eventMode = 'none'; units.addChild(txt)
     }
@@ -288,11 +357,23 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       if (r.all.has(t.id)) {
         const grp = collectArmies().find((a) => a.territoire === armyTerr && a.faction === joueurId())
         selUnitTerrRef.current = null
-        if (grp && grp.idsLibres.length && typeof onMoveStack === 'function') onMoveStack(grp.idsLibres, t.id)
+        if (grp && grp.idsLibres.length && typeof onMoveStack === 'function') {
+          // La colonne se met en marche TOUT DE SUITE (retour immédiat au joueur),
+          // pendant que l'ordre part au serveur.
+          lancerMarche(centreOf(armyTerr), centreOf(t.id),
+                       hexToNumber(factionColor(joueurId())), grp.effectif)
+          onMoveStack(grp.idsLibres, t.id)
+        }
         draw(); return
       }
     }
-    selUnitTerrRef.current = null
+    // Cliquer une de SES provinces où stationne une armée disponible la sélectionne
+    // directement : plus besoin de viser le petit jeton.
+    const mienne = factionId && factionId === joueurId()
+    const garnison = mienne
+      ? collectArmies().find((a) => a.territoire === t.id && a.faction === joueurId() && a.idsLibres.length)
+      : null
+    selUnitTerrRef.current = garnison && selUnitTerrRef.current !== t.id ? t.id : null
     if (typeof onSelectProvince === 'function') onSelectProvince({ id: t.id, faction: factionId, nom: t.nom })
     if (factionId && factionId !== joueurId() && typeof onSelectFaction === 'function') onSelectFaction(factionId)
     draw()
@@ -329,9 +410,12 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     const cover = Math.max(W / cw, H / ch)
     fitRef.current = { scale: cover, bb }
     if (resetView) {
-      // Démarre PLUS zoomé, centré sur la Méditerranée centrale.
+      // Démarre centré sur VOS terres (sinon on ouvrait la partie sur une mer vide
+      // quand le joueur régnait loin de la Méditerranée — Francs, Bretons…).
       const scale = cover * 1.5
-      const cx = bb.minX + cw * 0.5, cy = bb.minY + ch * 0.6
+      let cx = bb.minX + cw * 0.5, cy = bb.minY + ch * 0.6
+      const chez = centreJoueur()
+      if (chez) { cx = chez[0]; cy = chez[1] }
       viewRef.current = { scale, x: W / 2 - cx * scale, y: H / 2 - cy * scale }
       clampView()
     }
@@ -371,6 +455,8 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       arrowLayerRef.current = new Container(); app.stage.addChild(arrowLayerRef.current)
       labelLayerRef.current = new Container(); app.stage.addChild(labelLayerRef.current)
       unitLayerRef.current = new Container(); app.stage.addChild(unitLayerRef.current)
+      marcheLayerRef.current = new Container(); app.stage.addChild(marcheLayerRef.current)
+      app.ticker.add(animerMarche)
       try { const data = await getMap(); if (destroyed) return; dataRef.current = data; setError(null); layout(true); draw() }
       catch (err) { if (!destroyed) setError(err.message || 'Carte indisponible') }
       finally { if (!destroyed) setLoading(false) }
@@ -396,7 +482,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       if (host) { host.removeEventListener('wheel', onWheel); host.removeEventListener('pointerdown', onDown) }
       window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp)
       if (appRef.current) appRef.current.destroy(true, { children: true, texture: true })
-      appRef.current = null; worldRef.current = null; labelLayerRef.current = null; unitLayerRef.current = null; arrowLayerRef.current = null
+      appRef.current = null; worldRef.current = null; labelLayerRef.current = null; unitLayerRef.current = null; arrowLayerRef.current = null; marcheLayerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

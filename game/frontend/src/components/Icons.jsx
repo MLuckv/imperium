@@ -72,6 +72,10 @@ const EMBLEM_SVG = {
   macedoine: <g {...S}><circle cx="12" cy="12" r="2" /><path d="M12 3v4M12 17v4M3 12h4M17 12h4M6 6l2.5 2.5M15.5 15.5L18 18M18 6l-2.5 2.5M8.5 15.5L6 18" /></g>,
   // Sparte : lambda (Λ) sur le bouclier hoplite — Léonidas.
   sparte: <g {...S}><circle cx="12" cy="12" r="9" /><path d="M8 16l4-8 4 8" /></g>,
+  // Francs : fleur de lys — la bannière de Jeanne d'Arc.
+  francs: <g {...S}><path d="M12 3c-1.6 2.2-1.6 4.4 0 6.6 1.6-2.2 1.6-4.4 0-6.6z" /><path d="M12 9.6c-2 -1.8 -4.6 -1.4 -5.4 .8 -.7 1.9 .9 3.6 2.9 3.4" /><path d="M12 9.6c2 -1.8 4.6 -1.4 5.4 .8 .7 1.9 -.9 3.6 -2.9 3.4" /><path d="M7.5 13.8h9" /><path d="M12 9.6V21" /></g>,
+  // Bretons : couronne sur Excalibur — la Table Ronde d'Arthur.
+  bretons: <g {...S}><path d="M12 4v13" /><path d="M8.5 8h7" /><path d="M12 17l-1.6 3h3.2L12 17z" /><path d="M5 5l1.8 2.4L9 4.6" /><path d="M19 5l-1.8 2.4L15 4.6" /></g>,
 }
 export function FactionEmblem({ faction, className, size, style }) {
   return <Svg className={className} size={size} style={style}>{EMBLEM_SVG[faction] || EMBLEM_SVG.rome}</Svg>

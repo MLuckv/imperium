@@ -50,6 +50,20 @@ PRIORITES_IA: dict[str, dict] = {
                       "camp_militaire"],
         "terrain_prefere": "fertile", "allie": "macedoine", "rival": None,
     },
+    "francs": {     # Jeanne : délivrer et tenir le royaume, foi et discipline, peu de conquête
+        "agressivite": 0.45, "expansion": 0.6, "armee_cible": 6, "merveilles": True,
+        "unite": "legionnaire",
+        "batiments": ["ferme", "puits", "scierie", "camp_militaire", "grenier", "carriere",
+                      "murailles", "marche", "mine", "aqueduc", "forum", "agora", "port"],
+        "terrain_prefere": "fertile", "allie": None, "rival": "bretons",
+    },
+    "bretons": {    # Arthur : unir l'île, peu d'hommes mais irréprochables, défense
+        "agressivite": 0.35, "expansion": 0.45, "armee_cible": 5, "merveilles": True,
+        "unite": "hoplite",
+        "batiments": ["ferme", "puits", "scierie", "murailles", "camp_militaire", "grenier",
+                      "carriere", "port", "marche", "mine", "aqueduc", "forum", "agora"],
+        "terrain_prefere": None, "allie": None, "rival": "francs",
+    },
 }
 
 

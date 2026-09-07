@@ -18,6 +18,8 @@ META_FACTIONS: dict[str, dict[str, str]] = {
     "carthage": {"nom": "Égypte", "couleur": "#c9a227"},
     "macedoine": {"nom": "Macédoine", "couleur": "#1e8449"},
     "sparte": {"nom": "Sparte", "couleur": "#2e6da4"},
+    "francs": {"nom": "Francs", "couleur": "#7048a8"},
+    "bretons": {"nom": "Bretons", "couleur": "#0d8c8c"},
 }
 
 # Ressources de base et de luxe (cahier §7).
