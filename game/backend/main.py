@@ -31,6 +31,7 @@ import realism_validator      # noqa: E402
 import tech_tree              # noqa: E402
 import conversations          # noqa: E402
 import merveilles             # noqa: E402
+import guerre                 # noqa: E402
 from models.city import CATALOGUE_BATIMENTS  # noqa: E402
 from models.unit import COUTS_UNITES, FORCES_UNITES, TECH_REQUISE_UNITE, COUT_POP_UNITES, COUT_RES_UNITES  # noqa: E402
 
@@ -108,6 +109,12 @@ class AnnexReq(BaseModel):
 
 class SlotReq(BaseModel):
     slot: int = 1
+
+
+class PaixReq(BaseModel):
+    cible: str
+    provinces: list[str] = []
+    or_exige: int = 0
 
 
 # =====================================================================
@@ -403,6 +410,41 @@ def diplomatie_message(req: MessageReq):
     return res
 
 
+@app.get("/api/guerre/offres")
+def guerre_offres(cible: str):
+    """Ce que le joueur peut EXIGER de `cible` avec son score de guerre actuel.
+    {score, provinces:[{id,nom,etoiles,cout,capitale,abordable}], or_max}."""
+    state = ws.charger_etat_courant()
+    if state is None:
+        raise HTTPException(status_code=404, detail="Aucune partie en cours.")
+    joueur = state.get("meta", {}).get("joueur_pays", "rome")
+    g = guerre.trouver(state, joueur, cible)
+    if not g:
+        raise HTTPException(status_code=400, detail="Vous n'êtes pas en guerre avec cette puissance.")
+    offres = guerre.offres_possibles(state, joueur, cible)
+    offres["score_adverse"] = round(max(0.0, -guerre.score_de(g, joueur)), 1)
+    offres["depuis"] = g.get("depuis")
+    return offres
+
+
+@app.post("/api/guerre/paix")
+def guerre_paix(req: PaixReq):
+    """Conclut la paix : applique les exigences payées par le score de guerre."""
+    state = ws.charger_etat_courant()
+    if state is None:
+        raise HTTPException(status_code=404, detail="Aucune partie en cours.")
+    joueur = state.get("meta", {}).get("joueur_pays", "rome")
+    evenements: list[dict] = []
+    res = guerre.conclure_paix(state, joueur, req.cible, req.provinces,
+                               req.or_exige, evenements)
+    if res.get("ok"):
+        state.setdefault("evenements_tour", []).extend(evenements)
+        state.setdefault("_chronique_annee", []).extend(e["texte"] for e in evenements)
+        ws.sauver_etat_courant(state)
+    res["state"] = state
+    return res
+
+
 @app.get("/api/diplomatie/conversation")
 def diplomatie_conversation(cible: str):
     """Historique complet du fil de discussion avec une IA. {cible, messages}."""
@@ -410,6 +452,98 @@ def diplomatie_conversation(cible: str):
     if state is None:
         raise HTTPException(status_code=404, detail="Aucune partie en cours.")
     return {"cible": cible, "messages": conversations.get_conversation(state, cible)}
+
+
+def _renseignements_espions(state: dict, pj: dict) -> str:
+    """Ce que les espions OPÉRATIONNELS du joueur rapportent de leurs cibles."""
+    lignes = []
+    for pr in pj.get("projets", []):
+        if pr.get("type") != "espionnage" or not pr.get("cible_faction"):
+            continue
+        cf = pr["cible_faction"]; cp = state.get("pays", {}).get(cf, {})
+        if pr.get("statut") == "actif":
+            intel = ai_director.resume_situation(cp, cp.get("nom", cf))
+            secrets = [q.get("nom") for q in cp.get("projets", [])
+                       if q.get("type") in ("espionnage", "sabotage")]
+            if secrets:
+                intel += " Manœuvres secrètes repérées : " + ", ".join(secrets) + "."
+            lignes.append(f"[{pr['nom']}] {intel}")
+        else:
+            lignes.append(f"[{pr['nom']}] Agents en route, rapport dans "
+                          f"{pr.get('tours_restants', '?')} tour(s).")
+    return "\n".join(lignes)
+
+
+def _deduire_cible(state: dict, directive: dict, texte: str, joueur: str) -> None:
+    """Déduit la cible d'une directive depuis le texte de l'ordre (tracé sur la carte)."""
+    if directive.get("cible_faction"):
+        return
+    low = (texte or "").lower()
+    cibles = {"sparte": "sparte", "léonidas": "sparte", "leonidas": "sparte",
+              "macédoine": "macedoine", "macedoine": "macedoine", "alexandre": "macedoine",
+              "égypte": "carthage", "egypte": "carthage", "ptolémée": "carthage",
+              "ptolemee": "carthage", "nil": "carthage", "alexandrie": "carthage",
+              "rome": "rome", "néron": "rome", "neron": "rome",
+              "francs": "francs", "jeanne": "francs", "reims": "francs",
+              "bretons": "bretons", "arthur": "bretons", "camelot": "bretons"}
+    for kw, fid in cibles.items():
+        if kw in low and fid != joueur and fid in state.get("pays", {}):
+            directive["cible_faction"] = fid
+            return
+
+
+@app.post("/api/conseiller/message/stream")
+def conseiller_message_stream(req: ConseilReq):
+    """Conseiller en STREAMING : sa parole s'affiche au fil de l'eau, puis une dernière
+    ligne JSON (préfixée \x1e) livre le projet éventuellement lancé."""
+    from fastapi.responses import StreamingResponse
+    state = ws.charger_etat_courant()
+    if state is None:
+        raise HTTPException(status_code=404, detail="Aucune partie en cours.")
+    pays_joueur = state.get("meta", {}).get("joueur_pays", "rome")
+    date_jeu = state.get("meta", {}).get("date_jeu", "5-03")
+    tour = state.get("meta", {}).get("tour")
+    pj = state.get("pays", {}).get(pays_joueur, {})
+    situation = ai_director.resume_situation(pj, pj.get("nom", pays_joueur))
+    renseignements = _renseignements_espions(state, pj)
+    conversations.ajouter_message(state, "_conseiller", role="joueur",
+                                  auteur=pj.get("nom", pays_joueur), texte=req.texte, tour=tour)
+    historique = conversations.historique_pour_prompt(state, "_conseiller", limite=40)
+    presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
+    prompt = ai_director.prompt_conseil(pays_joueur, req.texte, situation,
+                                        pj.get("projets", []), historique=historique,
+                                        date_jeu=date_jeu, renseignements=renseignements,
+                                        presents=presents)
+
+    def flux():
+        morceaux: list[str] = []
+        for chunk in ai_director.flux_conseil(prompt):
+            morceaux.append(chunk)
+            yield chunk
+        brut = getattr(ai_director.flux_conseil, "json_brut", "") or ""
+        data = ai_director._extraire_json(brut) if brut else None
+        texte = ai_director._nettoyer_reponse("".join(morceaux)) or ""
+        directive = data.get("directive") if isinstance(data, dict) else None
+        if not texte:   # Ollama muet : repli déterministe
+            texte = ai_director._conseil_repli(pays_joueur, req.texte, situation, pj)
+            yield texte
+        projet = None
+        if isinstance(directive, dict) and not ai_director.ordre_impossible(req.texte):
+            _deduire_cible(state, directive, req.texte, pays_joueur)
+            appl = game_engine.appliquer_directive_conseiller(state, directive)
+            if appl.get("ok"):
+                projet = appl["projet"]
+            else:
+                sup = f" (Hélas, {appl.get('raison')}.)"
+                texte += sup
+                yield sup
+        conversations.ajouter_message(state, "_conseiller", role="ia",
+                                      auteur="Conseiller", texte=texte, tour=tour)
+        ws.sauver_etat_courant(state)
+        yield "\x1e" + json.dumps({"projet": projet,
+                                    "projets": pj.get("projets", [])}, ensure_ascii=False)
+
+    return StreamingResponse(flux(), media_type="text/plain; charset=utf-8")
 
 
 @app.post("/api/conseiller/message")

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { sendConseillerMessage } from '../api'
+import { streamConseillerMessage, getState } from '../api'
 import { num } from '../lib/format'
 import { Overlay } from './ProductionModal'
 
@@ -9,6 +9,7 @@ import { Overlay } from './ProductionModal'
 const CONSEILLERS = {
   rome: 'Cassius, conseiller romain', macedoine: 'Cleitos, Compagnon du roi',
   sparte: "l'Éphore de Sparte", carthage: 'Manéthon, vizir d\'Égypte',
+  francs: 'frère Ambroise, confesseur', bretons: 'Merlin, conseiller du roi',
 }
 const TYPE_ICON = { espionnage: '🕵', garnison: '🛡', sabotage: '🔥', commerce: '⚖', autre: '✦' }
 const STATUT = { en_cours: 'En cours', actif: 'Opérationnel ✓', termine: 'Terminé' }
@@ -32,12 +33,30 @@ export default function ConseillerModal({ state, onClose, onStateChange }) {
     if (!t || busy) return
     setMsgs((m) => [...m, { role: 'joueur', texte: t }]); setTexte(''); setBusy(true)
     try {
-      const r = await sendConseillerMessage(t)
-      setMsgs((m) => [...m, { role: 'ia', texte: r.reponse || '…', projet: r.projet }])
+      // STREAMING : la parole du conseiller s'affiche au fil de sa réflexion.
+      let bulleCreee = false
+      const r = await streamConseillerMessage(t, (parole) => {
+        if (!bulleCreee) { bulleCreee = true; setBusy(false) }
+        setMsgs((m) => {
+          const copie = [...m]
+          const dernier = copie[copie.length - 1]
+          if (dernier && dernier.role === 'ia' && dernier.enCours) {
+            copie[copie.length - 1] = { ...dernier, texte: parole }
+          } else {
+            copie.push({ role: 'ia', texte: parole, enCours: true })
+          }
+          return copie
+        })
+      })
+      setMsgs((m) => m.map((x) => (x.enCours ? { ...x, enCours: false, projet: r.projet } : x)))
       if (r.projets) setProjets(r.projets)
-      if (r.state) onStateChange(r.state)
+      // Le projet a pu modifier le trésor : on rafraîchit l'état.
+      try {
+        const s = await getState()
+        if (s && s.pays) onStateChange(s)
+      } catch { /* le prochain tour resynchronisera */ }
     } catch (e) {
-      setMsgs((m) => [...m, { role: 'ia', texte: 'Pardonnez-moi, mon souverain, le message s\'est perdu.' }])
+      setMsgs((m) => [...m.filter((x) => !x.enCours), { role: 'ia', texte: 'Pardonnez-moi, mon souverain, le message s\'est perdu.' }])
     } finally { setBusy(false) }
   }
 

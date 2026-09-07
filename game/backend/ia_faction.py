@@ -399,6 +399,8 @@ def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
                 ge._perdre_unite(cible)
                 cible.setdefault("prov_stab", {})[cap_e] = max(
                     0.0, cible.get("prov_stab", {}).get(cap_e, 50) - 4)
+                import guerre as gr
+                gr.ajouter_score(state, fid, ennemi, gr.GAIN_SIEGE_CAPITALE)
                 evenements.append({"type": "guerre", "faction": fid,
                                    "texte": f"⚔ {ge.META_FACTIONS.get(fid, {}).get('nom', fid)} assiège "
                                             f"{ge._nom_territoire(cap_e)} : la garnison s'épuise."})
@@ -443,7 +445,7 @@ def _declarer_guerre(state: dict, fid: str, pays: dict, prio: dict, evenements: 
     candidats.sort()
     proie = candidats[0][2]
     state.setdefault("diplomatie", {}).setdefault("guerres_actives", []).append(
-        {"a": fid, "b": proie, "depuis": state.get("meta", {}).get("tour", 1)})
+        {"a": fid, "b": proie, "depuis": state.get("meta", {}).get("tour", 1), "score": 0.0})
     evenements.append({"type": "guerre", "faction": fid,
                        "texte": f"⚔ {ge.META_FACTIONS.get(fid, {}).get('nom', fid)} déclare la GUERRE "
                                 f"à {ge.META_FACTIONS.get(proie, {}).get('nom', proie)} !"})
@@ -489,7 +491,7 @@ def _alliances(state: dict, fid: str, pays: dict, prio: dict,
         return
     state.setdefault("diplomatie", {}).setdefault("traites_actifs", []).append(
         {"type": "alliance", "a": fid, "b": allie,
-         "depuis": state.get("meta", {}).get("tour", 1)})
+         "depuis": state.get("meta", {}).get("tour", 1), "score": 0.0})
     for x, y in ((fid, allie), (allie, fid)):
         r = state["pays"][x].setdefault("reputation", {})
         r[y] = min(100, r.get(y, 0) + 25)

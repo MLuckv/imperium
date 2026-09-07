@@ -35,6 +35,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   const dataRef = useRef(null)
   const stateRef = useRef(stateData)
   const hoveredRef = useRef(null)
+  const [apercu, setApercu] = useState(null)  // survol : fiche province + puissance du rival
   const selProvRef = useRef(null)     // province soulevée (sélection)
   const selUnitTerrRef = useRef(null) // territoire de l'armée joueur sélectionnée
   const viewRef = useRef({ scale: 1, x: 0, y: 0 })
@@ -183,8 +184,16 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       g.eventMode = 'static'; g.cursor = 'pointer'
       g.__terr = t; g.__factionId = factionId
       if (lifted) g.position.set(0, -6)
-      g.on('pointerover', () => { hoveredRef.current = t.id; paint(g, t, factionId, true, reach) })
-      g.on('pointerout', () => { if (hoveredRef.current === t.id) hoveredRef.current = null; paint(g, t, factionId, false, reach) })
+      g.on('pointerover', (e) => {
+        hoveredRef.current = t.id; paint(g, t, factionId, true, reach)
+        setApercu({ terr: t.id, nom: t.nom || t.id, faction: factionId, x: e.global.x, y: e.global.y })
+      })
+      g.on('pointermove', (e) => setApercu((a) => (a && a.terr === t.id ? { ...a, x: e.global.x, y: e.global.y } : a)))
+      g.on('pointerout', () => {
+        if (hoveredRef.current === t.id) hoveredRef.current = null
+        paint(g, t, factionId, false, reach)
+        setApercu((a) => (a && a.terr === t.id ? null : a))
+      })
       g.on('pointertap', () => onProvinceTap(t, factionId))
       paint(g, t, factionId, hoveredRef.current === t.id, reach)
       world.addChild(g)
@@ -508,6 +517,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       {loading && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-parchment/80">Chargement de la carte…</div>}
       {error && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1c1813]/85 px-6 text-center"><p className="text-lg font-semibold text-terracotta">Carte indisponible</p><p className="max-w-sm text-sm text-parchment/80">{error}</p></div>}
       <MapLegend stateData={stateData} naval={hasNaval()} />
+      {apercu && <ApercuProvince info={apercu} stateData={stateData} host={hostRef.current} />}
       <div className="absolute right-2 top-2 flex flex-col gap-1 rounded-lg border border-bronze-dark/50 bg-night/90 p-1 shadow-lg">
         <button onClick={() => zoomCenter(1.25)} title="Zoomer" className="h-8 w-8 rounded-md text-lg font-bold text-parchment hover:bg-ink-soft">+</button>
         <button onClick={() => zoomCenter(1 / 1.25)} title="Dézoomer" className="h-8 w-8 rounded-md text-lg font-bold text-parchment hover:bg-ink-soft">−</button>
@@ -576,4 +586,92 @@ function drawScaffold(layer, cx, cy) {
   g.stroke({ width: 1.8, color: 0xe8c267, alpha: 1 })
   g.rect(cx + 3, cy - 2, 4, 4); g.fill({ color: 0xb5462f }); g.stroke({ width: 1, color: 0x14110c })
   g.eventMode = 'none'; layer.addChild(g)
+}
+
+
+// Fiche de survol : ce que le joueur peut lire d'un coup d'œil sur une province —
+// et, si elle appartient à un rival, la PUISSANCE de ce rival, pour juger d'une
+// attaque sans devoir ouvrir la diplomatie.
+function ApercuProvince({ info, stateData, host }) {
+  const pays = (stateData && stateData.pays) || {}
+  const joueurId = stateData && stateData.meta && stateData.meta.joueur_pays
+  const prop = info.faction ? pays[info.faction] : null
+
+  let ville = null
+  for (const p of Object.values(pays)) for (const v of p.villes || []) if (v.territoire === info.terr) ville = v
+  const garnison = []
+  for (const [pid, p] of Object.entries(pays))
+    for (const u of p.unites || []) if (u.territoire === info.terr) garnison.push({ ...u, pid })
+
+  const enGuerre = info.faction && info.faction !== joueurId &&
+    (((stateData.diplomatie || {}).guerres_actives) || [])
+      .some((g) => new Set([g.a, g.b]).has(info.faction) && new Set([g.a, g.b]).has(joueurId))
+
+  const moi = pays[joueurId] || {}
+  const maPuissance = moi.puissance || 0
+  // Sans réseau d'espionnage, le moteur ne livre qu'une ESTIMATION de la puissance
+  // des rivaux : on l'affiche comme telle plutôt que de mentir sur sa précision.
+  const estime = prop && prop.puissance == null && prop.puissance_estimee != null
+  const saPuissance = (prop && (prop.puissance != null ? prop.puissance : prop.puissance_estimee)) || 0
+  const rapport = maPuissance > 0 && saPuissance > 0 ? saPuissance / maPuissance : null
+  const verdict = rapport == null ? null
+    : rapport > 1.35 ? { t: 'Plus fort que vous', c: 'text-red-300' }
+    : rapport > 0.75 ? { t: 'De force comparable', c: 'text-amber-300' }
+    : { t: 'Plus faible que vous', c: 'text-emerald-300' }
+
+  // Bulle collée au curseur, rabattue si elle sortirait du cadre.
+  const L = 226, H = 178
+  const w = (host && host.clientWidth) || 900
+  const h = (host && host.clientHeight) || 600
+  const left = Math.min(Math.max(8, info.x + 16), w - L - 8)
+  const top = Math.min(Math.max(8, info.y + 16), h - H - 8)
+
+  return (
+    <div className="pointer-events-none absolute z-20 rounded-lg border border-bronze-dark bg-night/97 px-3 py-2 shadow-2xl"
+         style={{ left, top, width: L }}>
+      <div className="font-display text-sm font-bold text-parchment">{info.nom}</div>
+      <div className="text-[11px]" style={{ color: info.faction ? factionColor(info.faction) : '#9c8f74' }}>
+        {info.faction ? factionLabel(info.faction, prop && prop.nom) : 'Terre sans maître'}
+        {info.faction === joueurId && ' · vos terres'}
+        {enGuerre && <span className="ml-1 text-red-300">⚔ en guerre</span>}
+      </div>
+
+      {ville && (
+        <div className="mt-1.5 text-[11px] text-parchment/75">
+          🏛 {ville.nom} · {Math.round(ville.population)} hab.
+          {(ville.batiments || []).length > 0 && ` · ${ville.batiments.length} bâtiment${ville.batiments.length > 1 ? 's' : ''}`}
+          {ville.fortifications > 0 && ` · remparts ${ville.fortifications}`}
+        </div>
+      )}
+      <div className="text-[11px] text-parchment/75">
+        {garnison.length > 0
+          ? `⚔ ${garnison.length} armée${garnison.length > 1 ? 's' : ''} · force ${garnison.reduce((n, u) => n + (u.effectif || 0), 0)}`
+          : '⚔ Aucune troupe visible'}
+      </div>
+
+      {prop && info.faction !== joueurId && (
+        <div className="mt-1.5 border-t border-bronze-dark/50 pt-1.5">
+          <div className="text-[10px] uppercase tracking-widest text-bronze/80">Puissance du rival</div>
+          <div className="mt-0.5 flex items-center gap-1.5">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/50">
+              <div className="h-full rounded-full"
+                   style={{ width: `${Math.min(100, rapport == null ? 50 : (rapport / (rapport + 1)) * 100)}%`,
+                            background: factionColor(info.faction) }} />
+            </div>
+            <span className="text-[11px] text-parchment/70">{estime ? '≈' : ''}{Math.round(saPuissance)}</span>
+          </div>
+          {verdict && (
+            <div className={'text-[11px] font-semibold ' + verdict.c}>
+              {verdict.t}{estime && <span className="font-normal text-parchment/45"> (estimation)</span>}
+            </div>
+          )}
+          <div className="text-[11px] text-parchment/60">
+            {(prop.territoires || []).length} prov. ·
+            {' '}{(prop.unites || []).length} armée{(prop.unites || []).length > 1 ? 's' : ''} ·
+            {' '}stab. {Math.round(prop.stabilite || 0)}
+          </div>
+        </div>
+      )}
+    </div>
+  )
 }

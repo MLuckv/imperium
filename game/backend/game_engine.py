@@ -1789,7 +1789,7 @@ def _appliquer_intent_diplo(state: dict, fid: str, joueur: str, intent: str, eve
     if intent == "guerre":
         ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
         if not any({g.get("a"), g.get("b")} == {fid, joueur} for g in ga):
-            ga.append({"a": fid, "b": joueur, "depuis": state.get("meta", {}).get("tour")})
+            ga.append({"a": fid, "b": joueur, "depuis": state.get("meta", {}).get("tour"), "score": 0.0})
             evenements.append({"type": "guerre", "faction": fid,
                                "texte": f"⚔ {ai_director.nom_dirigeant(fid)} déclare la GUERRE à {_nom_pays(joueur)} !"})
         rep[joueur] = max(-100, cur - 40)
@@ -1847,7 +1847,9 @@ def resoudre_bataille(state: dict, att_id: str, def_id: str, prov: str,
                if v.get("territoire") == prov):
             mult += 0.5
     fd_eff = max(1.0, fd * mult + (3.0 if est_cap else 0.0))
+    import guerre as gr
     if fa <= fd_eff:  # assaut repoussé : l'attaquant saigne
+        gr.ajouter_score(state, def_id, att_id, gr.GAIN_ASSAUT_REPOUSSE)
         _perdre_unite(att)
         if random.random() < 0.4:
             _perdre_unite(dfn)
@@ -1856,6 +1858,8 @@ def resoudre_bataille(state: dict, att_id: str, def_id: str, prov: str,
                                     f"{' (capitale)' if est_cap else ''} : REPOUSSÉ par {nom_d} !"})
         return False
     # Victoire de l'attaquant : pertes des deux côtés.
+    gr.ajouter_score(state, att_id, def_id,
+                     gr.GAIN_PROVINCE_PRISE if not est_cap else gr.GAIN_PROVINCE_PRISE * 2)
     _perdre_unite(dfn)
     if random.random() < (0.7 if est_cap else 0.35):
         _perdre_unite(att)
@@ -1952,6 +1956,10 @@ def _escalader_messages_ignores(state: dict, evenements: list) -> None:
             f["attente_reponse"] = None
 
 
+MOIS_NOMS = ("janvier", "février", "mars", "avril", "mai", "juin", "juillet",
+             "août", "septembre", "octobre", "novembre", "décembre")
+
+
 def _annee_lisible(annee: int) -> str:
     return f"{abs(int(annee))} {'av. J.-C.' if int(annee) < 0 else 'ap. J.-C.'}"
 
@@ -2018,6 +2026,7 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
             p["_actions_tour"] = ia_faction.jouer(state, fid, evenements)
 
     # 3a) Escalade des messages restés sans réponse, puis nouveaux messages SPONTANÉS.
+    import guerre as _gr; _gr.eroder(state)
     _escalader_messages_ignores(state, evenements)
     messages.extend(_messages_spontanes_ia(state, evenements, utiliser_ia=ia_messages))
 
@@ -2073,6 +2082,26 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     else:
         resume = {"texte": "", "source": "none"}
     state["resume_tour"] = resume.get("texte", "")
+
+    # 9b) JOURNAL DU RÈGNE : mémoire consultable de la partie. On n'y consigne que
+    # les faits notables (le bruit de gestion resterait illisible) plus, une fois
+    # l'an, la chronique rédigée. Plafonné pour ne pas gonfler la sauvegarde.
+    journal = state.setdefault("journal", [])
+    if notables:
+        journal.append({
+            "tour": meta.get("tour", 1),
+            "date": f"{MOIS_NOMS[(meta.get('mois', 1) - 1) % 12]} {_annee_lisible(meta.get('annee', 0))}",
+            "faits": notables[:12],
+        })
+    if resume.get("texte"):
+        journal.append({
+            "tour": meta.get("tour", 1),
+            "date": f"an {resume.get('annee')}",
+            "annee": resume.get("annee"),
+            "chronique": resume["texte"],
+        })
+    if len(journal) > 400:
+        del journal[:len(journal) - 400]
 
     # Enregistre les événements du tour dans l'état + sauvegarde courante.
     state["evenements_tour"] = evenements
@@ -2514,7 +2543,7 @@ def deplacer_unite(state: dict, unit_id: str, territoire_cible: str) -> dict:
         ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
         evs: list[dict] = []
         if not any({g.get("a"), g.get("b")} == {joueur, proprio} for g in ga):
-            ga.append({"a": joueur, "b": proprio, "depuis": state.get("meta", {}).get("tour")})
+            ga.append({"a": joueur, "b": proprio, "depuis": state.get("meta", {}).get("tour"), "score": 0.0})
             rep = state["pays"][proprio].setdefault("reputation", {})
             rep[joueur] = max(-100, rep.get(joueur, 0) - 40)
             evs.append({"type": "guerre", "faction": joueur,

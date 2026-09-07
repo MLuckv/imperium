@@ -389,6 +389,16 @@ def conseil(faction: str, message: str, situation: str, projets: list[dict],
             presents: tuple[str, ...] | None = None) -> dict:
     """Réponse du conseiller du joueur + éventuelle directive (projet à créer).
     Retourne {reponse, directive, source}."""
+    prompt = prompt_conseil(faction, message, situation, projets, historique,
+                            date_jeu, renseignements, presents)
+    brut = _appel_ollama(prompt, temperature=0.7, num_predict=240, format_json=True)
+    return _conseil_depuis_json(brut, faction, message, situation, pays_data)
+
+
+def prompt_conseil(faction: str, message: str, situation: str, projets: list[dict],
+                   historique: list[dict] | None = None, date_jeu: str = "5-03",
+                   renseignements: str = "", presents: tuple[str, ...] | None = None) -> str:
+    """Construit le prompt du conseiller (partagé entre appel direct et streaming)."""
     ident, style = CONSEILLERS.get(faction, ("ton conseiller", "fidèle et avisé"))
     proj_txt = "; ".join(f"{p.get('nom')} ({p.get('statut')}, {p.get('tours_restants',0)} tours restants)"
                          for p in projets) or "(aucun)"
@@ -403,18 +413,13 @@ def conseil(faction: str, message: str, situation: str, projets: list[dict],
     })
     if historique:
         prompt = f"FIL RÉCENT AVEC TON SOUVERAIN :\n{_formater_historique(historique)}\n\n" + prompt
-    brut = _appel_ollama(prompt, temperature=0.7, num_predict=240, format_json=True)
-    data = None
-    if brut:
-        try:
-            data = json.loads(brut)
-        except Exception:
-            m = re.search(r"\{.*\}", brut, re.DOTALL)
-            if m:
-                try:
-                    data = json.loads(m.group(0))
-                except Exception:
-                    data = None
+    return prompt
+
+
+def _conseil_depuis_json(brut: str | None, faction: str, message: str, situation: str,
+                         pays_data: dict | None) -> dict:
+    """Normalise la sortie JSON du conseiller (ou bascule sur le repli)."""
+    data = _extraire_json(brut) if brut else None
     if isinstance(data, dict) and data.get("reponse"):
         rep = _nettoyer_reponse(str(data["reponse"]))
         directive = data.get("directive")
@@ -424,6 +429,41 @@ def conseil(faction: str, message: str, situation: str, projets: list[dict],
     # Repli déterministe (Ollama absent/échec) : DIAGNOSTIC réel du royaume.
     return {"reponse": _conseil_repli(faction, message, situation, pays_data),
             "directive": None, "source": "fallback"}
+
+
+def flux_conseil(prompt: str):
+    """Générateur : la PAROLE du conseiller au fil de l'eau, extraite du JSON en cours
+    de production. Le modèle émet {"reponse": "...", "directive": ...} ; on suit la
+    valeur de « reponse » caractère par caractère pour l'afficher sans attendre.
+    Termine en livrant le JSON complet via l'attribut `.json_brut`."""
+    brut = ""
+    emis = 0            # nb de caractères de la réponse déjà envoyés
+    debut = -1          # position du 1er caractère de la valeur "reponse"
+    for chunk in flux_ollama(prompt, temperature=0.7, num_predict=240, format_json=True):
+        brut += chunk
+        if debut < 0:
+            m = re.search(r'"reponse"\s*:\s*"', brut)
+            if not m:
+                continue
+            debut = m.end()
+        # Cherche la fin de la chaîne (guillemet non échappé).
+        i, fin = debut + emis, None
+        while i < len(brut):
+            if brut[i] == '"' and brut[i - 1] != "\\":
+                fin = i
+                break
+            i += 1
+        dispo = brut[debut + emis:fin if fin is not None else len(brut)]
+        # On garde le dernier caractère en réserve tant que la chaîne n'est pas close
+        # (il pourrait être un antislash d'échappement).
+        if fin is None and dispo:
+            dispo = dispo[:-1]
+        if dispo:
+            emis += len(dispo)
+            yield dispo.replace('\\"', '"').replace("\\n", " ")
+        if fin is not None:
+            break
+    flux_conseil.json_brut = brut
 
 
 def _conseil_repli(faction: str, message: str, situation: str,
@@ -507,18 +547,22 @@ def prompt_diplomatique(
     )
 
 
-def flux_ollama(prompt: str, temperature: float = 0.72, num_predict: int = 90):
+def flux_ollama(prompt: str, temperature: float = 0.72, num_predict: int = 90,
+                format_json: bool = False):
     """Générateur : chunks de texte streamés depuis Ollama (vide si indisponible).
     Permet d'afficher les premiers mots en ~1-2 s au lieu d'attendre la fin."""
     if not modele_pret():
         return
+    charge = {
+        "model": MODELE, "prompt": prompt, "stream": True, "keep_alive": "30m",
+        "options": {"temperature": temperature, "num_predict": num_predict,
+                    "seed": random.randint(1, 2_000_000_000),
+                    "top_p": 0.92, "repeat_penalty": 1.18},
+    }
+    if format_json:
+        charge["format"] = "json"
     try:
-        with httpx.stream("POST", OLLAMA_GENERATE, json={
-            "model": MODELE, "prompt": prompt, "stream": True, "keep_alive": "30m",
-            "options": {"temperature": temperature, "num_predict": num_predict,
-                        "seed": random.randint(1, 2_000_000_000),
-                        "top_p": 0.92, "repeat_penalty": 1.18},
-        }, timeout=90.0) as r:
+        with httpx.stream("POST", OLLAMA_GENERATE, json=charge, timeout=90.0) as r:
             if r.status_code != 200:
                 return
             for ligne in r.iter_lines():
@@ -529,6 +573,11 @@ def flux_ollama(prompt: str, temperature: float = 0.72, num_predict: int = 90):
                 except Exception:
                     continue
                 morceau = d.get("response") or ""
+                if morceau and format_json:
+                    yield morceau
+                    if d.get("done"):
+                        return
+                    continue
                 if morceau:
                     # Garde anti-glissement : si un caractère non latin (CJK…)
                     # apparaît, on coupe et on ARRÊTE le flux proprement.

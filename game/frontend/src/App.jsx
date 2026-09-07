@@ -6,6 +6,9 @@ import ProductionModal from './components/ProductionModal'
 import RecruitmentModal from './components/RecruitmentModal'
 import DiplomacyModal from './components/DiplomacyModal'
 import ConseillerModal from './components/ConseillerModal'
+import PeaceModal from './components/PeaceModal'
+import JournalModal from './components/JournalModal'
+import Objectifs from './components/Objectifs'
 import TechTree from './components/TechTree'
 import DogmeTree from './components/DogmeTree'
 import { factionColor, factionLabel, leaderName, reputationTone, num } from './lib/format'
@@ -43,6 +46,7 @@ export default function App() {
   // Modales (UI épurée : tout s'ouvre via un bouton)
   const [modal, setModal] = useState(null) // 'production' | 'recrutement' | 'tech' | 'civs' | null
   const [diploTarget, setDiploTarget] = useState(null)
+  const [paixTarget, setPaixTarget] = useState(null)  // traité de paix en cours
   const [resume, setResume] = useState('')
   const [resumeSource, setResumeSource] = useState('')
   const [resumeAnnee, setResumeAnnee] = useState(null)  // chronique annuelle (livre d'histoire)
@@ -50,12 +54,19 @@ export default function App() {
   const [evenements, setEvenements] = useState([])
   const [showChronique, setShowChronique] = useState(false)
   const [msgIA, setMsgIA] = useState(0)  // messages spontanés des dirigeants non lus
+  const [journalVu, setJournalVu] = useState(0)  // taille du journal déjà consultée
+  const [menuOuvert, setMenuOuvert] = useState(null)  // {bas, droite} quand le menu Partie est ouvert
   const [selProv, setSelProv] = useState(null)   // province cliquée {id, faction, nom}
   const [conqueteCost, setConqueteCost] = useState(90)
   const [provNames, setProvNames] = useState({}) // id -> nom
   const [impotsOpts, setImpotsOpts] = useState([])
   const [nbIa, setNbIa] = useState(5)   // adversaires IA (5 = toutes les autres civs)
   const nbIaRef = useRef(5)             // toujours à jour, même si l'on clique très vite
+  // Le gestionnaire clavier est monté une fois : il lit l'état courant via ces refs.
+  const screenRef = useRef('menu'); const modalRef = useRef(null)
+  const busyRef = useRef(false); const stateRef = useRef(null)
+  screenRef.current = screen; modalRef.current = modal
+  busyRef.current = busy; stateRef.current = state
 
   useEffect(() => {
     getCatalog().then((c) => { if (c) { if (c.conquete) setConqueteCost(c.conquete.cout_or); if (c.impots) setImpotsOpts(c.impots) } }).catch(() => {})
@@ -79,6 +90,28 @@ export default function App() {
     finally { setBooting(false) }
   }, [])
   useEffect(() => { boot() }, [boot])
+
+  // Raccourcis clavier : jouer au clavier plutôt qu'à la souris sur chaque bouton.
+  // Espace = fin de tour ; Échap ferme ; une lettre ouvre le panneau correspondant.
+  useEffect(() => {
+    function onKey(e) {
+      if (e.metaKey || e.ctrlKey || e.altKey) return
+      // Échap ferme TOUJOURS, même depuis un champ de saisie (recherche, chat).
+      if (e.key === 'Escape') { setModal(null); setDiploTarget(null); setPaixTarget(null); setMenuOuvert(null); return }
+      if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return
+      if (screenRef.current !== 'game' || modalRef.current || busyRef.current) return
+      if (e.key === ' ') { e.preventDefault(); handleEndTurn(1); return }
+      const cible = { t: 'tech', g: 'dogmes', d: 'civs', c: 'conseiller', j: 'journal' }[e.key.toLowerCase()]
+      if (cible) {
+        e.preventDefault()
+        if (cible === 'civs') setMsgIA(0)
+        if (cible === 'journal') setJournalVu(((stateRef.current || {}).journal || []).length)
+        setModal(cible)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [])
 
   function flash(type, text) { setBanner({ type, text }) }
 
@@ -225,6 +258,14 @@ export default function App() {
   // Armées qui peuvent encore marcher ce tour-ci (évite de terminer son tour
   // en oubliant des troupes immobiles).
   const armeesPretes = ((joueur && joueur.unites) || []).filter((u) => !u.a_bouge).length
+  const nbJournal = ((state && state.journal) || []).length
+  // Guerres en cours du joueur : {faction, score vu du joueur}
+  const mesGuerres = (((state.diplomatie || {}).guerres_actives) || [])
+    .filter((g) => g.a === joueurId || g.b === joueurId)
+    .map((g) => ({
+      faction: g.a === joueurId ? g.b : g.a,
+      score: g.a === joueurId ? (g.score || 0) : -(g.score || 0),
+    }))
 
   // Provinces neutres occupées par une armée du joueur → annexables.
   const ownedAll = new Set()
@@ -240,6 +281,8 @@ export default function App() {
 
       <main className="relative min-h-0 flex-1">
         <Map stateData={state} onSelectFaction={setDiploTarget} onMoveStack={handleMoveStack} onSelectProvince={setSelProv} />
+
+        <Objectifs state={state} onAction={(a) => { if (a === 'civs') setMsgIA(0); setModal(a) }} />
 
         {/* Toast (flottant, ne décale plus la carte) */}
         {banner && (
@@ -279,44 +322,67 @@ export default function App() {
         )}
       </main>
 
-      {/* Barre d'action en bas (n'empiète plus sur la carte) */}
-      <div className="flex flex-wrap items-center justify-center gap-2 border-t border-bronze-dark/60 bg-night px-3 py-2">
+      {/* Barre d'action : UNE seule ligne, jamais de retour à la ligne qui vole
+          de la hauteur à la carte. Elle défile horizontalement si l'écran est étroit. */}
+      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto border-t border-bronze-dark/60 bg-night px-2 py-1.5">
         {/* Emplacement de largeur STABLE : les boutons suivants ne sautent plus
             quand on sélectionne ou désélectionne une province. */}
-        <div className="flex min-w-[19rem] items-center justify-end gap-2">
+        <div className="flex min-w-[16rem] shrink-0 items-center gap-1.5">
           {monProv ? (
             <>
-              <span className="mr-1 truncate text-xs text-parchment/70">{monProv.nom} :</span>
-              <button onClick={() => setModal('production')} className="btn btn-ghost">Production</button>
-              <button onClick={() => setModal('recrutement')} className="btn btn-ghost">Armée</button>
+              <span className="max-w-[7rem] truncate text-xs text-parchment/70" title={monProv.nom}>{monProv.nom}</span>
+              <button onClick={() => setModal('production')} className="btn btn-ghost btn-sm">⚒ Production</button>
+              <button onClick={() => setModal('recrutement')} className="btn btn-ghost btn-sm">⚔ Armée</button>
             </>
           ) : (
             <span className="text-xs italic text-parchment/45">Cliquez une de vos provinces pour la gérer</span>
           )}
         </div>
-        <span className="mx-1 h-6 w-px bg-bronze-dark/50" />
-        <button onClick={() => setModal('tech')} className="btn btn-ghost">Technologies</button>
-        <button onClick={() => setModal('dogmes')} className="btn btn-ghost">Dogmes</button>
-        <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost relative">
-          Diplomatie
-          {msgIA > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-red-600 px-1 text-[11px] font-bold text-white">{msgIA}</span>}
+        <span className="h-6 w-px shrink-0 bg-bronze-dark/50" />
+
+        <button onClick={() => setModal('tech')} className="btn btn-ghost btn-sm shrink-0" title="Technologies (T)">🔬 Technos</button>
+        <button onClick={() => setModal('dogmes')} className="btn btn-ghost btn-sm shrink-0" title="Dogmes (G)">☩ Dogmes</button>
+        <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost btn-sm relative shrink-0" title="Diplomatie (D)">
+          ✉ Diplomatie
+          {msgIA > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">{msgIA}</span>}
         </button>
-        <button onClick={() => setModal('conseiller')} className="btn btn-ghost">Conseiller</button>
+        <button onClick={() => setModal('conseiller')} className="btn btn-ghost btn-sm shrink-0" title="Conseiller (C)">👤 Conseiller</button>
+        <button onClick={() => { setModal('journal'); setJournalVu(nbJournal) }} className="btn btn-ghost btn-sm relative shrink-0" title="Journal du règne (J)">
+          📜 Journal
+          {nbJournal > journalVu && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-ink">{nbJournal - journalVu}</span>}
+        </button>
+
         {impotsOpts.length > 0 && (
-          <label className="flex items-center gap-1 text-xs text-parchment/70">
-            Impôts
-            <select value={(joueur && joueur.impots) || 'normal'} onChange={(e) => setImpots(e.target.value)}
-                    className="rounded border border-bronze-dark/60 bg-night px-1.5 py-1 text-parchment">
-              {impotsOpts.map((o) => <option key={o.id} value={o.id}>{o.nom} (stab {o.stab >= 0 ? '+' : ''}{o.stab})</option>)}
-            </select>
-          </label>
+          <select value={(joueur && joueur.impots) || 'normal'} onChange={(e) => setImpots(e.target.value)}
+                  title="Niveau d'imposition" className="shrink-0 rounded border border-bronze-dark/60 bg-night px-1.5 py-1 text-xs text-parchment">
+            {impotsOpts.map((o) => <option key={o.id} value={o.id}>Impôts : {o.nom} ({o.stab >= 0 ? '+' : ''}{o.stab} stab)</option>)}
+          </select>
         )}
-        <span className="mx-1 h-6 w-px bg-bronze-dark/50" />
-        <button onClick={handleSave} disabled={busy} className="btn btn-ghost btn-sm">Sauver</button>
-        <button onClick={() => setScreen('menu')} className="btn btn-ghost btn-sm">Menu</button>
-        <div className="flex items-stretch gap-px overflow-hidden rounded-md">
+
+        {/* Sauver / Menu, repliés pour ne plus disputer la place aux vraies actions */}
+        <div className="shrink-0">
+          <button onClick={(e) => {
+                    const r = e.currentTarget.getBoundingClientRect()
+                    setMenuOuvert(menuOuvert ? null : { bas: window.innerHeight - r.top + 4, droite: window.innerWidth - r.right })
+                  }}
+                  className="btn btn-ghost btn-sm" title="Partie">☰</button>
+          {menuOuvert && (
+            <>
+              <div className="fixed inset-0 z-20" onClick={() => setMenuOuvert(null)} />
+              <div style={{ bottom: menuOuvert.bas, right: menuOuvert.droite }}
+                   className="fixed z-30 flex w-36 flex-col rounded-md border border-bronze-dark bg-night py-1 shadow-xl">
+                <button onClick={() => { setMenuOuvert(null); handleSave() }} disabled={busy}
+                        className="px-3 py-1.5 text-left text-sm text-parchment hover:bg-black/40">Sauvegarder</button>
+                <button onClick={() => { setMenuOuvert(null); setScreen('menu') }}
+                        className="px-3 py-1.5 text-left text-sm text-parchment hover:bg-black/40">Menu principal</button>
+              </div>
+            </>
+          )}
+        </div>
+
+        <div className="ml-auto flex shrink-0 items-stretch gap-px overflow-hidden rounded-md">
           <button onClick={() => handleEndTurn(1)} disabled={busy} className="btn btn-primary rounded-none"
-                  title={armeesPretes > 0 ? `${armeesPretes} armée(s) peuvent encore marcher` : "Avancer d'un mois"}>
+                  title={armeesPretes > 0 ? `${armeesPretes} armée(s) peuvent encore marcher — Espace` : "Avancer d'un mois (Espace)"}>
             {busy ? 'Le monde avance…' : 'Fin de tour ▸'}
             {!busy && armeesPretes > 0 && (
               <span className="ml-2 rounded-full bg-ink/30 px-1.5 text-[11px] font-bold" title="Armées encore disponibles">
@@ -324,7 +390,7 @@ export default function App() {
               </span>
             )}
           </button>
-          <button onClick={() => handleEndTurn(3)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer de 3 mois">+3 mois</button>
+          <button onClick={() => handleEndTurn(3)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer de 3 mois">+3 m</button>
           <button onClick={() => handleEndTurn(12)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer d'un an (12 mois)">+1 an</button>
         </div>
       </div>
@@ -340,6 +406,32 @@ export default function App() {
       )}
       {diploTarget && state.pays[diploTarget] && (
         <DiplomacyModal cible={diploTarget} state={state} onClose={() => setDiploTarget(null)} onStateChange={setState} />
+      )}
+      {mesGuerres.length > 0 && (
+        <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-red-900/60 bg-night/95 px-3 py-1.5 shadow-lg">
+          <span className="text-xs font-semibold uppercase tracking-widest text-red-300">⚔ En guerre</span>
+          {mesGuerres.map((g) => (
+            <button key={g.faction} onClick={() => setPaixTarget(g.faction)}
+                    title="Négocier la paix : dépensez votre score de guerre pour réclamer des provinces"
+                    className="flex items-center gap-1.5 rounded border border-bronze-dark/60 px-2 py-0.5 text-xs hover:border-gold">
+              <span style={{ color: factionColor(g.faction) }}>
+                {factionLabel(g.faction, state.pays[g.faction] && state.pays[g.faction].nom)}
+              </span>
+              <span className={g.score >= 0 ? 'font-semibold text-emerald-300' : 'font-semibold text-red-300'}>
+                {g.score >= 0 ? '+' : ''}{Math.round(g.score)}
+              </span>
+              <span className="text-parchment/50">· négocier</span>
+            </button>
+          ))}
+        </div>
+      )}
+      {paixTarget && (
+        <PeaceModal cible={paixTarget} state={state}
+                    onClose={(msg) => { setPaixTarget(null); if (msg) flash('ok', msg) }}
+                    onStateChange={setState} />
+      )}
+      {modal === 'journal' && (
+        <JournalModal state={state} onClose={() => setModal(null)} />
       )}
       {modal === 'conseiller' && (
         <ConseillerModal state={state} onClose={() => setModal(null)} onStateChange={setState} />

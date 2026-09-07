@@ -93,6 +93,38 @@ export const sendDiplomaticMessage = (cible, texte, opts) =>
 export const sendConseillerMessage = (texte, opts) =>
   request('/api/conseiller/message', { method: 'POST', body: { texte }, ...opts })
 
+// Conseiller en STREAMING : sa parole arrive au fil de l'eau ; le flux se termine par
+// une ligne JSON (après le séparateur \x1e) décrivant le projet éventuellement lancé.
+export async function streamConseillerMessage(texte, onChunk) {
+  const res = await fetch(`${API_BASE}/api/conseiller/message/stream`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texte }),
+  })
+  if (!res.ok || !res.body) throw new ApiError('Échec du flux', { status: res.status })
+  const reader = res.body.getReader()
+  const dec = new TextDecoder()
+  let parole = ''
+  let meta = null
+  for (;;) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const morceau = dec.decode(value, { stream: true })
+    if (meta !== null) { meta += morceau; continue }
+    const sep = morceau.indexOf('\x1e')
+    if (sep >= 0) {
+      parole += morceau.slice(0, sep)
+      meta = morceau.slice(sep + 1)
+    } else {
+      parole += morceau
+    }
+    if (onChunk) onChunk(parole)
+  }
+  let extra = {}
+  try { extra = meta ? JSON.parse(meta) : {} } catch { extra = {} }
+  return { reponse: parole, ...extra }
+}
+
 // Réponse diplomatique en STREAMING : onChunk(texteCumulé) est appelé au fil des
 // tokens (premiers mots en ~1-2 s). Résout avec le texte complet.
 export async function streamDiplomaticMessage(cible, texte, onChunk) {
@@ -119,6 +151,16 @@ export const moveUnit = (unitId, territoire, opts) =>
 
 export const annexProvince = (territoire, opts) =>
   request('/api/province/annex', { method: 'POST', body: { territoire }, ...opts })
+
+export const getWarOffers = (cible, opts) =>
+  request(`/api/guerre/offres?cible=${encodeURIComponent(cible)}`, opts)
+
+export const makePeace = (cible, provinces = [], orExige = 0, opts) =>
+  request('/api/guerre/paix', {
+    method: 'POST',
+    body: { cible, provinces, or_exige: orExige },
+    ...opts,
+  })
 
 export const getSaves = (opts) => request('/api/saves', opts)
 
