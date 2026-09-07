@@ -8,10 +8,9 @@ Issus de la critique globale après la longue partie de test (v16).
   corruption + entretien + inflation + annexion exponentielle.
 - [ ] **Pas d'ennemis ni d'IA** — l'armée et la diplomatie ne servent presque à rien
   pour l'instant. (Phase 2, volontaire.)
-- [ ] **Âges d'or / âge sombre trop rares** — seuils (stab ≥ 75 ou ≤ 32 soutenus 3 tours)
-  difficiles à atteindre. À assouplir.
-- [ ] **Expansion = surtout annexion** — la population gonfle par conquête bien plus que
-  par croissance organique.
+- [x] **Âges d'or / sombres** — ✅ REFONDUS (v21, voir plus bas).
+- [x] **Expansion = surtout annexion** — ✅ corrigé par le bug de croissance des villes
+  (v21) : les cités grandissent enfin, donc la colonisation redevient possible.
 - [ ] **Pas de condition de victoire** — le Prestige (merveilles) est prêt à servir de base.
 - [ ] **Diplomatie / messagerie en sommeil** — (Phase 2.)
 
@@ -123,3 +122,49 @@ devient nécessaire). Petit empire prudent : corruption 0 %, sain.
 - [ ] Messagerie / diplomatie active (accords, alliances, trahisons appliqués au jeu).
 - [ ] Conditions de victoire (prestige culturel, domination militaire…).
 - [ ] Feuilles / historique de conversations par IA.
+
+
+---
+
+## 🔎 v21 — Audit complet (IA, économie, âges)
+
+### Âges d'or / âges sombres : refondus
+Constat mesuré : **0 âge d'or en 75 années cumulées**. Le seuil (stabilité ≥ 75) était
+au-dessus du plafond réel (~68) à cause de la tension d'empire, et un âge ne faisait que
+modifier la stabilité — une boucle sur elle-même, sans effet de jeu.
+
+- **ÉLAN** : nouveau score composite (stabilité + merveilles + prospérité + paix + savoir
+  + ampleur du royaume − corruption − troubles récents − **stagnation**). Visible dans la
+  barre du haut (✧) avec le détail au survol.
+- **Anti-inertie** : un royaume qui n'entreprend plus rien (aucune terre, cité, bâtiment,
+  savoir ni merveille nouveaux) s'assoupit — ne rien faire ne donne plus d'âge d'or.
+- **Un âge d'or est un MOMENT** : il se mérite (élan ≥ 94 tenu 3 tours), **brille 14 mois**,
+  puis s'achève dans l'épuisement (30 mois avant d'en rallumer un). On ne campe plus dedans.
+- **Effets réels** : ±18 % sur toute la production (or, vivres, pierre, bois, fer).
+- **Âge sombre** (élan ≤ 58) : dure tant que le royaume n'est pas redressé (sortie à 70).
+- Annonces dans la chronique aux bascules.
+- **Calibré empiriquement** : ~2 âges d'or par royaume et par partie de 25 ans (9 % du
+  temps), les âges sombres frappant les royaumes en déclin.
+
+### Bugs de fond trouvés et corrigés
+- **La population des villes ne grandissait JAMAIS** : la croissance répartie était
+  tronquée à l'entier chaque tour (`int(round(12 + 0,2))` = 12). D'où une population
+  nationale à 693 pendant que les cités restaient figées à 5-12 habitants — et une
+  colonisation impossible (les colons se prélèvent sur une ville). Corrigé (décimale
+  conservée) : l'Égypte passe de 5 à 14-17 cités.
+- **Les bonus % des bâtiments s'additionnaient à l'échelle de l'EMPIRE** : 17 marchés
+  donnaient 17× le bonus sur toute la production → +3 232 or/tour, trésors à
+  **115 000 or**. Un marché améliore désormais **sa** cité (moyenne par ville, plafond
+  +150 %) → trésors ramenés à 250-3 500 or.
+- **L'IA conquérante se ruinait** : Alexandre entretenait 9 unités avec 1 à 3 provinces
+  (or à 27, stabilité 37, révoltes en chaîne, pop 24 → 10). L'ambition militaire est
+  maintenant indexée sur la base économique (2 + 1,5/province) et le recrutement s'arrête
+  si le trésor est exsangue. La Macédoine tient désormais 12 provinces.
+- **L'IA n'avait plus rien à financer** (listes de 8 bâtiments) : listes complètes (13)
+  + garnisons de mercenaires quand le trésor déborde.
+
+### ⚙️ Incident machine (hors code)
+macOS bloquait les bibliothèques natives (`library load disallowed by system policy`) :
+pydantic (backend), esbuild/rollup/lightningcss (frontend) portaient un attribut
+**`com.apple.quarantine`**. Résolu par `xattr -dr com.apple.quarantine` sur `.venv` et
+`node_modules`. À refaire si l'erreur réapparaît.

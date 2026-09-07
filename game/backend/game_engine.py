@@ -448,13 +448,18 @@ def _calculer_production(pays: dict, state: dict | None = None,
     if tor: prod["or"] += tor; note("or", "Oasis & caravanes", tor)
 
     # 5) Bonus MULTIPLICATIFS des bâtiments (marché, grenier, forum…).
+    # Un marché améliore le rendement de SA cité, pas de l'empire entier : on prend
+    # donc l'efficacité MOYENNE par ville. (Sommer les bonus de toutes les villes
+    # faisait exploser l'économie : 17 marchés = 17× le bonus sur toute la production.)
     pct = {}
     for v in villes:
         for bat in v.get("batiments", []):
             for res, p in EFFETS_BATIMENTS.get(bat, {}).items():
                 pct[res] = pct.get(res, 0) + p
+    nb_v = max(1, len(villes))
     for res, p in pct.items():
-        d = prod[res] * p
+        moyen = min(p / nb_v, 1.5)      # plafond : +150 % de rendement par cité
+        d = prod[res] * moyen
         if d: prod[res] += d; note(res, "Bâtiments (%)", d)
 
     # 6) Technologies + dogmes (or/nourriture).
@@ -476,6 +481,15 @@ def _calculer_production(pays: dict, state: dict | None = None,
     for res in ("or", "nourriture", "pierre", "bois", "fer"):
         d = prod[res] * (fstab - 1)
         if d: prod[res] += d; note(res, f"Stabilité (×{fstab})", d)
+
+    # 7b) ÂGE D'OR / ÂGE SOMBRE : un vrai souffle — ou un vrai marasme — sur l'économie.
+    age = pays.get("age")
+    if age in ("or", "sombre"):
+        mult = 0.18 if age == "or" else -0.18
+        libelle = "Âge d'or" if age == "or" else "Âge sombre"
+        for res in ("or", "nourriture", "pierre", "bois", "fer"):
+            d = prod[res] * mult
+            if d: prod[res] += d; note(res, libelle, d)
 
     # 8) Économie de guerre + événements.
     if _en_guerre(pays.get("id", ""), state):
@@ -553,12 +567,14 @@ def _appliquer_production(pays: dict, state: dict | None = None) -> None:
     croissance = prod.get("population", 0)
     if croissance:
         res["population"] = round(res.get("population", 0) + croissance, 1)
-        # Répartit la croissance sur les villes (proportionnel).
+        # Répartit la croissance sur les villes. On garde une DÉCIMALE : arrondir à
+        # l'entier chaque tour annulait toute croissance dès qu'il y avait plusieurs
+        # villes (0,2 habitant/tour → int() → 0), et les cités restaient figées.
         villes = [v for v in pays.get("villes", []) if v.get("pacification", 0) <= 0]
         if villes:
             part = croissance / len(villes)
             for v in villes:
-                v["population"] = int(round(v.get("population", 0) + part))
+                v["population"] = round(v.get("population", 0) + part, 1)
 
 
 # =====================================================================
@@ -681,25 +697,146 @@ def calculer_stabilite(pays: dict, state: dict | None = None) -> int:
     return pays["stabilite"]
 
 
-def _maj_age(pays: dict) -> None:
-    """ÂGE de la civilisation (empire entier) selon la stabilité moyenne. Hystérésis :
-    il faut tenir la condition ~3 tours pour entrer/sortir d'un âge d'or ou sombre."""
-    stab = pays.get("stabilite", 60)
+def elan_civilisation(pays: dict, state: dict | None = None) -> tuple[float, list[dict]]:
+    """ÉLAN d'une civilisation : sa santé et son rayonnement d'ensemble, pas seulement
+    sa stabilité. C'est lui qui décide des âges d'or et des âges sombres.
+    Retourne (score, facteurs lisibles pour l'infobulle)."""
+    facteurs: list[dict] = []
+    def f(label, v):
+        if v: facteurs.append({"source": label, "val": round(v, 1)})
+
+    e = float(pays.get("stabilite", 60)); f("Stabilité", e)
+
+    # Rayonnement : les merveilles bâties portent la civilisation.
+    prestige = pays.get("prestige", 0)
+    if prestige:
+        e += prestige * 1.2; f("Merveilles (prestige)", prestige * 1.2)
+
+    # Prospérité : un trésor sain et des greniers pleins.
+    prod = pays.get("production", {}); res = pays.get("ressources", {})
+    if res.get("or", 0) > 250 and prod.get("or", 0) > 0:
+        e += 6; f("Trésor florissant", 6)
+    elif res.get("or", 0) <= 0:
+        e -= 8; f("Caisses vides", -8)
+    if prod.get("nourriture", 0) > 1:
+        e += 4; f("Greniers pleins", 4)
+    elif prod.get("nourriture", 0) < 0:
+        e -= 12; f("Famine", -12)
+
+    # Paix ou guerre : la guerre longue épuise, la paix laisse fleurir les arts.
+    tg = pays.get("tours_guerre", 0)
+    if tg > 8:
+        e -= 12; f("Guerre interminable", -12)
+    elif tg > 0:
+        e -= 4; f("Guerre", -4)
+    elif pays.get("_tours_paix", 0) >= 12:
+        e += 5; f("Longue paix", 5)
+
+    # Ampleur du royaume : une civilisation qui rayonne a des terres et des cités.
+    nb_terr = len(pays.get("territoires", []))
+    nb_villes = len(pays.get("villes", []))
+    ampleur = min(14.0, max(0.0, (nb_terr - 1) * 1.6 + (nb_villes - 1) * 2.4))
+    if ampleur:
+        e += ampleur; f("Ampleur du royaume", ampleur)
+
+    # STAGNATION : un royaume qui n'entreprend plus rien s'endort, si paisible soit-il.
+    stagne = pays.get("_tours_sans_progres", 0)
+    if stagne > 24:
+        d = -min(20.0, (stagne - 24) * 0.6)
+        e += d; f("Royaume assoupi", d)
+
+    # Savoir et bonne administration.
+    nb_tech = len(pays.get("technologies", []))
+    if nb_tech >= 3:
+        e += min(6.0, (nb_tech - 2) * 1.5); f("Savoir", min(6.0, (nb_tech - 2) * 1.5))
+    corr = pays.get("corruption", 0)
+    if corr > 12:
+        e -= (corr - 12) * 0.35; f("Corruption", -(corr - 12) * 0.35)
+
+    # Mémoire des heurts récents (révoltes, sacs, catastrophes) : elle s'estompe.
+    heurts = pays.get("_heurts", 0)
+    if heurts:
+        e -= heurts * 4.0; f("Troubles récents", -heurts * 4.0)
+    return e, facteurs
+
+
+# Seuils calibrés sur la distribution réelle de l'élan (p90 ≈ 103, p10 ≈ 29).
+SEUIL_AGE_OR = 94.0
+SEUIL_AGE_SOMBRE = 58.0
+DUREE_AGE_OR = 14        # un âge d'or brille ~14 mois, puis les fastes retombent
+REPOS_APRES_AGE_OR = 30  # il faut se refaire une gloire avant le suivant
+
+
+def _maj_age(pays: dict, evenements: list | None = None) -> None:
+    """ÂGE de la civilisation, piloté par l'ÉLAN. Un âge d'or est un MOMENT : il se
+    mérite (élan très haut tenu 3 tours), il BRILLE une durée limitée, puis s'achève
+    dans l'épuisement — on ne campe pas dedans. Un âge sombre dure tant qu'on n'a pas
+    redressé le royaume."""
+    # Suit l'ŒUVRE du règne : terres, cités, bâtiments, savoir, merveilles. Tant que
+    # rien n'avance, le royaume s'assoupit (et ne mérite pas d'âge d'or).
+    signature = (len(pays.get("territoires", [])), len(pays.get("villes", [])),
+                 sum(len(v.get("batiments", [])) for v in pays.get("villes", [])),
+                 len(pays.get("technologies", [])), len(pays.get("dogmes", [])),
+                 round(pays.get("prestige", 0)))
+    if signature == tuple(pays.get("_signature_progres", ())):
+        pays["_tours_sans_progres"] = pays.get("_tours_sans_progres", 0) + 1
+    else:
+        pays["_signature_progres"] = list(signature)
+        pays["_tours_sans_progres"] = 0
+
+    score, facteurs = elan_civilisation(pays)
+    pays["elan"] = round(score, 1)
+    pays["elan_facteurs"] = facteurs
+    if pays.get("_heurts", 0) > 0:                    # les malheurs s'estompent
+        pays["_heurts"] = max(0, pays["_heurts"] - 0.34)
+    pays["_tours_paix"] = 0 if pays.get("tours_guerre", 0) > 0 else pays.get("_tours_paix", 0) + 1
+    if pays.get("age_repos", 0) > 0:
+        pays["age_repos"] -= 1
+
+    nom = _nom_pays(pays.get("id", ""))
+    def annonce(txt):
+        if evenements is not None:
+            evenements.append({"type": "age", "faction": pays.get("id"), "texte": txt})
+
+    age = pays.get("age")
+
+    # --- Un âge d'or en cours s'écoule puis s'achève ---
+    if age == "or":
+        pays["age_restant"] = pays.get("age_restant", DUREE_AGE_OR) - 1
+        if pays["age_restant"] <= 0:
+            pays["age"] = None
+            pays["age_compteur"] = 0
+            pays["age_repos"] = REPOS_APRES_AGE_OR
+            annonce(f"L'âge d'or {_de(nom)} s'achève : les fastes retombent, "
+                    f"il faudra une œuvre nouvelle pour rallumer pareille gloire.")
+        return
+
+    # --- Un âge sombre dure tant que le royaume n'est pas redressé ---
+    if age == "sombre":
+        if score >= SEUIL_AGE_SOMBRE + 12:            # hystérésis : vraie sortie de crise
+            pays["age"] = None
+            pays["age_compteur"] = 0
+            annonce(f"{nom} sort enfin de son âge sombre ; le peuple relève la tête.")
+        return
+
+    # --- Entrée dans un âge : il faut TENIR la condition 3 tours ---
     cpt = pays.get("age_compteur", 0)
-    if stab >= 75:
+    if score >= SEUIL_AGE_OR and pays.get("age_repos", 0) <= 0:
         cpt = (cpt + 1) if cpt >= 0 else 1
-    elif stab <= 32:
+    elif score <= SEUIL_AGE_SOMBRE:
         cpt = (cpt - 1) if cpt <= 0 else -1
     else:
         cpt = 0
-    cpt = max(-4, min(4, cpt))
-    pays["age_compteur"] = cpt
-    if cpt >= 3:
+    pays["age_compteur"] = max(-3, min(3, cpt))
+    if pays["age_compteur"] >= 3:
         pays["age"] = "or"
-    elif cpt <= -3:
+        pays["age_restant"] = DUREE_AGE_OR
+        annonce(f"☀ ÂGE D'OR : {nom} entre dans une ère de splendeur — "
+                f"les arts fleurissent, les moissons et l'or abondent.")
+    elif pays["age_compteur"] <= -3:
         pays["age"] = "sombre"
-    elif -2 <= cpt <= 2:
-        pays["age"] = None
+        annonce(f"☾ ÂGE SOMBRE : {nom} sombre dans la décadence — "
+                f"disettes, murmures et caisses vides.")
 
 
 def _maj_corruption(pays: dict) -> float:
@@ -778,6 +915,7 @@ def _declencher_catastrophes(state: dict, evenements: list) -> None:
             continue
         tid = random.choice(terrs)
         cat = random.choice(CATASTROPHES)
+        _noter_heurt(p, 0.8)
         p.setdefault("prov_modif", {}).setdefault(tid, []).append(
             {"nom": cat["nom"], "malus": cat["malus"], "tours": cat["tours"]})
         evenements.append({"type": "catastrophe", "faction": fid,
@@ -965,6 +1103,7 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
             p.setdefault("prov_modif", {}).setdefault(ville.get("territoire"), []).append(
                 {"nom": "Incendie", "malus": -15, "tours": 3})
             noms = ", ".join(_nom_batiment(b) for b in perdus)
+            _noter_heurt(p, 1.2)
             evenements.append({"type": "catastrophe", "faction": fid,
                                "texte": f"🔥 Un GRAND INCENDIE ravage {ville.get('nom')} : "
                                         f"{noms} partent en fumée ! Il faudra rebâtir."})
@@ -988,6 +1127,7 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
                 ville["population"] = max(1, int(ville.get("population", 1) * 0.8))
             p.setdefault("prov_modif", {}).setdefault(tid, []).append(
                 {"nom": "Éruption", "malus": -25, "tours": 4})
+            _noter_heurt(p, 1.6)
             evenements.append({"type": "catastrophe", "faction": fid,
                                "texte": f"🌋 ÉRUPTION : le feu de la terre dévaste "
                                         f"{_nom_territoire(tid)} (−{perte_pop} habitants).{detail}"})
@@ -1011,6 +1151,7 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
                     "force": 9 + tour // 12, "cible_faction": fid,
                     "cible_territoire": _capitale_faction(fid),
                 })
+                _noter_heurt(p, 2.0)
                 evenements.append({"type": "barbares", "faction": fid,
                                    "texte": f"⚔ RÉBELLION ARMÉE : {_nom_territoire(tid)} se soulève "
                                             f"et lève une armée contre {_nom_pays(fid)} !"})
@@ -1117,6 +1258,7 @@ def _tour_hordes(state: dict, evenements: list) -> None:
             defenseur.setdefault("prov_modif", {}).setdefault(prochain, []).append(
                 {"nom": f"Sac ({h['nom']})", "malus": -20, "tours": 4})
             h["force"] = round(h["force"] * 0.7, 1)  # le siège coûte cher aux assaillants
+            _noter_heurt(defenseur, 2.0)
             evenements.append({"type": "barbares", "faction": proprio,
                                "texte": f"🔥 Les {h['nom']} SACCAGENT {_nom_territoire(prochain)}, capitale de "
                                         f"{_nom_pays(proprio)} : −{butin} or, −{perte_pop} habitants. La cité tient."})
@@ -1132,9 +1274,15 @@ def _tour_hordes(state: dict, evenements: list) -> None:
             if u.get("territoire") == prochain and cap_c:
                 u["territoire"] = _capitale_faction(proprio) or prochain
         h["territoire"] = prochain
+        _noter_heurt(defenseur, 1.5)
         evenements.append({"type": "barbares", "faction": proprio,
                            "texte": f"🔥 Les {h['nom']} RAVAGENT {_nom_territoire(prochain)} "
                                     f"({_nom_pays(proprio)}) : pillages, {perte_pop} habitants perdus."})
+
+
+def _noter_heurt(pays: dict, poids: float = 1.0) -> None:
+    """Mémorise un malheur récent : il pèse sur l'élan et s'estompe avec le temps."""
+    pays["_heurts"] = min(6.0, pays.get("_heurts", 0) + poids)
 
 
 def _verifier_revolte(pays: dict, evenements: list) -> None:
@@ -1823,7 +1971,7 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
         _maj_moral(p)
         _progresser_recherche(p, evenements)
         calculer_stabilite(p, state)
-        _maj_age(p)                    # âge d'or / âge sombre (selon la moyenne)
+        _maj_age(p, evenements)                    # âge d'or / âge sombre (selon la moyenne)
         _verifier_revolte(p, evenements)
         _reset_mouvements(p)  # les unités peuvent rebouger au tour suivant
         # Décrémente la pacification des villes capturées (§9.3).
@@ -1895,7 +2043,7 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     # belle chronique (style livre d'histoire) qu'au PASSAGE D'UNE ANNÉE.
     NOTABLE = {"guerre", "paix", "coalition", "message_ia", "revolte", "catastrophe",
                "merveille", "projet", "accord", "victoire", "conseiller", "expansion",
-               "barbares", "aubaine"}
+               "barbares", "aubaine", "age"}
     notables = [ev.get("texte") for ev in evenements
                 if isinstance(ev, dict) and ev.get("type") in NOTABLE and ev.get("texte")]
     chron = state.setdefault("_chronique_annee", [])

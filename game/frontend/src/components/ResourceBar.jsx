@@ -21,6 +21,9 @@ export default function ResourceBar({ meta, joueur }) {
   const facteursStab = (joueur && joueur.stabilite_facteurs) || []
   const bassesStab = (joueur && joueur.stabilite_basses) || []
   const age = joueur && joueur.age
+  const ageRestant = (joueur && joueur.age_restant) || 0
+  const elan = joueur && joueur.elan
+  const elanFacteurs = (joueur && joueur.elan_facteurs) || []
   const prestige = joueur && joueur.prestige
   const tourisme = (joueur && joueur.tourisme) || 0
   const corruption = (joueur && joueur.corruption) || 0
@@ -119,8 +122,28 @@ export default function ResourceBar({ meta, joueur }) {
           {cibleStab != null && (
             <span className="text-[10px] text-parchment/50">→ {num(cibleStab)}</span>
           )}
-          {age === 'or' && <span className="ml-1 rounded px-1 text-[10px] font-semibold text-amber-300" style={{ backgroundColor: 'rgba(202,165,61,0.2)' }} title="Âge d'or">☀ Âge d'or</span>}
-          {age === 'sombre' && <span className="ml-1 rounded px-1 text-[10px] font-semibold text-red-300" style={{ backgroundColor: 'rgba(192,57,43,0.2)' }} title="Âge sombre">☾ Âge sombre</span>}
+          {age === 'or' && <span className="ml-1 rounded px-1 text-[10px] font-semibold text-amber-300" style={{ backgroundColor: 'rgba(202,165,61,0.2)' }} title="Âge d'or : +18 % de production. Il ne dure qu'un temps.">☀ Âge d'or{ageRestant ? ` · ${ageRestant} mois` : ''}</span>}
+          {age === 'sombre' && <span className="ml-1 rounded px-1 text-[10px] font-semibold text-red-300" style={{ backgroundColor: 'rgba(192,57,43,0.2)' }} title="Âge sombre : −18 % de production. Redressez le royaume pour en sortir.">☾ Âge sombre</span>}
+          {elan != null && (
+            <span className="group relative ml-2 cursor-help text-xs text-sky-200"
+                  title="Élan de la civilisation — c'est lui qui mène aux âges d'or (94) ou sombres (58).">
+              ✧ {Math.round(elan)}
+              {elanFacteurs.length > 0 && (
+                <span className="pointer-events-none absolute left-0 top-5 z-50 hidden w-56 rounded border border-bronze-dark bg-night p-2 text-[11px] shadow-xl group-hover:block">
+                  <b className="text-sky-200">Élan {Math.round(elan)}</b>
+                  <span className="mt-1 block text-parchment/60">Âge d'or à 94 · âge sombre à 58</span>
+                  {elanFacteurs.map((f, i) => (
+                    <span key={i} className="mt-0.5 flex justify-between gap-2">
+                      <span className="text-parchment/80">{f.source}</span>
+                      <span className={f.val >= 0 ? 'text-emerald-300' : 'text-red-300'}>
+                        {f.val >= 0 ? '+' : ''}{f.val}
+                      </span>
+                    </span>
+                  ))}
+                </span>
+              )}
+            </span>
+          )}
           {prestige ? <span className="ml-2 text-xs text-amber-200" title="Prestige (merveilles)">✦ {num(prestige)}</span> : null}
           {tourisme > 0 ? <span className="ml-1 text-xs text-sky-300" title="Points de tourisme — vos merveilles attirent le monde (victoire à 1200)">🏺 {num(Math.round(tourisme))}</span> : null}
           {corruption > 0 ? <span className="ml-2 text-xs text-orange-300" title="Corruption : réduit le revenu d'or (gouverneurs, forum/agora et droit la font baisser)">☣ {num(corruption)}%</span> : null}

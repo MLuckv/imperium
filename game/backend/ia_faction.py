@@ -22,28 +22,32 @@ PRIORITES_IA: dict[str, dict] = {
         "agressivite": 0.35, "expansion": 0.55, "armee_cible": 4, "merveilles": True,
         "unite": "legionnaire",
         "batiments": ["scierie", "ferme", "puits", "carriere", "marche", "aqueduc",
-                      "forum", "mine", "grenier"],
+                      "forum", "mine", "grenier", "port", "murailles", "camp_militaire",
+                      "agora"],
         "terrain_prefere": None, "allie": None, "rival": None,
     },
     "macedoine": {  # Alexandre : conquête avant tout, armée de choc
         "agressivite": 0.9, "expansion": 0.95, "armee_cible": 7, "merveilles": False,
         "unite": "phalange",
         "batiments": ["scierie", "ferme", "puits", "camp_militaire", "carriere",
-                      "mine", "grenier"],
+                      "mine", "grenier", "murailles", "marche", "aqueduc", "agora",
+                      "forum", "port"],
         "terrain_prefere": None, "allie": "carthage", "rival": "sparte",
     },
     "sparte": {     # Léonidas : peu de terres, beaucoup de fer ; défense farouche
         "agressivite": 0.5, "expansion": 0.3, "armee_cible": 6, "merveilles": False,
         "unite": "hoplite",
         "batiments": ["scierie", "ferme", "puits", "camp_militaire", "murailles",
-                      "carriere", "mine"],
+                      "carriere", "mine", "grenier", "marche", "agora", "aqueduc",
+                      "forum", "port"],
         "terrain_prefere": None, "allie": None, "rival": "macedoine",
     },
     "carthage": {   # Ptolémée : le NIL (terres fertiles), la richesse, l'alliance macédonienne
         "agressivite": 0.15, "expansion": 0.5, "armee_cible": 3, "merveilles": True,
         "unite": "infanterie_legere",
         "batiments": ["ferme", "puits", "scierie", "marche", "grenier", "carriere",
-                      "agora", "aqueduc"],
+                      "agora", "aqueduc", "port", "forum", "mine", "murailles",
+                      "camp_militaire"],
         "terrain_prefere": "fertile", "allie": "macedoine", "rival": None,
     },
 }
@@ -165,11 +169,30 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list,
               en_guerre: bool = False) -> None:
     res = pays.get("ressources", {})
     nb = sum(u.get("effectif", 1) for u in pays.get("unites", []))
-    cible = prio.get("armee_cible", 3)
-    # Les conquérants limitent d'abord l'armée à 3 : la solde ne doit pas manger l'or
-    # d'annexion tant que l'empire est petit.
-    if prio.get("expansion", 0) >= 0.55 and len(pays.get("territoires", [])) < 3:
+    # L'ambition militaire se plie à la BASE ÉCONOMIQUE : on ne nourrit que ce que
+    # les provinces peuvent porter, sinon la solde ruine le royaume et il se révolte.
+    nb_terr = len(pays.get("territoires", []))
+    cible = min(prio.get("armee_cible", 3), 2 + int(nb_terr * 1.5))
+    # Les conquérants gardent en plus leur or pour annexer tant qu'ils sont petits.
+    if prio.get("expansion", 0) >= 0.55 and nb_terr < 3:
         cible = min(cible, 3)
+    # Trésor exsangue ou revenus négatifs : on cesse de recruter.
+    if res.get("or", 0) < 120 or pays.get("production", {}).get("or", 0) < 0:
+        return
+    # TRÉSOR QUI DÉBORDE : même en paix, un royaume opulent solde des garnisons
+    # (puits d'or crédible ; sinon l'IA thésaurise sans fin).
+    if res.get("or", 0) > 2500 and nb < cible + 6:
+        cout_m = ge._cout_inflation(pays, COUTS_UNITES.get("mercenaire", 160))
+        if res["or"] > cout_m * 3:
+            res["or"] = round(res["or"] - cout_m, 1)
+            pays.setdefault("unites", []).append({
+                "id": f"{fid}-mercenaire-{random.randint(1000, 999999)}",
+                "type": "mercenaire", "territoire": pays["territoires"][0],
+                "effectif": 1, "moral": 80, "a_bouge": False,
+            })
+            actions.append("solde une garnison de mercenaires")
+            return
+
     if en_guerre:  # en GUERRE, on mobilise davantage (l'IA se bat pour de bon)
         cible += 3
         # Trésor de guerre : les riches soldent des MERCENAIRES (or pur, pas de pop).
