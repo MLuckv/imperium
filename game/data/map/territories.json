@@ -47995,7 +47995,7 @@
   },
   {
    "id": "parnu_2",
-   "nom": "Pärnu (2)",
+   "nom": "Viljandi",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],
@@ -81827,7 +81827,7 @@
   },
   {
    "id": "midtjylland_2",
-   "nom": "Midtjylland (2)",
+   "nom": "Vestjylland",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],
@@ -111883,7 +111883,7 @@
   },
   {
    "id": "highland_2",
-   "nom": "Highland (2)",
+   "nom": "Sutherland",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],
@@ -123313,7 +123313,7 @@
   },
   {
    "id": "peloponnisos_2",
-   "nom": "Peloponnisos (2)",
+   "nom": "Arcadie",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],
@@ -130780,7 +130780,7 @@
   },
   {
    "id": "palermo_2",
-   "nom": "Palermo (2)",
+   "nom": "Trapani",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],
@@ -148743,7 +148743,7 @@
   },
   {
    "id": "balikesir_2",
-   "nom": "Balikesir (2)",
+   "nom": "Çanakkale",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],
@@ -164816,7 +164816,7 @@
   },
   {
    "id": "kocevje_2",
-   "nom": "Kocevje (2)",
+   "nom": "Novo Mesto",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],
@@ -168182,7 +168182,7 @@
   },
   {
    "id": "lerida_2",
-   "nom": "Lérida (2)",
+   "nom": "Huesca",
    "faction": null,
    "terrain": "plaine",
    "ressources": [],

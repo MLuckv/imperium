@@ -9,6 +9,7 @@ import ConseillerModal from './components/ConseillerModal'
 import PeaceModal from './components/PeaceModal'
 import JournalModal from './components/JournalModal'
 import Objectifs from './components/Objectifs'
+import ProvincePanel from './components/ProvincePanel'
 import TechTree from './components/TechTree'
 import DogmeTree from './components/DogmeTree'
 import { factionColor, factionLabel, leaderName, reputationTone, num } from './lib/format'
@@ -67,8 +68,10 @@ export default function App() {
   // Le gestionnaire clavier est monté une fois : il lit l'état courant via ces refs.
   const screenRef = useRef('menu'); const modalRef = useRef(null)
   const busyRef = useRef(false); const stateRef = useRef(null)
+  const diploRef = useRef(null); const paixRef = useRef(null)
   screenRef.current = screen; modalRef.current = modal
   busyRef.current = busy; stateRef.current = state
+  diploRef.current = diploTarget; paixRef.current = paixTarget
 
   useEffect(() => {
     getCatalog().then((c) => { if (c) { if (c.conquete) setConqueteCost(c.conquete.cout_or); if (c.impots) setImpotsOpts(c.impots) } }).catch(() => {})
@@ -99,7 +102,10 @@ export default function App() {
     function onKey(e) {
       if (e.metaKey || e.ctrlKey || e.altKey) return
       // Échap ferme TOUJOURS, même depuis un champ de saisie (recherche, chat).
-      if (e.key === 'Escape') { setModal(null); setDiploTarget(null); setPaixTarget(null); setMenuOuvert(null); return }
+      if (e.key === 'Escape') {
+        if (!modalRef.current && !diploRef.current && !paixRef.current) setSelProv(null)
+        setModal(null); setDiploTarget(null); setPaixTarget(null); setMenuOuvert(null); return
+      }
       if (e.target && /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName)) return
       if (screenRef.current !== 'game' || modalRef.current || busyRef.current) return
       if (e.key === ' ') { e.preventDefault(); handleEndTurn(1); return }
@@ -300,6 +306,14 @@ export default function App() {
 
         <Objectifs state={state} onAction={(a) => { if (a === 'civs') setMsgIA(0); setModal(a) }} />
 
+        {/* Panneau de la province cliquée (cité, bâtiments, chantier, garnison, actions) */}
+        {selProv && (
+          <ProvincePanel prov={selProv} state={state} annexable={annexables.includes(selProv.id)} conqueteCost={conqueteCost}
+                         onProduction={() => setModal('production')} onArmee={() => setModal('recrutement')}
+                         onAnnex={() => handleAnnex(selProv.id)} onDiplo={(f) => setDiploTarget(f)}
+                         onClose={() => setSelProv(null)} />
+        )}
+
         {/* Toast (flottant, ne décale plus la carte) */}
         {banner && (
           <div className={'absolute left-1/2 top-3 z-20 flex max-w-[min(90%,40rem)] -translate-x-1/2 items-center gap-3 rounded-lg border px-4 py-2 text-sm shadow-xl ' + (banner.type === 'ok' ? 'border-emerald-700/60 bg-emerald-950/90 text-emerald-100' : banner.type === 'warn' ? 'border-amber-600/60 bg-amber-950/90 text-amber-100' : 'border-red-700/60 bg-red-950/90 text-red-100')}>
@@ -364,19 +378,38 @@ export default function App() {
             </div>
             <div className="mt-2" />
             {resume && <p className={'whitespace-pre-wrap leading-relaxed ' + (resumeAnnee ? 'font-serif text-[15px] text-gold/95 first-letter:float-left first-letter:mr-1 first-letter:font-display first-letter:text-4xl first-letter:leading-none first-letter:text-gold' : 'text-sm italic text-parchment/90')}>{resume}</p>}
-            {evenements.length > 0 && (
-              <ul className="thin-scroll mt-2 max-h-32 space-y-1 overflow-y-auto border-t border-bronze-dark/40 pt-2 text-xs text-parchment/80">
-                {evenements.map((e, i) => <li key={i}>• {typeof e === 'string' ? e : e.texte || e.nom}</li>)}
-              </ul>
-            )}
+            {evenements.length > 0 && (() => {
+              // Vos affaires d'abord, le reste du monde ensuite (en retrait) : le
+              // joueur ne cherche plus sa ligne au milieu des chantiers d'Alexandrie.
+              const txt = (e) => (typeof e === 'string' ? e : e.texte || e.nom)
+              const nomJ = (joueur && joueur.nom) || ''
+              const mien = (e) => typeof e !== 'string' && (e.faction === joueurId || e.type === 'message_ia' || (nomJ && String(e.texte || '').includes(nomJ)))
+              const miens = evenements.filter(mien), autres = evenements.filter((e) => !mien(e))
+              return (
+                <div className="thin-scroll mt-2 max-h-40 overflow-y-auto border-t border-bronze-dark/40 pt-2 text-xs">
+                  {miens.length > 0 && (
+                    <>
+                      <div className="mb-1 text-[10px] font-bold uppercase tracking-widest text-gold/80">Chez vous</div>
+                      <ul className="space-y-1 text-parchment/90">{miens.map((e, i) => <li key={'m' + i}>• {txt(e)}</li>)}</ul>
+                    </>
+                  )}
+                  {autres.length > 0 && (
+                    <>
+                      <div className={'mb-1 text-[10px] font-bold uppercase tracking-widest text-bronze/70 ' + (miens.length ? 'mt-2' : '')}>Ailleurs</div>
+                      <ul className="space-y-1 text-parchment/60">{autres.map((e, i) => <li key={'a' + i}>• {txt(e)}</li>)}</ul>
+                    </>
+                  )}
+                </div>
+              )
+            })()}
           </div>
         )}
 
         {/* Annexion : une armée occupe une province neutre (coût affiché) */}
-        {annexables.length > 0 && (
+        {annexables.filter((tt) => !(selProv && selProv.id === tt)).length > 0 && (
           <div className="panel absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 flex-wrap items-center gap-2 whitespace-nowrap">
             <span className="text-sm text-parchment/90">Armée en province neutre :</span>
-            {annexables.map((t) => (
+            {annexables.filter((tt) => !(selProv && selProv.id === tt)).map((t) => (
               <button key={t} onClick={() => handleAnnex(t)} disabled={busy} className="btn btn-primary btn-sm">
                 Annexer {provNames[t] || t} ({conqueteCost} or)
               </button>
@@ -391,21 +424,6 @@ export default function App() {
           s'effacent et les icônes suffisent. */}
       <div className="flex items-stretch border-t border-bronze-dark/60 bg-night">
         <div className="thin-scroll flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-          {/* Emplacement de largeur STABLE : les boutons suivants ne sautent plus
-              quand on sélectionne ou désélectionne une province. */}
-          <div className="flex min-w-[13rem] shrink-0 items-center gap-1.5 lg:min-w-[16rem]">
-            {monProv ? (
-              <>
-                <span className="max-w-[7rem] truncate text-xs text-parchment/70" title={monProv.nom}>{monProv.nom}</span>
-                <button onClick={() => setModal('production')} className="btn btn-ghost btn-sm">⚒ Production</button>
-                <button onClick={() => setModal('recrutement')} className="btn btn-ghost btn-sm">⚔ Armée</button>
-              </>
-            ) : (
-              <span className="text-xs italic text-parchment/45">Cliquez une de vos provinces pour la gérer</span>
-            )}
-          </div>
-          <span className="h-6 w-px shrink-0 bg-bronze-dark/50" />
-
           <button onClick={() => setModal('tech')} className="btn btn-ghost btn-sm shrink-0" title="Technologies (T)">🔬<span className="hidden lg:inline"> Technos</span></button>
           <button onClick={() => setModal('dogmes')} className="btn btn-ghost btn-sm shrink-0" title="Dogmes (G)">☩<span className="hidden lg:inline"> Dogmes</span></button>
           <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost btn-sm relative shrink-0" title="Diplomatie (D)">

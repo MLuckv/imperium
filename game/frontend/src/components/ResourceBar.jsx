@@ -54,7 +54,9 @@ export default function ResourceBar({ meta, joueur }) {
       </div>
 
       {/* Ressources de base */}
-      <div className="flex flex-1 flex-wrap items-center gap-x-4 gap-y-1">
+      {/* Largeur plancher : sinon le bloc Stabilité (âge, élan, corruption…) écrasait
+          les ressources en une colonne verticale sur les écrans étroits. */}
+      <div className="flex min-w-[22rem] flex-1 flex-wrap items-center gap-x-4 gap-y-1">
         {keys.map((key) => {
           const meta2 = RESOURCE_META[key] || { label: key, icon: '•', tint: '#caa53d' }
           const value = ressources[key]

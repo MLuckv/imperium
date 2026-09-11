@@ -32,6 +32,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   const arrowLayerRef = useRef(null)
   const marcheLayerRef = useRef(null)   // colonne en marche (animation)
   const marqueurLayerRef = useRef(null) // marqueurs d'événements du tour (batailles, feux…)
+  const provLabelsRef = useRef(null)    // noms des provinces sans cité (visibles zoomé)
   const marqueursRef = useRef([])       // [{x, y, icone, t0}] en cours d'animation
   const [armeeSel, setArmeeSel] = useState(null) // {territoire, nom, effectif} : armée sélectionnée
   const marcheRef = useRef(null)        // {from,to,t0,duree,col,effectif}
@@ -97,7 +98,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     for (const [, p] of Object.entries(st.pays))
       for (const v of p.villes || []) {
         const pos = v.position || centreOf(v.territoire)
-        if (pos) out.push({ nom: v.nom || v.id, pos, batiments: v.batiments || [], construction: v.construction, capitale: caps.has(v.territoire) })
+        if (pos) out.push({ nom: v.nom || v.id, pos, terr: v.territoire, batiments: v.batiments || [], construction: v.construction, capitale: caps.has(v.territoire) })
       }
     return out
   }
@@ -269,6 +270,20 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       }
     }
 
+    // Noms des provinces SANS cité : invisibles à faible zoom (bruit), affichés dès
+    // qu'on s'approche — « Annexer Sofia » n'oblige plus à chercher Sofia.
+    const avecVille = new Set(collectCities().map((c) => c.terr))
+    const provLabels = new Container(); provLabels.eventMode = 'none'
+    for (const t of data.territoires || []) {
+      if (avecVille.has(t.id)) continue
+      const c = t.centre || polygonCentroid(t.polygone); if (!c) continue
+      const lab = new Text({ text: t.nom || t.id, style: { fontFamily: 'Georgia, serif', fontSize: 11, fill: 0xf3e9d2, stroke: { color: 0x14110c, width: 3 } } })
+      lab.anchor.set(0.5, 0.5); lab.position.set(c[0], c[1]); lab.alpha = 0.8; lab.eventMode = 'none'
+      provLabels.addChild(lab)
+    }
+    labels.addChild(provLabels); provLabelsRef.current = provLabels
+    ajusterEtiquettes()
+
     // Repères des merveilles sur la carte (✦ doré = active/intacte, grisé = ruine/site).
     const mervEtats = (stateRef.current && stateRef.current.merveilles) || {}
     for (const t of data.territoires || []) {
@@ -438,7 +453,8 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     selUnitTerrRef.current = garnison && selUnitTerrRef.current !== t.id ? t.id : null
     majArmeeSel()
     if (typeof onSelectProvince === 'function') onSelectProvince({ id: t.id, faction: factionId, nom: t.nom })
-    if (factionId && factionId !== joueurId() && typeof onSelectFaction === 'function') onSelectFaction(factionId)
+    // (Le panneau de province propose « Parler à … » : on n'ouvre plus la
+    // diplomatie d'office au moindre clic sur une terre étrangère.)
     draw()
   }
 
@@ -470,8 +486,20 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     return { minX, minY, maxX, maxY }
   }
 
+  // Étiquettes de provinces : taille CONSTANTE à l'écran, visibles seulement
+  // au-delà de 2× le zoom minimal (sinon la carte devient une soupe de noms).
+  function ajusterEtiquettes() {
+    const pl = provLabelsRef.current; if (!pl) return
+    const { scale } = viewRef.current
+    pl.visible = scale >= (fitRef.current.scale || 1) * 1.45
+    if (!pl.visible) return
+    const k = 1 / scale
+    for (const lab of pl.children) lab.scale.set(k)
+  }
+
   function applyTransform() {
     const { scale, x, y } = viewRef.current
+    ajusterEtiquettes()
     for (const l of [worldRef.current, labelLayerRef.current, unitLayerRef.current, arrowLayerRef.current, marqueurLayerRef.current])
       if (l) { l.scale.set(scale); l.position.set(x, y) }
   }
@@ -606,16 +634,15 @@ function MapLegend({ stateData, naval }) {
   if (stateData && stateData.pays) for (const pid of Object.keys(stateData.pays)) ids.push(pid)
   else ids.push('rome', 'carthage', 'macedoine')
   return (
-    <div className="absolute bottom-2 left-2 flex flex-col gap-1 rounded-md bg-night/85 px-3 py-2 text-xs text-parchment shadow">
+    <div className="absolute bottom-2 left-2 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md bg-night/85 px-2.5 py-1.5 text-[11px] text-parchment shadow"
+         title={naval ? 'Traversée maritime débloquée' : 'Mer : recherchez « Navigation maritime »'}>
       {ids.map((id) => (
-        <div key={id} className="flex items-center gap-2">
-          <span className="inline-block h-3 w-3 rounded-sm border border-black/40" style={{ backgroundColor: (stateData && stateData.pays && stateData.pays[id] && stateData.pays[id].couleur) || factionColor(id) }} />
+        <span key={id} className="flex items-center gap-1.5">
+          <span className="inline-block h-2.5 w-2.5 rounded-sm border border-black/40" style={{ backgroundColor: (stateData && stateData.pays && stateData.pays[id] && stateData.pays[id].couleur) || factionColor(id) }} />
           <span>{(stateData && stateData.pays && stateData.pays[id] && stateData.pays[id].nom) || factionLabel(id)}</span>
-        </div>
+        </span>
       ))}
-      <div className="mt-1 border-t border-bronze-dark/40 pt-1 text-[10px] text-parchment/60">
-        {naval ? '⚓ Traversée maritime débloquée' : 'Mer : recherchez « Navigation maritime »'}
-      </div>
+      <span className="text-parchment/45">{naval ? '⚓' : '⚓ ✕'}</span>
     </div>
   )
 }
