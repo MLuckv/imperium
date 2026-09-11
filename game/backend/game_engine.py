@@ -21,6 +21,7 @@ from pathlib import Path
 
 import tech_tree
 import world_state as ws
+import luxe
 import ai_director
 import conversations
 import merveilles
@@ -247,6 +248,10 @@ def new_game(joueur_pays: str = "rome", nb_ia: int | None = None,
         "pays": pays,
         "hordes": [],  # hordes barbares/rebelles actives
         "merveilles": merveilles.etat_initial(),
+        # Gisements de luxe tirés au sort pour CETTE partie (jamais sur un spawn).
+        "gisements": luxe.semer(charger_territoires().get("territoires", []),
+                                exclure={t["id"] for t in charger_territoires().get("territoires", [])
+                                         if t.get("capitale")}),
         "diplomatie": {"traites_actifs": [], "guerres_actives": []},
         "historique_actions": [
             {"tour": 1, "acteur": joueur_pays,
@@ -451,6 +456,9 @@ def _calculer_production(pays: dict, state: dict | None = None,
                 terr_b[cible] = terr_b.get(cible, 0) + val
     for res, v in terr_b.items():
         prod[res] += v; note(res, "Territoires", v)
+    # 4b) GISEMENTS DE LUXE exploités (cité + bâtiment requis dans la province).
+    if state is not None:
+        pays["luxe_bonus"] = luxe.appliquer(pays, state, prod, note)
     # Rendement NATUREL de chaque province selon son TERRAIN (Nil fertile, désert
     # stérile, montagne pierreuse…) — production réaliste.
     tf = te = tpierre = tor = 0.0
@@ -576,9 +584,10 @@ def _appliquer_production(pays: dict, state: dict | None = None) -> None:
     # Les CARRIÈRES extraient aussi un peu de MARBRE (nécessaire aux merveilles).
     nb_carrieres = sum(1 for v in pays.get("villes", [])
                        if "carriere" in v.get("batiments", []) and v.get("pacification", 0) <= 0)
-    if nb_carrieres:
-        luxe = pays.setdefault("ressources_luxe", {})
-        luxe["marbre"] = round(luxe.get("marbre", 0) + nb_carrieres * 0.6, 1)
+    marbre_gis = pays.get("luxe_bonus", {}).get("marbre", 0.0)  # gisements de marbre exploités
+    if nb_carrieres or marbre_gis:
+        luxe_stock = pays.setdefault("ressources_luxe", {})
+        luxe_stock["marbre"] = round(luxe_stock.get("marbre", 0) + nb_carrieres * 0.6 + marbre_gis, 1)
     # Croissance de la population globale et des villes.
     croissance = prod.get("population", 0)
     if croissance:
@@ -628,8 +637,9 @@ def _base_stab_nationale(pays: dict, state: dict | None) -> tuple[float, list[di
     c += db; f("Dogmes", db)
     mb = pays.get("merveilles_effet", {}).get("stabilite", 0)
     c += mb; f("Merveilles", mb)
-    if pays.get("ressources_luxe", {}).get("vin", 0) > 0:
-        c += 2; f("Vin", 2)
+    lb = pays.get("luxe_bonus", {}).get("stabilite", 0)
+    if lb:
+        c += lb; f("Luxes (vin…)", lb)
     prod = pays.get("production", {}); res = pays.get("ressources", {})
     if prod.get("nourriture", 0) < 0:
         c -= 12; f("Famine", -12)
@@ -2000,6 +2010,11 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     evenements: list[dict] = []
     messages: list[dict] = []
 
+    # 0) Sauvegardes antérieures : gisements de luxe absents → on les sème.
+    if "gisements" not in state:
+        state["gisements"] = luxe.semer(charger_territoires().get("territoires", []),
+                                        exclure={t["id"] for t in charger_territoires().get("territoires", []) if t.get("capitale")})
+
     # 1) Merveilles : avancement des chantiers (restauration/fouille/construction).
     merveilles.avancer_chantiers(state, evenements)
 
@@ -2008,7 +2023,7 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
         if p.get("elimine"):
             continue
         p["merveilles_effet"] = merveilles.bonus_actif(p, state)
-        p["prestige"] = p["merveilles_effet"].get("prestige", 0)
+        p["prestige"] = p["merveilles_effet"].get("prestige", 0) + p.get("luxe_bonus", {}).get("prestige", 0)
         # TOURISME : les merveilles attirent les curieux (victoire touristique).
         # Hérité (antique) = 1 pt/mois ; BÂTI/RESTAURÉ = plein prestige → il faut œuvrer.
         p["tourisme"] = round(p.get("tourisme", 0) + p["merveilles_effet"].get("tourisme", 0), 1)

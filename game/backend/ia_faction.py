@@ -67,8 +67,13 @@ PRIORITES_IA: dict[str, dict] = {
 }
 
 
+_GISEMENTS: dict | None = None  # gisements de la partie en cours (lu par _construire)
+
+
 def jouer(state: dict, fid: str, evenements: list) -> list[str]:
     """Fait jouer la faction IA `fid`. Retourne les actions accomplies (libellés)."""
+    global _GISEMENTS
+    _GISEMENTS = state.get("gisements") or {}
     pays = state.get("pays", {}).get(fid)
     if not pays:
         return []
@@ -164,10 +169,16 @@ def _construire(pays: dict, actions: list, reserve_min: int = 40) -> None:
     if p_ia.get("expansion", 0) >= 0.55 and len(pays.get("territoires", [])) < 5:
         nb = len(pays.get("territoires", []))
         reserve = int(ge.COUT_CONQUETE_OR * (1.3 ** nb)) + 60  # de quoi annexer d'abord
+    import luxe as lx
     for ville in pays.get("villes", []):
         if ville.get("construction") or ville.get("pacification", 0) > 0:
             continue
-        for bat in prio:
+        ordre = list(prio)
+        # Un gisement de luxe dans la province : son bâtiment d'exploitation d'abord.
+        g = (_GISEMENTS or {}).get(ville.get("territoire"))
+        if g and lx.LUXES[g]["batiment"] in ordre:
+            ordre.remove(lx.LUXES[g]["batiment"]); ordre.insert(0, lx.LUXES[g]["batiment"])
+        for bat in ordre:
             if bat in ville.get("batiments", []):
                 continue
             cout = ge._cout_inflation(pays, COUT_BATIMENTS.get(bat, 999))

@@ -67,11 +67,17 @@ export const RESOURCE_META = {
 }
 
 export const LUXURY_META = {
-  vin: { label: 'Vin' },
-  epices: { label: 'Épices' },
-  ivoire: { label: 'Ivoire' },
-  marbre: { label: 'Marbre' },
-  grain_egyptien: { label: 'Grain égyptien' },
+  vin: { label: 'Vin', icon: '🍇' },
+  grain: { label: 'Grain', icon: '🌾' },
+  epices: { label: 'Épices', icon: '🌶' },
+  ivoire: { label: 'Ivoire', icon: '🐘' },
+  ambre: { label: 'Ambre', icon: '🟠' },
+  pourpre: { label: 'Pourpre', icon: '🐚' },
+  or: { label: "Filon d'or", icon: '✨' },
+  fer: { label: 'Fer riche', icon: '⛏' },
+  sel: { label: 'Sel', icon: '🧂' },
+  marbre: { label: 'Marbre', icon: '⬜' },
+  grain_egyptien: { label: 'Grain égyptien', icon: '🌾' },
 }
 
 export function resourceLabel(key) {

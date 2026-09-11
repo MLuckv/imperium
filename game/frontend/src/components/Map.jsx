@@ -23,6 +23,8 @@ function hexToNumber(hex) {
   return parseInt(hex.replace('#', ''), 16)
 }
 
+const LUXE_BAT = { vin: 'ferme', grain: 'ferme', epices: 'marche', ivoire: 'marche', ambre: 'marche', pourpre: 'port', or: 'mine', fer: 'mine', sel: 'mine', marbre: 'carriere' }
+
 export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectProvince, refreshKey, marqueurs }) {
   const hostRef = useRef(null)
   const appRef = useRef(null)
@@ -225,7 +227,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       if (lifted) g.position.set(0, -6)
       g.on('pointerover', (e) => {
         hoveredRef.current = t.id; paint(g, t, factionId, true, reach)
-        setApercu({ terr: t.id, nom: t.nom || t.id, faction: factionId, merveille: t.merveille || null, x: e.global.x, y: e.global.y })
+        setApercu({ terr: t.id, nom: t.nom || t.id, faction: factionId, merveille: t.merveille || null, gisement: ((stateRef.current || {}).gisements || {})[t.id] || null, x: e.global.x, y: e.global.y })
       })
       g.on('pointermove', (e) => setApercu((a) => (a && a.terr === t.id ? { ...a, x: e.global.x, y: e.global.y } : a)))
       g.on('pointerout', () => {
@@ -283,6 +285,25 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     }
     labels.addChild(provLabels); provLabelsRef.current = provLabels
     ajusterEtiquettes()
+
+    // GISEMENTS DE LUXE : pastille à droite du centre. Vive si le maître des lieux
+    // l'exploite (cité + bâtiment), éteinte sinon — on voit d'un coup d'œil ce qui
+    // dort encore sous la terre.
+    const gisements = (stateRef.current && stateRef.current.gisements) || {}
+    const LUXE_ICONE = { vin: '🍇', grain: '🌾', epices: '🌶', ivoire: '🐘', ambre: '🟠', pourpre: '🐚', or: '✨', fer: '⛏', sel: '🧂', marbre: '⬜' }
+    for (const [tid, lx] of Object.entries(gisements)) {
+      const c = centreOf(tid); if (!c) continue
+      const prop = resolveFaction(terrById(tid) || { id: tid })
+      const p = prop && stateRef.current.pays[prop]
+      const exploite = !!(p && (p.villes || []).some((v) => v.territoire === tid && (v.batiments || []).length && (p.luxes_actifs || []).includes(lx)
+        && v.batiments.includes(LUXE_BAT[lx])))
+      const bg = new Graphics(); bg.circle(c[0] + 15, c[1] + 9, 8.5)
+      bg.fill({ color: exploite ? 0x3a3014 : 0x14110c, alpha: exploite ? 0.95 : 0.6 })
+      bg.stroke({ width: 1.4, color: exploite ? 0xe8c267 : 0x8a7d66, alpha: 0.95 })
+      bg.eventMode = 'none'; labels.addChild(bg)
+      const ic = new Text({ text: LUXE_ICONE[lx] || '•', style: { fontFamily: 'Georgia, serif', fontSize: 11 } })
+      ic.anchor.set(0.5, 0.5); ic.position.set(c[0] + 15, c[1] + 9); ic.alpha = exploite ? 1 : 0.75; ic.eventMode = 'none'; labels.addChild(ic)
+    }
 
     // Repères des merveilles sur la carte (✦ doré = active/intacte, grisé = ruine/site).
     const mervEtats = (stateRef.current && stateRef.current.merveilles) || {}
@@ -454,7 +475,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       : null
     selUnitTerrRef.current = garnison && selUnitTerrRef.current !== t.id ? t.id : null
     majArmeeSel()
-    if (typeof onSelectProvince === 'function') onSelectProvince({ id: t.id, faction: factionId, nom: t.nom, merveille: t.merveille || null })
+    if (typeof onSelectProvince === 'function') onSelectProvince({ id: t.id, faction: factionId, nom: t.nom, merveille: t.merveille || null, gisement: ((stateRef.current || {}).gisements || {})[t.id] || null })
     // (Le panneau de province propose « Parler à … » : on n'ouvre plus la
     // diplomatie d'office au moindre clic sur une terre étrangère.)
     draw()
@@ -475,7 +496,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     // (Production / Armée) apparaissent, comme le promet l'aide en bas d'écran.
     const t = terrById(a.territoire)
     if (t && typeof onSelectProvince === 'function')
-      onSelectProvince({ id: t.id, faction: a.faction, nom: t.nom, merveille: t.merveille || null })
+      onSelectProvince({ id: t.id, faction: a.faction, nom: t.nom, merveille: t.merveille || null, gisement: ((stateRef.current || {}).gisements || {})[t.id] || null })
     draw()
   }
 
@@ -541,8 +562,12 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     if (!bb || !host) return
     const W = host.clientWidth || 800, H = host.clientHeight || 560
     v.scale = Math.max(fitRef.current.scale, Math.min(fitRef.current.scale * 14, v.scale))
-    const minX = W - bb.maxX * v.scale, maxX = -bb.minX * v.scale
-    const minY = H - bb.maxY * v.scale, maxY = -bb.minY * v.scale
+    // Marge de débordement : un royaume en bord de carte (Reims, Camelot) peut être
+    // centré à l'écran — le fond marin comble le vide. Sans elle, le cadrage se
+    // rabattait vers le centre du monde et le joueur ouvrait la partie sur la Bavière.
+    const mX = W * 0.35, mY = H * 0.35
+    const minX = W - bb.maxX * v.scale - mX, maxX = -bb.minX * v.scale + mX
+    const minY = H - bb.maxY * v.scale - mY, maxY = -bb.minY * v.scale + mY
     v.x = minX <= maxX ? Math.min(maxX, Math.max(minX, v.x)) : (minX + maxX) / 2
     v.y = minY <= maxY ? Math.min(maxY, Math.max(minY, v.y)) : (minY + maxY) / 2
   }
@@ -690,6 +715,10 @@ function drawScaffold(layer, cx, cy) {
 }
 
 
+const LUXE_NOMS = { vin: 'Vin', grain: 'Grain', epices: 'Épices', ivoire: 'Ivoire', ambre: 'Ambre', pourpre: 'Pourpre', or: "Filon d'or", fer: 'Fer riche', sel: 'Sel', marbre: 'Marbre' }
+const LUXE_ICONES = { vin: '🍇', grain: '🌾', epices: '🌶', ivoire: '🐘', ambre: '🟠', pourpre: '🐚', or: '✨', fer: '⛏', sel: '🧂', marbre: '⬜' }
+const LUXE_BAT_NOM = { ferme: 'une Ferme', marche: 'un Marché', port: 'un Port', mine: 'une Mine', carriere: 'une Carrière' }
+
 // Fiche de survol : ce que le joueur peut lire d'un coup d'œil sur une province —
 // et, si elle appartient à un rival, la PUISSANCE de ce rival, pour juger d'une
 // attaque sans devoir ouvrir la diplomatie.
@@ -739,6 +768,12 @@ function ApercuProvince({ info, stateData, host }) {
         {enGuerre && <span className="ml-1 text-red-300">⚔ en guerre</span>}
       </div>
 
+      {info.gisement && (
+        <div className="mt-1.5 text-[11px] text-amber-200">
+          {LUXE_ICONES[info.gisement] || '•'} Gisement : {LUXE_NOMS[info.gisement] || info.gisement}
+          <span className="text-parchment/50"> · {LUXE_BAT[info.gisement] ? `exploité par ${LUXE_BAT_NOM[LUXE_BAT[info.gisement]]}` : ''}</span>
+        </div>
+      )}
       {info.merveille && (
         <div className={'mt-1.5 text-[11px] font-semibold ' + (info.merveille.type === 'naturelle' ? 'text-emerald-300' : 'text-gold')}>
           {info.merveille.type === 'naturelle' ? '❋' : '✦'} {info.merveille.nom}

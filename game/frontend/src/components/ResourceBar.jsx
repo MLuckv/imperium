@@ -36,6 +36,9 @@ export default function ResourceBar({ meta, joueur }) {
   ]
 
   const luxeKeys = Object.entries(luxe).filter(([, v]) => v && v > 0)
+  // Gisements de luxe EXPLOITÉS (revenus tant qu'on tient la province + le bâtiment).
+  const luxesActifs = (joueur && joueur.luxes_actifs) || []
+  const luxeCount = luxesActifs.reduce((m, l) => { m[l] = (m[l] || 0) + 1; return m }, {})
 
   return (
     <header className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-bronze-dark/70 bg-gradient-to-b from-[#2b2419] to-[#211b12] px-4 py-2 text-parchment shadow">
@@ -97,12 +100,18 @@ export default function ResourceBar({ meta, joueur }) {
         })}
       </div>
 
-      {/* Luxe (si présent) */}
-      {luxeKeys.length > 0 && (
+      {/* Luxe : stock de marbre (merveilles) + gisements exploités */}
+      {(luxeKeys.length > 0 || Object.keys(luxeCount).length > 0) && (
         <div className="flex items-center gap-2 border-l border-bronze-dark/60 pl-3 text-xs text-amber-200">
           {luxeKeys.map(([k, v]) => (
-            <span key={k} title={(LUXURY_META[k] && LUXURY_META[k].label) || k}>
-              {(LUXURY_META[k] && LUXURY_META[k].label) || k} {num(v)}
+            <span key={k} title={((LUXURY_META[k] && LUXURY_META[k].label) || k) + ' en réserve (merveilles)'}>
+              {(LUXURY_META[k] && LUXURY_META[k].icon) || ''}{(LUXURY_META[k] && LUXURY_META[k].label) || k} {num(v)}
+            </span>
+          ))}
+          {Object.entries(luxeCount).map(([k, nb]) => (
+            <span key={'g' + k} className="rounded-full border border-amber-300/40 bg-amber-300/10 px-1.5 py-0.5 text-[11px]"
+                  title={`Gisement exploité : ${(LUXURY_META[k] && LUXURY_META[k].label) || k}${nb > 1 ? ` ×${nb}` : ''}`}>
+              {(LUXURY_META[k] && LUXURY_META[k].icon) || '•'}{nb > 1 ? ` ×${nb}` : ''}
             </span>
           ))}
         </div>

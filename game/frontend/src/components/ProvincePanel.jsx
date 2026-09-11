@@ -96,6 +96,23 @@ export default function ProvincePanel({ prov, state, annexable, conqueteCost, on
           <div className="italic text-parchment/55">Aucune cité.{mienne && ' Fondez-en une via Production.'}</div>
         )}
 
+        {prov.gisement && (() => {
+          const lx = ((catalog && catalog.luxes) || []).find((l) => l.id === prov.gisement)
+          const batNom = lx ? nomBat(lx.batiment) : ''
+          const exploite = mienne && proprio && (proprio.luxes_actifs || []).includes(prov.gisement) && ville && (ville.batiments || []).includes(lx && lx.batiment)
+          const effet = lx ? Object.entries(lx.effet).map(([k, v]) => `+${v} ${k === 'stabilite' ? 'stabilité' : k}`).join(', ') : ''
+          return (
+            <div className={'rounded border px-2 py-1.5 ' + (exploite ? 'border-amber-300/40 bg-amber-300/5' : 'border-bronze-dark/40 bg-black/20')}>
+              <div className="flex items-center gap-1.5 text-[12px] font-semibold text-amber-200">
+                <span>{lx ? lx.icone : '•'}</span>{lx ? lx.nom : prov.gisement}
+                <span className="ml-auto text-[10px] font-normal text-parchment/55">{exploite ? 'exploité ✓' : 'gisement'}</span>
+              </div>
+              <div className="mt-0.5 text-[11px] text-parchment/65">
+                {effet}{lx && ` — ${exploite ? 'grâce à ' : 'il faut '}${batNom ? batNom.toLowerCase() : lx.batiment} ${exploite ? '' : ville ? 'dans la cité' : '(fondez d\'abord une cité ici)'}`}
+              </div>
+            </div>
+          )
+        })()}
         {merv && (
           <div className="rounded border border-gold/30 bg-gold/5 px-2 py-1.5">
             <div className="flex items-center gap-1.5 text-[12px] font-semibold text-gold">

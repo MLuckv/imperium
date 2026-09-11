@@ -31,6 +31,7 @@ import realism_validator      # noqa: E402
 import tech_tree              # noqa: E402
 import conversations          # noqa: E402
 import merveilles             # noqa: E402
+import luxe                   # noqa: E402
 import guerre                 # noqa: E402
 from models.city import CATALOGUE_BATIMENTS  # noqa: E402
 from models.unit import COUTS_UNITES, FORCES_UNITES, TECH_REQUISE_UNITE, COUT_POP_UNITES, COUT_RES_UNITES  # noqa: E402
@@ -685,6 +686,7 @@ def catalog():
         "impots": [{"id": k, "nom": v["nom"], "or_pop": v["or_pop"], "stab": v["stab"]}
                    for k, v in game_engine.IMPOTS.items()],
         "merveilles": merveilles.info_publique(),
+        "luxes": luxe.info_publique(),
     }
 
 
