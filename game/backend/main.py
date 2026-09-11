@@ -34,7 +34,7 @@ import merveilles             # noqa: E402
 import luxe                   # noqa: E402
 import guerre                 # noqa: E402
 from models.city import CATALOGUE_BATIMENTS  # noqa: E402
-from models.unit import COUTS_UNITES, FORCES_UNITES, TECH_REQUISE_UNITE, COUT_POP_UNITES, COUT_RES_UNITES  # noqa: E402, MERVEILLE_REQUISE_UNITE
+from models.unit import COUTS_UNITES, FORCES_UNITES, TECH_REQUISE_UNITE, COUT_POP_UNITES, COUT_RES_UNITES, MERVEILLE_REQUISE_UNITE  # noqa: E402
 
 RACINE = Path(__file__).resolve().parent.parent
 CHEMIN_TERRITOIRES = RACINE / "data" / "map" / "territories.json"
