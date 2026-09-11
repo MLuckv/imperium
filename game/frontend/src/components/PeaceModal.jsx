@@ -142,11 +142,19 @@ export default function PeaceModal({ cible, state, onClose, onStateChange }) {
 
           {erreur && <p className="mt-3 rounded border border-red-800/50 bg-red-950/30 px-2 py-1 text-xs text-red-300">{erreur}</p>}
 
+          {offres.tribut_exige > 0 && (
+            <div className="mt-4 rounded border border-red-800/50 bg-red-950/30 px-3 py-2 text-sm text-red-200">
+              <b>{nomCible} domine cette guerre</b> : la paix vous coûtera <b>{num(offres.tribut_exige)} or</b> de tribut
+              {offres.tresor < offres.tribut_exige && <span className="text-red-300"> — votre trésor ({num(offres.tresor)} or) n'y suffit pas.</span>}
+            </div>
+          )}
+
           <div className="mt-4 flex items-center justify-between gap-2">
             <button onClick={() => { setChoix([]); setOrExige(0); setErreur(null) }}
                     className="btn btn-ghost btn-sm">Tout annuler</button>
-            <button onClick={conclure} disabled={busy} className="btn btn-primary">
+            <button onClick={conclure} disabled={busy || (offres.tribut_exige > 0 && offres.tresor < offres.tribut_exige)} className="btn btn-primary">
               {busy ? 'Les hérauts scellent…'
+                    : offres.tribut_exige > 0 ? `Payer ${num(offres.tribut_exige)} or et faire la paix`
                     : (choix.length || orExige) ? 'Imposer ces termes' : 'Paix blanche'}
             </button>
           </div>

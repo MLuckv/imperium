@@ -95,11 +95,21 @@ def offres_possibles(state: dict, demandeur: str, cible: str) -> dict:
             "abordable": cout <= score,
         })
     provinces.sort(key=lambda p: (p["capitale"], -p["etoiles"]))
+    # Score NÉGATIF (l'ennemi domine) : la paix se paie — l'ennemi exige un tribut
+    # proportionnel à son avantage. Sans cela, un joueur battu s'échappait d'un clic.
+    brut = score_de(g, demandeur)
+    tribut = int(round(-brut * OR_PAR_POINT)) if brut < -5 else 0
     return {
         "score": round(score, 1),
         "provinces": provinces,
         "or_max": int(min(score * OR_PAR_POINT, cp.get("ressources", {}).get("or", 0))),
+        "tribut_exige": tribut,
+        "tresor": int(dp_or(state, demandeur)),
     }
+
+
+def dp_or(state: dict, fid: str) -> float:
+    return state.get("pays", {}).get(fid, {}).get("ressources", {}).get("or", 0)
 
 
 def conclure_paix(state: dict, demandeur: str, cible: str,
@@ -127,6 +137,16 @@ def conclure_paix(state: dict, demandeur: str, cible: str,
     if cout > score + 0.01:
         return {"ok": False,
                 "raison": f"Vos exigences valent {cout:.0f} points ; vous n'en avez que {score:.0f}."}
+    # Vaincu : on paie le tribut exigé avant de signer.
+    brut = score_de(g, demandeur)
+    tribut = int(round(-brut * OR_PAR_POINT)) if brut < -5 else 0
+    if tribut:
+        if dp.get("ressources", {}).get("or", 0) < tribut:
+            return {"ok": False, "raison": f"{ge._nom_pays(cible)} exige {tribut} or pour la paix ; votre trésor n'y suffit pas."}
+        dp["ressources"]["or"] = round(dp["ressources"]["or"] - tribut, 1)
+        cp.setdefault("ressources", {})["or"] = round(cp["ressources"].get("or", 0) + tribut, 1)
+        evenements.append({"type": "paix", "faction": demandeur,
+                           "texte": f"💰 {ge._nom_pays(demandeur)} verse {tribut} or à {ge._nom_pays(cible)} pour obtenir la paix."})
 
     # Transfert des provinces.
     noms = []
@@ -170,6 +190,7 @@ def conclure_paix(state: dict, demandeur: str, cible: str,
     if reel:
         detail.append(f"verse {reel} or")
     texte = (f"🕊 PAIX entre {nd} et {nc}"
-             + (f" : {nc} " + " et ".join(detail) + "." if detail else " : paix blanche."))
+             + (f" : {nc} " + " et ".join(detail) + "." if detail
+                else f" : {nd} achète la paix {tribut} or." if tribut else " : paix blanche."))
     evenements.append({"type": "paix", "faction": demandeur, "texte": texte})
     return {"ok": True, "raison": texte, "provinces": noms, "or": reel}

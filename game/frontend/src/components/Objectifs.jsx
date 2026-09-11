@@ -21,7 +21,7 @@ export default function Objectifs({ state, onAction }) {
         aide: 'Une ferme ou un marché : sans bâtiments, votre province stagne.' },
       { id: 'mine', fait: villes.some((v) => (v.batiments || []).includes('mine')), action: 'production',
         titre: 'Ouvrez une mine',
-        aide: 'Sans fer, vous ne lèverez que des paysans et des mercenaires.' },
+        aide: 'Sans fer, vous ne lèverez que des paysans et des mercenaires. Une mine demande du bois : bâtissez d\'abord une scierie.' },
       { id: 'tech', fait: (p.technologies || []).length >= 2, action: 'tech',
         titre: 'Achevez une recherche',
         aide: 'Les technologies débloquent bâtiments, unités et bonus durables.' },

@@ -147,7 +147,10 @@ export default function App() {
       // avec un bouton pour répondre — un silence de 3 tours dégénère en ultimatum.
       const parFaction = {}
       for (const e of evs) if (e && e.type === 'message_ia' && e.faction) parFaction[e.faction] = String(e.texte || '').replace(/^✉\s*/, '')
-      setCourriers(Object.entries(parFaction).map(([faction, texte]) => ({ faction, texte })))
+      // Les courriers graves d'abord (ultimatum, armées massées, guerre), les politesses ensuite.
+      const gravite = (tx) => (/ULTIMATUM|massées|guerre|paix/i.test(tx) ? 0 : /hausse le ton|menace|rompt/i.test(tx) ? 1 : 2)
+      setCourriers(Object.entries(parFaction).map(([faction, texte]) => ({ faction, texte }))
+                         .sort((a, b) => gravite(a.texte) - gravite(b.texte)))
       if (r && r.interruption && tours > 1) {
         flash('warn', `⏸ Avance interrompue après ${r.tours_joues} mois — ${r.interruption}`)
       }

@@ -1817,11 +1817,14 @@ def _messages_spontanes_ia(state: dict, evenements: list, utiliser_ia: bool = Tr
     date_jeu = state.get("meta", {}).get("date_jeu", "5-03")
     derniers = state.setdefault("_derniers_msg_ia", {})
     situ = ai_director.resume_situation(pj, pj.get("nom", joueur))
+    guerres = state.get("diplomatie", {}).get("guerres_actives", [])
     for fid, f in state.get("pays", {}).items():
         if fid == joueur or f.get("elimine"):
             continue
         if tour - derniers.get(fid, -99) < 4:  # throttle : 1 message / 4 tours / faction
             continue
+        if any({g.get("a"), g.get("b")} == {fid, joueur} for g in guerres):
+            continue  # déjà en guerre : les menaces n'ont plus de sens, les armes parlent
         cle, raison = _raison_contact(state, fid, joueur)
         if not cle or random.random() > _PROBA_CONTACT.get(cle, 0.4):
             continue
@@ -2004,6 +2007,10 @@ def _escalader_messages_ignores(state: dict, evenements: list) -> None:
         att = f.get("attente_reponse")
         if not att:
             continue
+        if any({g.get("a"), g.get("b")} == {fid, joueur}
+               for g in state.get("diplomatie", {}).get("guerres_actives", [])):
+            f["attente_reponse"] = None  # la guerre est là : plus rien à escalader
+            continue
         thread = conversations.get_conversation(state, fid)
         repondu = any(m.get("role") == "joueur" and (m.get("tour") or 0) > att.get("tour_msg", 0)
                       for m in thread)
@@ -2139,7 +2146,8 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     state["accords_recents"] = accords
 
     # 4) Résolution simple des conflits (§6 étape 5).
-    evenements.extend(_resoudre_conflits(state))
+    # (Les « combats du mois » abstraits sont retirés : les batailles de provinces et
+    # les sièges, eux, se voient sur la carte et se lisent dans le score de guerre.)
 
     # 5) Avance la date (1 tour = 1 mois, §6).
     _avancer_date(state)
