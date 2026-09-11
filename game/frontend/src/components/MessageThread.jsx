@@ -7,6 +7,17 @@ import { factionColor } from '../lib/format'
 // Bulles : joueur à droite, dirigeant à gauche. Indicateur « écrit… » pendant
 // la génération (la réponse locale peut prendre ~10 s).
 
+// Amorces : le joueur sait rarement QUOI écrire à un souverain. Un clic remplit
+// le champ d'un brouillon qu'il peut retoucher avant d'envoyer.
+const AMORCES = [
+  { label: '🤝 Alliance', texte: 'Nos deux peuples ont tout à gagner à marcher ensemble. Je vous propose une alliance : nos ennemis seront les vôtres, et les vôtres les nôtres.' },
+  { label: '⚖ Commerce', texte: 'Ouvrons nos marchés l\'un à l\'autre. Un pacte commercial enrichirait nos deux trésors sans qu\'une goutte de sang ne coule.' },
+  { label: '🕊 Paix', texte: 'Cette guerre a assez duré. Je vous propose de déposer les armes et de fixer ensemble les termes d\'une paix honorable.' },
+  { label: '⚠ Avertir', texte: 'Que ce soit clair : vos troupes s\'approchent de mes frontières. Reculez, ou je considérerai cela comme une déclaration de guerre.' },
+  { label: '🎁 Don', texte: 'En gage d\'amitié, j\'ai fait porter cinquante pièces d\'or à votre cour. Puisse ce geste ouvrir entre nous une ère de confiance.' },
+  { label: '❓ Intentions', texte: 'Parlons franchement : que pensez-vous de mon royaume, et quelles sont vos intentions à son égard ?' },
+]
+
 export default function MessageThread({ cible, leaderName, joueurName }) {
   const [messages, setMessages] = useState([])
   const [texte, setTexte] = useState('')
@@ -90,9 +101,10 @@ export default function MessageThread({ cible, leaderName, joueurName }) {
       <div ref={scrollRef} className="thin-scroll flex-1 space-y-2 overflow-y-auto px-1 py-2">
         {loading && <p className="text-center text-xs text-parchment/50">Chargement du fil…</p>}
         {!loading && messages.length === 0 && (
-          <p className="px-3 py-6 text-center text-sm text-parchment/50">
-            Aucun message. Entamez la conversation avec {leaderName}.
-          </p>
+          <div className="px-3 py-6 text-center">
+            <p className="text-sm text-parchment/50">Aucun message. Entamez la conversation avec {leaderName}.</p>
+            <p className="mt-1 text-[11px] text-parchment/40">Les souverains ont leur caractère et leur mémoire : ce que vous dites compte.</p>
+          </div>
         )}
         {messages.map((m, i) => {
           const mine = m.role === 'joueur'
@@ -129,8 +141,18 @@ export default function MessageThread({ cible, leaderName, joueurName }) {
 
       {erreur && <p className="px-2 pb-1 text-xs text-red-300">{erreur}</p>}
 
+      {/* Amorces (toujours disponibles, discrètes une fois le fil lancé) */}
+      <div className="thin-scroll flex gap-1 overflow-x-auto border-t border-bronze-dark/40 pt-2 pb-1">
+        {AMORCES.map((a) => (
+          <button key={a.label} type="button" onClick={() => setTexte(a.texte)} disabled={typing}
+                  className="shrink-0 rounded-full border border-bronze-dark/60 px-2.5 py-0.5 text-[11px] text-parchment/70 transition hover:border-gold hover:text-gold disabled:opacity-40">
+            {a.label}
+          </button>
+        ))}
+      </div>
+
       {/* Saisie */}
-      <form onSubmit={envoyer} className="flex items-end gap-2 border-t border-bronze-dark/40 pt-2">
+      <form onSubmit={envoyer} className="flex items-end gap-2 pt-1">
         <textarea
           value={texte}
           onChange={(e) => setTexte(e.target.value)}

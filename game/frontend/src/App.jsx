@@ -56,6 +56,8 @@ export default function App() {
   const [msgIA, setMsgIA] = useState(0)  // messages spontanés des dirigeants non lus
   const [journalVu, setJournalVu] = useState(0)  // taille du journal déjà consultée
   const [menuOuvert, setMenuOuvert] = useState(null)  // {bas, droite} quand le menu Partie est ouvert
+  const [marqueurs, setMarqueurs] = useState([])       // événements localisés du dernier tour (carte)
+  const [courriers, setCourriers] = useState([])       // messages des souverains reçus ce tour (à répondre)
   const [selProv, setSelProv] = useState(null)   // province cliquée {id, faction, nom}
   const [conqueteCost, setConqueteCost] = useState(90)
   const [provNames, setProvNames] = useState({}) // id -> nom
@@ -119,10 +121,10 @@ export default function App() {
     setBusy(true); setBanner(null)
     try {
       const s = await newGame(civId, nbIaRef.current)
-      setState(s); setHasSavedGame(true); setEvenements([]); setResume(''); setShowChronique(false)
+      setState(s); setHasSavedGame(true); setEvenements([]); setResume(''); setShowChronique(false); setCourriers([]); setMarqueurs([])
       const rivaux = Object.keys(s.pays || {}).filter((id) => id !== civId).length
       setScreen('game')
-      flash('ok', `Vous incarnez ${factionLabel(civId, s.pays[civId] && s.pays[civId].nom)} — ${rivaux} rival${rivaux > 1 ? 'aux' : ''} en lice.`)
+      flash('ok', `Vous incarnez ${factionLabel(civId, s.pays[civId] && s.pays[civId].nom)} — ${rivaux} ${rivaux > 1 ? 'rivaux' : 'rival'} en lice.`)
     } catch (err) { flash('err', err.message || 'Échec de la création') }
     finally { setBusy(false) }
   }
@@ -134,6 +136,15 @@ export default function App() {
       if (r && r.state) setState(r.state)
       const evs = (r && r.evenements) || []
       setEvenements(evs)
+      setMarqueurs(evs.filter((e) => e && e.territoire).map((e) => ({ territoire: e.territoire, icone: e.icone })))
+      // Courriers des souverains : une carte par expéditeur (le dernier mot compte),
+      // avec un bouton pour répondre — un silence de 3 tours dégénère en ultimatum.
+      const parFaction = {}
+      for (const e of evs) if (e && e.type === 'message_ia' && e.faction) parFaction[e.faction] = String(e.texte || '').replace(/^✉\s*/, '')
+      setCourriers(Object.entries(parFaction).map(([faction, texte]) => ({ faction, texte })))
+      if (r && r.interruption && tours > 1) {
+        flash('warn', `⏸ Avance interrompue après ${r.tours_joues} mois — ${r.interruption}`)
+      }
       setMsgIA((n) => n + evs.filter((e) => e && e.type === 'message_ia').length)
       setResume((r && r.resume) || '')
       setResumeSource((r && r.resume_source) || '')
@@ -167,6 +178,11 @@ export default function App() {
       for (const id of unitIds) last = await moveUnit(id, toTerr)
       if (last && last.state) setState(last.state)
       if (last && !last.ok && last.raison) flash('err', last.raison) // pas de popup si succès
+      if (last && last.bataille) {
+        // Le choc a lieu SOUS LES YEUX du joueur : marqueur sur la province + verdict.
+        setMarqueurs([{ territoire: last.territoire || toTerr, icone: last.prise ? '🏴' : '⚔' }])
+        flash(last.prise ? 'ok' : 'err', last.raison || (last.prise ? 'Province prise !' : 'Assaut repoussé.'))
+      }
     } catch (err) { flash('err', err.message || 'Déplacement impossible') }
   }
 
@@ -227,7 +243,7 @@ export default function App() {
           </div>
           <div className="text-[11px] text-parchment/50">
             {nbIa === 5 ? 'Toutes les civilisations entrent en lice.'
-                        : `${nbIa} rival${nbIa > 1 ? 'aux' : ''} tiré${nbIa > 1 ? 's' : ''} au sort ; les autres n'existeront pas.`}
+                        : `${nbIa} ${nbIa > 1 ? 'rivaux tirés' : 'rival tiré'} au sort ; les autres n'existeront pas.`}
           </div>
         </div>
         <div className="mt-8 grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-3">
@@ -280,21 +296,68 @@ export default function App() {
       <ResourceBar meta={state.meta} joueur={joueur} />
 
       <main className="relative min-h-0 flex-1">
-        <Map stateData={state} onSelectFaction={setDiploTarget} onMoveStack={handleMoveStack} onSelectProvince={setSelProv} />
+        <Map stateData={state} onSelectFaction={setDiploTarget} onMoveStack={handleMoveStack} onSelectProvince={setSelProv} marqueurs={marqueurs} />
 
         <Objectifs state={state} onAction={(a) => { if (a === 'civs') setMsgIA(0); setModal(a) }} />
 
         {/* Toast (flottant, ne décale plus la carte) */}
         {banner && (
-          <div className={'absolute left-1/2 top-3 z-20 flex -translate-x-1/2 items-center gap-3 rounded-lg border px-4 py-2 text-sm shadow-xl ' + (banner.type === 'ok' ? 'border-emerald-700/60 bg-emerald-950/90 text-emerald-100' : 'border-red-700/60 bg-red-950/90 text-red-100')}>
+          <div className={'absolute left-1/2 top-3 z-20 flex max-w-[min(90%,40rem)] -translate-x-1/2 items-center gap-3 rounded-lg border px-4 py-2 text-sm shadow-xl ' + (banner.type === 'ok' ? 'border-emerald-700/60 bg-emerald-950/90 text-emerald-100' : banner.type === 'warn' ? 'border-amber-600/60 bg-amber-950/90 text-amber-100' : 'border-red-700/60 bg-red-950/90 text-red-100')}>
             <span>{banner.text}</span>
             <button onClick={() => setBanner(null)} className="opacity-70 hover:opacity-100">✕</button>
           </div>
         )}
 
+        {/* Guerres en cours : bandeau SOUS le toast, dans la carte (il recouvrait
+            la barre de ressources). */}
+        {mesGuerres.length > 0 && (
+          <div className={'absolute left-1/2 z-[15] flex -translate-x-1/2 flex-wrap items-center justify-center gap-2 rounded-lg border border-red-900/60 bg-night/95 px-3 py-1.5 shadow-lg ' + (banner ? 'top-14' : 'top-3')}>
+            <span className="text-xs font-semibold uppercase tracking-widest text-red-300">⚔ En guerre</span>
+            {mesGuerres.map((g) => (
+              <button key={g.faction} onClick={() => setPaixTarget(g.faction)}
+                      title="Négocier la paix : dépensez votre score de guerre pour réclamer des provinces"
+                      className="flex items-center gap-1.5 rounded border border-bronze-dark/60 px-2 py-0.5 text-xs hover:border-gold">
+                <span style={{ color: factionColor(g.faction) }}>
+                  {factionLabel(g.faction, state.pays[g.faction] && state.pays[g.faction].nom)}
+                </span>
+                <span className={g.score >= 0 ? 'font-semibold text-emerald-300' : 'font-semibold text-red-300'}>
+                  {g.score >= 0 ? '+' : ''}{Math.round(g.score)}
+                </span>
+                <span className="text-parchment/50">· négocier</span>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Courriers des souverains : on ne les laisse plus dormir derrière un badge. */}
+        {courriers.length > 0 && (
+          <div className="absolute bottom-3 right-3 z-10 flex w-80 max-w-[calc(100%-1.5rem)] flex-col gap-2">
+            {courriers.slice(0, 3).map((c) => (
+              <div key={c.faction} className="panel !p-3">
+                <div className="flex items-start gap-2">
+                  <FactionEmblem faction={c.faction} size={20} className="mt-0.5 shrink-0" style={{ color: factionColor(c.faction) }} />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: factionColor(c.faction) }}>
+                      ✉ {leaderName(c.faction)}
+                    </div>
+                    <p className="mt-0.5 line-clamp-3 text-xs italic leading-snug text-parchment/85">{c.texte}</p>
+                  </div>
+                  <button onClick={() => setCourriers((l) => l.filter((x) => x.faction !== c.faction))}
+                          className="text-parchment/50 hover:text-parchment" title="Ignorer">✕</button>
+                </div>
+                <div className="mt-2 flex justify-end">
+                  <button onClick={() => { setCourriers((l) => l.filter((x) => x.faction !== c.faction)); setMsgIA(0); setDiploTarget(c.faction) }}
+                          className="btn btn-primary btn-sm">Répondre</button>
+                </div>
+              </div>
+            ))}
+            {courriers.length > 3 && <div className="text-right text-[11px] text-parchment/50">+{courriers.length - 3} autre{courriers.length - 3 > 1 ? 's' : ''} courrier{courriers.length - 3 > 1 ? 's' : ''} (Diplomatie)</div>}
+          </div>
+        )}
+
         {/* Chronique : événements marquants du tour, et belle chronique au passage d'une année */}
         {showChronique && (resume || evenements.length > 0) && (
-          <div className={'panel absolute right-3 top-3 z-10 ' + (resumeAnnee ? 'max-w-md' : 'max-w-sm')}>
+          <div className={'panel thin-scroll absolute right-3 top-3 z-10 max-h-[42vh] overflow-y-auto ' + (resumeAnnee ? 'max-w-md' : 'max-w-sm')}>
             <div className="flex items-center justify-between">
               <h2 className="panel-title !mb-0 !border-0 !pb-0">{resumeAnnee ? `Chronique de l'an ${resumeAnnee}` : 'Événements'}</h2>
               <button onClick={() => setShowChronique(false)} className="text-parchment/60 hover:text-parchment">✕</button>
@@ -311,7 +374,7 @@ export default function App() {
 
         {/* Annexion : une armée occupe une province neutre (coût affiché) */}
         {annexables.length > 0 && (
-          <div className="panel absolute bottom-3 left-3 z-10 flex flex-wrap items-center gap-2">
+          <div className="panel absolute bottom-3 left-1/2 z-10 flex -translate-x-1/2 flex-wrap items-center gap-2 whitespace-nowrap">
             <span className="text-sm text-parchment/90">Armée en province neutre :</span>
             {annexables.map((t) => (
               <button key={t} onClick={() => handleAnnex(t)} disabled={busy} className="btn btn-primary btn-sm">
@@ -322,82 +385,88 @@ export default function App() {
         )}
       </main>
 
-      {/* Barre d'action : UNE seule ligne, jamais de retour à la ligne qui vole
-          de la hauteur à la carte. Elle défile horizontalement si l'écran est étroit. */}
-      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto border-t border-bronze-dark/60 bg-night px-2 py-1.5">
-        {/* Emplacement de largeur STABLE : les boutons suivants ne sautent plus
-            quand on sélectionne ou désélectionne une province. */}
-        <div className="flex min-w-[16rem] shrink-0 items-center gap-1.5">
-          {monProv ? (
-            <>
-              <span className="max-w-[7rem] truncate text-xs text-parchment/70" title={monProv.nom}>{monProv.nom}</span>
-              <button onClick={() => setModal('production')} className="btn btn-ghost btn-sm">⚒ Production</button>
-              <button onClick={() => setModal('recrutement')} className="btn btn-ghost btn-sm">⚔ Armée</button>
-            </>
-          ) : (
-            <span className="text-xs italic text-parchment/45">Cliquez une de vos provinces pour la gérer</span>
-          )}
-        </div>
-        <span className="h-6 w-px shrink-0 bg-bronze-dark/50" />
-
-        <button onClick={() => setModal('tech')} className="btn btn-ghost btn-sm shrink-0" title="Technologies (T)">🔬 Technos</button>
-        <button onClick={() => setModal('dogmes')} className="btn btn-ghost btn-sm shrink-0" title="Dogmes (G)">☩ Dogmes</button>
-        <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost btn-sm relative shrink-0" title="Diplomatie (D)">
-          ✉ Diplomatie
-          {msgIA > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">{msgIA}</span>}
-        </button>
-        <button onClick={() => setModal('conseiller')} className="btn btn-ghost btn-sm shrink-0" title="Conseiller (C)">👤 Conseiller</button>
-        <button onClick={() => { setModal('journal'); setJournalVu(nbJournal) }} className="btn btn-ghost btn-sm relative shrink-0" title="Journal du règne (J)">
-          📜 Journal
-          {nbJournal > journalVu && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-ink">{nbJournal - journalVu}</span>}
-        </button>
-
-        {impotsOpts.length > 0 && (
-          <select value={(joueur && joueur.impots) || 'normal'} onChange={(e) => setImpots(e.target.value)}
-                  title="Niveau d'imposition" className="shrink-0 rounded border border-bronze-dark/60 bg-night px-1.5 py-1 text-xs text-parchment">
-            {impotsOpts.map((o) => <option key={o.id} value={o.id}>Impôts : {o.nom} ({o.stab >= 0 ? '+' : ''}{o.stab} stab)</option>)}
-          </select>
-        )}
-
-        {/* Sauver / Menu, repliés pour ne plus disputer la place aux vraies actions */}
-        <div className="shrink-0">
-          <button onClick={(e) => {
-                    const r = e.currentTarget.getBoundingClientRect()
-                    setMenuOuvert(menuOuvert ? null : { bas: window.innerHeight - r.top + 4, droite: window.innerWidth - r.right })
-                  }}
-                  className="btn btn-ghost btn-sm" title="Partie">☰</button>
-          {menuOuvert && (
-            <>
-              <div className="fixed inset-0 z-20" onClick={() => setMenuOuvert(null)} />
-              <div style={{ bottom: menuOuvert.bas, right: menuOuvert.droite }}
-                   className="fixed z-30 flex w-36 flex-col rounded-md border border-bronze-dark bg-night py-1 shadow-xl">
-                <button onClick={() => { setMenuOuvert(null); handleSave() }} disabled={busy}
-                        className="px-3 py-1.5 text-left text-sm text-parchment hover:bg-black/40">Sauvegarder</button>
-                <button onClick={() => { setMenuOuvert(null); setScreen('menu') }}
-                        className="px-3 py-1.5 text-left text-sm text-parchment hover:bg-black/40">Menu principal</button>
-              </div>
-            </>
-          )}
-        </div>
-
-        <div className="ml-auto flex shrink-0 items-stretch gap-px overflow-hidden rounded-md">
-          <button onClick={() => handleEndTurn(1)} disabled={busy} className="btn btn-primary rounded-none"
-                  title={armeesPretes > 0 ? `${armeesPretes} armée(s) peuvent encore marcher — Espace` : "Avancer d'un mois (Espace)"}>
-            {busy ? 'Le monde avance…' : 'Fin de tour ▸'}
-            {!busy && armeesPretes > 0 && (
-              <span className="ml-2 rounded-full bg-ink/30 px-1.5 text-[11px] font-bold" title="Armées encore disponibles">
-                ⚔ {armeesPretes}
-              </span>
+      {/* Barre d'action : UNE seule ligne. La partie gauche défile si l'écran est
+          étroit ; « Fin de tour » reste TOUJOURS visible à droite (jamais de bouton
+          principal caché derrière un défilement). Sous 1024 px, les libellés
+          s'effacent et les icônes suffisent. */}
+      <div className="flex items-stretch border-t border-bronze-dark/60 bg-night">
+        <div className="thin-scroll flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-2 py-1.5">
+          {/* Emplacement de largeur STABLE : les boutons suivants ne sautent plus
+              quand on sélectionne ou désélectionne une province. */}
+          <div className="flex min-w-[13rem] shrink-0 items-center gap-1.5 lg:min-w-[16rem]">
+            {monProv ? (
+              <>
+                <span className="max-w-[7rem] truncate text-xs text-parchment/70" title={monProv.nom}>{monProv.nom}</span>
+                <button onClick={() => setModal('production')} className="btn btn-ghost btn-sm">⚒ Production</button>
+                <button onClick={() => setModal('recrutement')} className="btn btn-ghost btn-sm">⚔ Armée</button>
+              </>
+            ) : (
+              <span className="text-xs italic text-parchment/45">Cliquez une de vos provinces pour la gérer</span>
             )}
+          </div>
+          <span className="h-6 w-px shrink-0 bg-bronze-dark/50" />
+
+          <button onClick={() => setModal('tech')} className="btn btn-ghost btn-sm shrink-0" title="Technologies (T)">🔬<span className="hidden lg:inline"> Technos</span></button>
+          <button onClick={() => setModal('dogmes')} className="btn btn-ghost btn-sm shrink-0" title="Dogmes (G)">☩<span className="hidden lg:inline"> Dogmes</span></button>
+          <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost btn-sm relative shrink-0" title="Diplomatie (D)">
+            ✉<span className="hidden lg:inline"> Diplomatie</span>
+            {msgIA > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">{msgIA}</span>}
           </button>
-          <button onClick={() => handleEndTurn(3)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer de 3 mois">+3 m</button>
-          <button onClick={() => handleEndTurn(12)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer d'un an (12 mois)">+1 an</button>
+          <button onClick={() => setModal('conseiller')} className="btn btn-ghost btn-sm shrink-0" title="Conseiller (C)">👤<span className="hidden lg:inline"> Conseiller</span></button>
+          <button onClick={() => { setModal('journal'); setJournalVu(nbJournal) }} className="btn btn-ghost btn-sm relative shrink-0" title="Journal du règne (J)">
+            📜<span className="hidden lg:inline"> Journal</span>
+            {nbJournal > journalVu && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-ink">{nbJournal - journalVu}</span>}
+          </button>
+
+          {impotsOpts.length > 0 && (
+            <select value={(joueur && joueur.impots) || 'normal'} onChange={(e) => setImpots(e.target.value)}
+                    title="Niveau d'imposition" className="shrink-0 rounded border border-bronze-dark/60 bg-night px-1.5 py-1 text-xs text-parchment">
+              {impotsOpts.map((o) => <option key={o.id} value={o.id}>Impôts : {o.nom} ({o.stab >= 0 ? '+' : ''}{o.stab} stab)</option>)}
+            </select>
+          )}
+
+          {/* Sauver / Menu, repliés pour ne plus disputer la place aux vraies actions */}
+          <div className="shrink-0">
+            <button onClick={(e) => {
+                      const r = e.currentTarget.getBoundingClientRect()
+                      setMenuOuvert(menuOuvert ? null : { bas: window.innerHeight - r.top + 4, droite: window.innerWidth - r.right })
+                    }}
+                    className="btn btn-ghost btn-sm" title="Partie">☰</button>
+            {menuOuvert && (
+              <>
+                <div className="fixed inset-0 z-20" onClick={() => setMenuOuvert(null)} />
+                <div style={{ bottom: menuOuvert.bas, right: menuOuvert.droite }}
+                     className="fixed z-30 flex w-36 flex-col rounded-md border border-bronze-dark bg-night py-1 shadow-xl">
+                  <button onClick={() => { setMenuOuvert(null); handleSave() }} disabled={busy}
+                          className="px-3 py-1.5 text-left text-sm text-parchment hover:bg-black/40">Sauvegarder</button>
+                  <button onClick={() => { setMenuOuvert(null); setScreen('menu') }}
+                          className="px-3 py-1.5 text-left text-sm text-parchment hover:bg-black/40">Menu principal</button>
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+
+        <div className="flex shrink-0 items-center border-l border-bronze-dark/60 px-2 py-1.5">
+          <div className="flex items-stretch gap-px overflow-hidden rounded-md">
+            <button onClick={() => handleEndTurn(1)} disabled={busy} className="btn btn-primary rounded-none"
+                    title={armeesPretes > 0 ? `${armeesPretes} armée(s) peuvent encore marcher — Espace` : "Avancer d'un mois (Espace)"}>
+              {busy ? 'Le monde avance…' : 'Fin de tour ▸'}
+              {!busy && armeesPretes > 0 && (
+                <span className="ml-2 rounded-full bg-ink/30 px-1.5 text-[11px] font-bold" title="Armées encore disponibles">
+                  ⚔ {armeesPretes}
+                </span>
+              )}
+            </button>
+            <button onClick={() => handleEndTurn(3)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer de 3 mois">+3 m</button>
+            <button onClick={() => handleEndTurn(12)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer d'un an (12 mois)">+1 an</button>
+          </div>
         </div>
       </div>
 
       {/* Modales */}
       {modal === 'production' && <ProductionModal state={state} forcedTerr={monProv && monProv.id} onClose={() => setModal(null)} onStateChange={setState} />}
-      {modal === 'recrutement' && <RecruitmentModal state={state} forcedTerr={monProv && monProv.id} onClose={() => setModal(null)} onStateChange={setState} />}
+      {modal === 'recrutement' && <RecruitmentModal state={state} forcedTerr={monProv && monProv.id} provNames={provNames} onClose={() => setModal(null)} onStateChange={setState} />}
       {modal === 'tech' && <TechTree state={state} onClose={() => setModal(null)} onStateChange={setState} />}
       {modal === 'dogmes' && <DogmeTree state={state} onClose={() => setModal(null)} onStateChange={setState} />}
       {modal === 'civs' && (
@@ -406,24 +475,6 @@ export default function App() {
       )}
       {diploTarget && state.pays[diploTarget] && (
         <DiplomacyModal cible={diploTarget} state={state} onClose={() => setDiploTarget(null)} onStateChange={setState} />
-      )}
-      {mesGuerres.length > 0 && (
-        <div className="absolute left-1/2 top-2 z-10 flex -translate-x-1/2 flex-wrap items-center gap-2 rounded-lg border border-red-900/60 bg-night/95 px-3 py-1.5 shadow-lg">
-          <span className="text-xs font-semibold uppercase tracking-widest text-red-300">⚔ En guerre</span>
-          {mesGuerres.map((g) => (
-            <button key={g.faction} onClick={() => setPaixTarget(g.faction)}
-                    title="Négocier la paix : dépensez votre score de guerre pour réclamer des provinces"
-                    className="flex items-center gap-1.5 rounded border border-bronze-dark/60 px-2 py-0.5 text-xs hover:border-gold">
-              <span style={{ color: factionColor(g.faction) }}>
-                {factionLabel(g.faction, state.pays[g.faction] && state.pays[g.faction].nom)}
-              </span>
-              <span className={g.score >= 0 ? 'font-semibold text-emerald-300' : 'font-semibold text-red-300'}>
-                {g.score >= 0 ? '+' : ''}{Math.round(g.score)}
-              </span>
-              <span className="text-parchment/50">· négocier</span>
-            </button>
-          ))}
-        </div>
       )}
       {paixTarget && (
         <PeaceModal cible={paixTarget} state={state}
@@ -459,13 +510,21 @@ export default function App() {
   )
 }
 
-// Sélecteur de civilisation pour le bouton Diplomatie.
+// Sélecteur de civilisation pour le bouton Diplomatie : un VRAI tableau de bord
+// des rivaux (terres, armées, puissance, traités, guerre), pas une simple liste.
 function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
+  const guerres = ((state.diplomatie || {}).guerres_actives) || []
+  const traites = ((state.diplomatie || {}).traites_actifs) || []
+  const maPuissance = (joueur && joueur.puissance) || 0
+  const monArmee = (joueur && joueur.force_armee) || 0
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="w-full max-w-md rounded-xl border border-bronze-dark bg-night p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="w-full max-w-lg rounded-xl border border-bronze-dark bg-night p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
-          <h2 className="font-display text-lg font-bold text-gold">Diplomatie</h2>
+          <div>
+            <h2 className="font-display text-lg font-bold text-gold">Diplomatie</h2>
+            <div className="text-[11px] text-parchment/50">Vous : armée <b className="text-parchment/80">⚔ {num(monArmee)}</b> · puissance <b className="text-parchment/80">✦ {num(maPuissance)}</b></div>
+          </div>
           <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
         </div>
         <div className="flex flex-col gap-2">
@@ -473,16 +532,34 @@ function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
             const p = state.pays[id] || {}
             const score = joueur && joueur.reputation && joueur.reputation[id]
             const tone = reputationTone(score)
-            const enGuerre = ((state.diplomatie || {}).guerres_actives || []).some((g) => new Set([g.a, g.b]).has(id) && new Set([g.a, g.b]).has(joueurId))
+            const enGuerre = guerres.some((g) => new Set([g.a, g.b]).has(id) && new Set([g.a, g.b]).has(joueurId))
+            const mesTraites = traites.filter((tr) => (tr.parties || []).includes(id) && (tr.parties || []).includes(joueurId))
+            const puissance = p.puissance != null ? p.puissance : p.puissance_estimee
+            const estime = p.puissance == null
+            const armee = p.force_armee != null ? p.force_armee : p.force_armee_estimee
+            const rapport = monArmee > 0 ? (armee || 0) / monArmee : (armee > 0 ? Infinity : null)
+            const force = rapport == null ? null : rapport > 1.35 ? { t: 'armée plus forte', c: 'text-red-300' }
+              : rapport > 0.75 ? { t: 'armées comparables', c: 'text-amber-300' } : { t: 'armée plus faible', c: 'text-emerald-300' }
             return (
-              <button key={id} onClick={() => onPick(id)} className="flex items-center gap-2 rounded-md border border-transparent bg-black/20 px-3 py-2 text-left transition hover:border-bronze hover:bg-black/30">
-                <FactionEmblem faction={id} size={22} className="shrink-0" style={{ color: p.couleur || factionColor(id) }} />
-                <span className="flex-1">
-                  <span className="block text-sm text-parchment">{factionLabel(id, p.nom)}</span>
-                  <span className="block text-[11px] text-parchment/50">{leaderName(id)}</span>
+              <button key={id} onClick={() => onPick(id)} className="flex items-center gap-3 rounded-md border border-transparent bg-black/20 px-3 py-2 text-left transition hover:border-bronze hover:bg-black/30">
+                <FactionEmblem faction={id} size={24} className="shrink-0" style={{ color: p.couleur || factionColor(id) }} />
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-parchment">{factionLabel(id, p.nom)}</span>
+                    <span className="text-[11px] text-parchment/50">{leaderName(id)}</span>
+                    {enGuerre && <span className="chip chip-war">Guerre</span>}
+                    {mesTraites.map((tr) => <span key={tr.type} className="chip text-emerald-200">{tr.type}</span>)}
+                  </span>
+                  <span className="mt-0.5 block text-[11px] text-parchment/60">
+                    {(p.territoires || []).length} prov. · {(p.unites || []).length} unité{(p.unites || []).length > 1 ? 's' : ''} · ⚔ {estime ? '≈' : ''}{num(armee || 0)}
+                    {puissance != null && <> · ✦ {estime ? '≈' : ''}{num(puissance)}</>}
+                    {force && <span className={'ml-1 ' + force.c}>({force.t})</span>}
+                  </span>
                 </span>
-                {enGuerre && <span className="chip chip-war">Guerre</span>}
-                <span className={'text-xs font-semibold ' + tone.className}>{tone.label}{score != null && ` (${score > 0 ? '+' : ''}${num(score)})`}</span>
+                <span className={'shrink-0 text-right text-xs font-semibold ' + tone.className}>
+                  {tone.label}
+                  {score != null && <span className="block font-normal text-parchment/50">{score > 0 ? '+' : ''}{num(score)}</span>}
+                </span>
               </button>
             )
           })}

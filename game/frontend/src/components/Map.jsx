@@ -23,7 +23,7 @@ function hexToNumber(hex) {
   return parseInt(hex.replace('#', ''), 16)
 }
 
-export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectProvince, refreshKey }) {
+export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectProvince, refreshKey, marqueurs }) {
   const hostRef = useRef(null)
   const appRef = useRef(null)
   const worldRef = useRef(null)
@@ -31,6 +31,9 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   const unitLayerRef = useRef(null)
   const arrowLayerRef = useRef(null)
   const marcheLayerRef = useRef(null)   // colonne en marche (animation)
+  const marqueurLayerRef = useRef(null) // marqueurs d'événements du tour (batailles, feux…)
+  const marqueursRef = useRef([])       // [{x, y, icone, t0}] en cours d'animation
+  const [armeeSel, setArmeeSel] = useState(null) // {territoire, nom, effectif} : armée sélectionnée
   const marcheRef = useRef(null)        // {from,to,t0,duree,col,effectif}
   const dataRef = useRef(null)
   const stateRef = useRef(stateData)
@@ -156,6 +159,41 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     txt.anchor.set(0.5); txt.position.set(x, y - 21); txt.eventMode = 'none'; layer.addChild(txt)
 
     if (av >= 1) { marcheRef.current = null; layer.removeChildren(); draw() }
+  }
+
+  // --- MARQUEURS D'ÉVÉNEMENTS : à chaque fin de tour, batailles, incendies,
+  // révoltes… s'affichent LÀ OÙ ils ont eu lieu (anneau qui pulse, puis s'efface).
+  // La liste textuelle reste ; ceci donne le « où » d'un coup d'œil.
+  const MARQUEUR_DUREE = 9000
+  function poserMarqueurs(liste) {
+    const now = performance.now()
+    marqueursRef.current = (liste || []).map((m, i) => {
+      const c = centreOf(m.territoire); if (!c) return null
+      // Décale les marqueurs qui tombent sur la même province.
+      const memes = (liste || []).slice(0, i).filter((x) => x.territoire === m.territoire).length
+      return { x: c[0] + memes * 14, y: c[1] - 4 - memes * 6, icone: m.icone || '!', t0: now }
+    }).filter(Boolean)
+  }
+  function animerMarqueurs() {
+    const layer = marqueurLayerRef.current; if (!layer) return
+    const now = performance.now()
+    const vivants = marqueursRef.current.filter((m) => now - m.t0 < MARQUEUR_DUREE)
+    marqueursRef.current = vivants
+    layer.removeChildren()
+    if (!vivants.length) return
+    const s = Math.max(0.35, 1 / (viewRef.current.scale || 1))  // taille constante à l'écran
+    for (const m of vivants) {
+      const age = (now - m.t0) / MARQUEUR_DUREE
+      const fade = age > 0.75 ? 1 - (age - 0.75) / 0.25 : 1
+      const pulse = 0.5 + 0.5 * Math.sin((now - m.t0) / 180)
+      const ring = new Graphics()
+      ring.circle(m.x, m.y, (11 + pulse * 7) * s)
+      ring.stroke({ width: 2.2 * s, color: 0xe8c267, alpha: (0.35 + 0.45 * (1 - pulse)) * fade })
+      ring.circle(m.x, m.y, 10 * s); ring.fill({ color: 0x14110c, alpha: 0.72 * fade })
+      ring.eventMode = 'none'; layer.addChild(ring)
+      const ic = new Text({ text: m.icone, style: { fontFamily: 'Georgia, serif', fontSize: 13 * s, fill: 0xffffff } })
+      ic.anchor.set(0.5, 0.5); ic.position.set(m.x, m.y); ic.alpha = fade; ic.eventMode = 'none'; layer.addChild(ic)
+    }
   }
 
   function draw() {
@@ -338,9 +376,12 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   function paint(g, t, factionId, hover, reach) {
     const flat = (t.polygone || []).flat()
     const isReach = reach && reach.all.has(t.id)
+    const isSel = selProvRef.current === t.id
     g.clear(); g.poly(flat)
     g.fill({ color: fillFor(factionId), alpha: hover ? 1 : factionId ? 0.96 : 0.88 })
-    g.stroke({ width: hover || isReach ? 2.4 : 0.8, color: hover ? HOVER_LINE : isReach ? ARROW_LAND : BORDER_COLOR, alpha: hover || isReach ? 1 : 0.9 })
+    // Priorité du liseré : sélection (or) > survol > destination atteignable.
+    if (isSel) g.stroke({ width: 3, color: 0xe8c267, alpha: 1 })
+    else g.stroke({ width: hover || isReach ? 2.4 : 0.8, color: hover ? HOVER_LINE : isReach ? ARROW_LAND : BORDER_COLOR, alpha: hover || isReach ? 1 : 0.9 })
   }
 
   function drawArrow(layer, a, b, color) {
@@ -358,6 +399,18 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     g.eventMode = 'none'; layer.addChild(g)
   }
 
+  // Reflète la sélection d'armée dans React (bandeau d'aide) sans redessiner.
+  function majArmeeSel() {
+    const terr = selUnitTerrRef.current
+    if (!terr) { setArmeeSel(null); return }
+    const grp = collectArmies().find((a) => a.territoire === terr && a.faction === joueurId())
+    const tt = terrById(terr)
+    setArmeeSel(grp ? { territoire: terr, nom: (tt && tt.nom) || terr, effectif: grp.effectif, libres: grp.idsLibres.length } : null)
+  }
+  function annulerSelection() {
+    selUnitTerrRef.current = null; majArmeeSel(); draw()
+  }
+
   function onProvinceTap(t, factionId) {
     selProvRef.current = t.id
     const armyTerr = selUnitTerrRef.current
@@ -365,7 +418,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       const r = reachable(armyTerr)
       if (r.all.has(t.id)) {
         const grp = collectArmies().find((a) => a.territoire === armyTerr && a.faction === joueurId())
-        selUnitTerrRef.current = null
+        selUnitTerrRef.current = null; majArmeeSel()
         if (grp && grp.idsLibres.length && typeof onMoveStack === 'function') {
           // La colonne se met en marche TOUT DE SUITE (retour immédiat au joueur),
           // pendant que l'ordre part au serveur.
@@ -383,6 +436,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       ? collectArmies().find((a) => a.territoire === t.id && a.faction === joueurId() && a.idsLibres.length)
       : null
     selUnitTerrRef.current = garnison && selUnitTerrRef.current !== t.id ? t.id : null
+    majArmeeSel()
     if (typeof onSelectProvince === 'function') onSelectProvince({ id: t.id, faction: factionId, nom: t.nom })
     if (factionId && factionId !== joueurId() && typeof onSelectFaction === 'function') onSelectFaction(factionId)
     draw()
@@ -398,6 +452,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     }
     selUnitTerrRef.current = dep === a.territoire ? null : a.territoire
     selProvRef.current = a.territoire
+    majArmeeSel()
     // Cliquer son armée sélectionne AUSSI sa province : les boutons de gestion
     // (Production / Armée) apparaissent, comme le promet l'aide en bas d'écran.
     const t = terrById(a.territoire)
@@ -417,12 +472,14 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
 
   function applyTransform() {
     const { scale, x, y } = viewRef.current
-    for (const l of [worldRef.current, labelLayerRef.current, unitLayerRef.current, arrowLayerRef.current])
+    for (const l of [worldRef.current, labelLayerRef.current, unitLayerRef.current, arrowLayerRef.current, marqueurLayerRef.current])
       if (l) { l.scale.set(scale); l.position.set(x, y) }
   }
   function layout(resetView = true) {
     const app = appRef.current, data = dataRef.current, host = hostRef.current
     if (!app || !data || !host) return
+    // La carte bouge sous le curseur : l'ancien survol n'a plus de sens.
+    hoveredRef.current = null; setApercu(null)
     const W = host.clientWidth || 800, H = host.clientHeight || 560
     app.renderer.resize(W, H)
     const bb = contentBBox()
@@ -476,8 +533,9 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       arrowLayerRef.current = new Container(); app.stage.addChild(arrowLayerRef.current)
       labelLayerRef.current = new Container(); app.stage.addChild(labelLayerRef.current)
       unitLayerRef.current = new Container(); app.stage.addChild(unitLayerRef.current)
+      marqueurLayerRef.current = new Container(); app.stage.addChild(marqueurLayerRef.current)
       marcheLayerRef.current = new Container(); app.stage.addChild(marcheLayerRef.current)
-      app.ticker.add(animerMarche)
+      app.ticker.add(animerMarche); app.ticker.add(animerMarqueurs)
       try { const data = await getMap(); if (destroyed) return; dataRef.current = data; setError(null); layout(true); draw() }
       catch (err) { if (!destroyed) setError(err.message || 'Carte indisponible') }
       finally { if (!destroyed) setLoading(false) }
@@ -496,19 +554,25 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     const onDown = (e) => { dragging = true; moved = 0; last = { x: e.clientX, y: e.clientY } }
     const onMove = (e) => { if (!dragging || !last) return; const dx = e.clientX - last.x, dy = e.clientY - last.y; moved += Math.abs(dx) + Math.abs(dy); if (moved > 4) { viewRef.current.x += dx; viewRef.current.y += dy; userAdjustedRef.current = true; clampView(); applyTransform(); if (host) host.style.cursor = 'grabbing' } last = { x: e.clientX, y: e.clientY } }
     const onUp = () => { dragging = false; if (host) host.style.cursor = '' }
-    if (host) { host.addEventListener('wheel', onWheel, { passive: false }); host.addEventListener('pointerdown', onDown) }
+    const onLeave = () => { hoveredRef.current = null; setApercu(null) }
+    // Échap : annule la sélection d'armée (le joueur ne reste plus « collé » à ses flèches).
+    const onKey = (e) => { if (e.key === 'Escape' && selUnitTerrRef.current) annulerSelection() }
+    if (host) { host.addEventListener('wheel', onWheel, { passive: false }); host.addEventListener('pointerdown', onDown); host.addEventListener('pointerleave', onLeave) }
+    window.addEventListener('keydown', onKey)
     window.addEventListener('pointermove', onMove); window.addEventListener('pointerup', onUp)
     return () => {
       destroyed = true; ro.disconnect()
-      if (host) { host.removeEventListener('wheel', onWheel); host.removeEventListener('pointerdown', onDown) }
+      if (host) { host.removeEventListener('wheel', onWheel); host.removeEventListener('pointerdown', onDown); host.removeEventListener('pointerleave', onLeave) }
+      window.removeEventListener('keydown', onKey)
       window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp)
       if (appRef.current) appRef.current.destroy(true, { children: true, texture: true })
-      appRef.current = null; worldRef.current = null; labelLayerRef.current = null; unitLayerRef.current = null; arrowLayerRef.current = null; marcheLayerRef.current = null
+      appRef.current = null; worldRef.current = null; labelLayerRef.current = null; unitLayerRef.current = null; arrowLayerRef.current = null; marcheLayerRef.current = null; marqueurLayerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   useEffect(() => { if (dataRef.current) draw() /* eslint-disable-next-line */ }, [stateData, refreshKey])
+  useEffect(() => { if (dataRef.current && marqueurs) poserMarqueurs(marqueurs) /* eslint-disable-next-line */ }, [marqueurs])
 
   return (
     <div className="relative h-full w-full overflow-hidden"
@@ -518,6 +582,14 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       {error && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1c1813]/85 px-6 text-center"><p className="text-lg font-semibold text-terracotta">Carte indisponible</p><p className="max-w-sm text-sm text-parchment/80">{error}</p></div>}
       <MapLegend stateData={stateData} naval={hasNaval()} />
       {apercu && <ApercuProvince info={apercu} stateData={stateData} host={hostRef.current} />}
+      {armeeSel && (
+        <div className="pointer-events-none absolute bottom-16 left-1/2 z-10 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-gold/60 bg-night/95 py-1.5 pl-4 pr-2 text-sm shadow-xl">
+          <span className="text-gold">⚔ {armeeSel.nom}</span>
+          <span className="text-parchment/70">force {armeeSel.effectif}</span>
+          <span className="text-parchment/55">· cliquez une province fléchée</span>
+          <button onClick={annulerSelection} className="pointer-events-auto rounded-full px-2 py-0.5 text-xs text-parchment/60 hover:bg-black/40 hover:text-parchment" title="Annuler (Échap)">✕</button>
+        </div>
+      )}
       <div className="absolute right-2 top-2 flex flex-col gap-1 rounded-lg border border-bronze-dark/50 bg-night/90 p-1 shadow-lg">
         <button onClick={() => zoomCenter(1.25)} title="Zoomer" className="h-8 w-8 rounded-md text-lg font-bold text-parchment hover:bg-ink-soft">+</button>
         <button onClick={() => zoomCenter(1 / 1.25)} title="Dézoomer" className="h-8 w-8 rounded-md text-lg font-bold text-parchment hover:bg-ink-soft">−</button>
@@ -608,16 +680,18 @@ function ApercuProvince({ info, stateData, host }) {
       .some((g) => new Set([g.a, g.b]).has(info.faction) && new Set([g.a, g.b]).has(joueurId))
 
   const moi = pays[joueurId] || {}
-  const maPuissance = moi.puissance || 0
-  // Sans réseau d'espionnage, le moteur ne livre qu'une ESTIMATION de la puissance
+  // Sans réseau d'espionnage, le moteur ne livre qu'une ESTIMATION des forces
   // des rivaux : on l'affiche comme telle plutôt que de mentir sur sa précision.
   const estime = prop && prop.puissance == null && prop.puissance_estimee != null
   const saPuissance = (prop && (prop.puissance != null ? prop.puissance : prop.puissance_estimee)) || 0
-  const rapport = maPuissance > 0 && saPuissance > 0 ? saPuissance / maPuissance : null
+  // Le verdict compare les ARMÉES (pas le trésor) : c'est ce qui décide d'une attaque.
+  const monArmee = moi.force_armee || 0
+  const sonArmee = (prop && (prop.force_armee != null ? prop.force_armee : prop.force_armee_estimee)) || 0
+  const rapport = monArmee > 0 ? sonArmee / monArmee : (sonArmee > 0 ? Infinity : null)
   const verdict = rapport == null ? null
-    : rapport > 1.35 ? { t: 'Plus fort que vous', c: 'text-red-300' }
-    : rapport > 0.75 ? { t: 'De force comparable', c: 'text-amber-300' }
-    : { t: 'Plus faible que vous', c: 'text-emerald-300' }
+    : rapport > 1.35 ? { t: 'Armée plus forte que la vôtre', c: 'text-red-300' }
+    : rapport > 0.75 ? { t: 'Armées comparables', c: 'text-amber-300' }
+    : { t: 'Armée plus faible que la vôtre', c: 'text-emerald-300' }
 
   // Bulle collée au curseur, rabattue si elle sortirait du cadre.
   const L = 226, H = 178
@@ -645,20 +719,20 @@ function ApercuProvince({ info, stateData, host }) {
       )}
       <div className="text-[11px] text-parchment/75">
         {garnison.length > 0
-          ? `⚔ ${garnison.length} armée${garnison.length > 1 ? 's' : ''} · force ${garnison.reduce((n, u) => n + (u.effectif || 0), 0)}`
+          ? `⚔ ${garnison.length} unité${garnison.length > 1 ? 's' : ''} en garnison`
           : '⚔ Aucune troupe visible'}
       </div>
 
       {prop && info.faction !== joueurId && (
         <div className="mt-1.5 border-t border-bronze-dark/50 pt-1.5">
-          <div className="text-[10px] uppercase tracking-widest text-bronze/80">Puissance du rival</div>
+          <div className="text-[10px] uppercase tracking-widest text-bronze/80">Forces du rival</div>
           <div className="mt-0.5 flex items-center gap-1.5">
-            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/50">
+            <div className="h-1.5 flex-1 overflow-hidden rounded-full bg-black/50" title="Armée du rival rapportée à la vôtre">
               <div className="h-full rounded-full"
-                   style={{ width: `${Math.min(100, rapport == null ? 50 : (rapport / (rapport + 1)) * 100)}%`,
+                   style={{ width: `${Math.min(100, rapport == null ? 0 : rapport === Infinity ? 100 : (rapport / (rapport + 1)) * 100)}%`,
                             background: factionColor(info.faction) }} />
             </div>
-            <span className="text-[11px] text-parchment/70">{estime ? '≈' : ''}{Math.round(saPuissance)}</span>
+            <span className="text-[11px] text-parchment/70">⚔ {estime ? '≈' : ''}{Math.round(sonArmee)} · ✦ {estime ? '≈' : ''}{Math.round(saPuissance)}</span>
           </div>
           {verdict && (
             <div className={'text-[11px] font-semibold ' + verdict.c}>
@@ -667,7 +741,7 @@ function ApercuProvince({ info, stateData, host }) {
           )}
           <div className="text-[11px] text-parchment/60">
             {(prop.territoires || []).length} prov. ·
-            {' '}{(prop.unites || []).length} armée{(prop.unites || []).length > 1 ? 's' : ''} ·
+            {' '}{(prop.unites || []).length} unité{(prop.unites || []).length > 1 ? 's' : ''} ·
             {' '}stab. {Math.round(prop.stabilite || 0)}
           </div>
         </div>

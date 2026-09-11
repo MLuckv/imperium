@@ -199,6 +199,7 @@ def end_turn(tours: int = 1):
     n = max(1, min(12, tours))
     evenements, messages, res = [], [], None
     chronique = {}
+    interruption = None
     for i in range(n):
         # Avance MULTI-TOURS = mode rapide : aucun appel IA lent (les messages spontanés
         # utilisent des replis variés, seule la chronique annuelle passe par Ollama).
@@ -210,11 +211,46 @@ def end_turn(tours: int = 1):
             chronique = {"resume": res["resume"], "resume_source": res.get("resume_source"),
                          "resume_annee": res.get("resume_annee")}
         state = res.get("state", state)
+        # Avance rapide INTERROMPUE dès qu'un fait exige le joueur : un souverain lui
+        # écrit, on lui déclare la guerre, ses terres brûlent… Sinon une année passée
+        # d'un clic laissait un ultimatum sans réponse dégénérer en guerre.
+        if n > 1 and i < n - 1:
+            interruption = _fait_qui_interrompt(state, res.get("evenements", []))
+            if interruption:
+                break
     if res is not None:
         res["evenements"] = evenements
         res["messages_diplomatiques"] = messages
+        res["tours_joues"] = (i + 1) if n > 1 else 1
+        res["interruption"] = interruption
         res.update(chronique or {})
     return res
+
+
+def _fait_qui_interrompt(state: dict, evenements: list) -> str | None:
+    """Premier événement du tour qui justifie de rendre la main au joueur."""
+    joueur = state.get("meta", {}).get("joueur_pays")
+    nom_j = state.get("pays", {}).get(joueur, {}).get("nom", "")
+    for e in evenements:
+        if not isinstance(e, dict):
+            continue
+        typ, txt = e.get("type"), e.get("texte") or ""
+        if typ == "victoire":
+            return txt
+        if typ == "message_ia":
+            # Seuls les courriers À CONSÉQUENCE (menace, ultimatum, offre d'alliance,
+            # reproche) arrêtent l'avance ; les politesses défilent.
+            att = state.get("pays", {}).get(e.get("faction") or "", {}).get("attente_reponse")
+            if (att and att.get("tour_msg") == state.get("meta", {}).get("tour")) or "ULTIMATUM" in txt:
+                return txt
+            continue
+        if typ == "guerre" and nom_j and nom_j in txt:
+            return txt
+        if typ in ("catastrophe", "revolte", "barbares") and e.get("faction") == joueur:
+            return txt
+        if typ == "age" and e.get("faction") == joueur:
+            return txt
+    return None
 
 
 @app.post("/api/action")

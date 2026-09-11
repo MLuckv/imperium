@@ -1120,7 +1120,8 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
                 {"nom": "Incendie", "malus": -15, "tours": 3})
             noms = ", ".join(_nom_batiment(b) for b in perdus)
             _noter_heurt(p, 1.2)
-            evenements.append({"type": "catastrophe", "faction": fid,
+            evenements.append({"type": "catastrophe", "faction": fid, "icone": "🔥",
+                               "territoire": ville.get("territoire"),
                                "texte": f"🔥 Un GRAND INCENDIE ravage {ville.get('nom')} : "
                                         f"{noms} partent en fumée ! Il faudra rebâtir."})
 
@@ -1144,7 +1145,7 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
             p.setdefault("prov_modif", {}).setdefault(tid, []).append(
                 {"nom": "Éruption", "malus": -25, "tours": 4})
             _noter_heurt(p, 1.6)
-            evenements.append({"type": "catastrophe", "faction": fid,
+            evenements.append({"type": "catastrophe", "faction": fid, "territoire": tid, "icone": "🌋",
                                "texte": f"🌋 ÉRUPTION : le feu de la terre dévaste "
                                         f"{_nom_territoire(tid)} (−{perte_pop} habitants).{detail}"})
 
@@ -1168,7 +1169,7 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
                     "cible_territoire": _capitale_faction(fid),
                 })
                 _noter_heurt(p, 2.0)
-                evenements.append({"type": "barbares", "faction": fid,
+                evenements.append({"type": "barbares", "faction": fid, "territoire": tid, "icone": "✊",
                                    "texte": f"⚔ RÉBELLION ARMÉE : {_nom_territoire(tid)} se soulève "
                                             f"et lève une armée contre {_nom_pays(fid)} !"})
 
@@ -1186,7 +1187,7 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
                 "force": 11 + tour // 10, "cible_faction": fid,
                 "cible_territoire": _capitale_faction(fid),
             })
-            evenements.append({"type": "barbares", "faction": fid,
+            evenements.append({"type": "barbares", "faction": fid, "territoire": tid, "icone": "☠",
                                "texte": f"⚔ Des BARBARES déferlent sur {_nom_territoire(tid)} : "
                                         f"la horde marche vers {_nom_pays(fid)} !"})
 
@@ -1255,7 +1256,7 @@ def _tour_hordes(state: dict, evenements: list) -> None:
             h["force"] = round(h["force"] * 0.55, 1)
             if random.random() < 0.4:
                 _perdre_unite(defenseur)
-            evenements.append({"type": "barbares", "faction": proprio,
+            evenements.append({"type": "barbares", "faction": proprio, "territoire": prochain, "icone": "⚔",
                                "texte": f"⚔ {_nom_pays(proprio)} repousse les {h['nom']} aux portes "
                                         f"{_de(_nom_territoire(prochain))} !"})
             continue
@@ -1275,7 +1276,7 @@ def _tour_hordes(state: dict, evenements: list) -> None:
                 {"nom": f"Sac ({h['nom']})", "malus": -20, "tours": 4})
             h["force"] = round(h["force"] * 0.7, 1)  # le siège coûte cher aux assaillants
             _noter_heurt(defenseur, 2.0)
-            evenements.append({"type": "barbares", "faction": proprio,
+            evenements.append({"type": "barbares", "faction": proprio, "territoire": prochain, "icone": "🔥",
                                "texte": f"🔥 Les {h['nom']} SACCAGENT {_nom_territoire(prochain)}, capitale de "
                                         f"{_nom_pays(proprio)} : −{butin} or, −{perte_pop} habitants. La cité tient."})
             continue
@@ -1291,7 +1292,7 @@ def _tour_hordes(state: dict, evenements: list) -> None:
                 u["territoire"] = _capitale_faction(proprio) or prochain
         h["territoire"] = prochain
         _noter_heurt(defenseur, 1.5)
-        evenements.append({"type": "barbares", "faction": proprio,
+        evenements.append({"type": "barbares", "faction": proprio, "territoire": prochain, "icone": "🔥",
                            "texte": f"🔥 Les {h['nom']} RAVAGENT {_nom_territoire(prochain)} "
                                     f"({_nom_pays(proprio)}) : pillages, {perte_pop} habitants perdus."})
 
@@ -1315,7 +1316,7 @@ def _verifier_revolte(pays: dict, evenements: list) -> None:
         pays["villes"] = [v for v in pays.get("villes", []) if v.get("territoire") != perdu]
         pays["unites"] = [u for u in pays.get("unites", []) if u.get("territoire") != perdu]
         prov_stab.pop(perdu, None)
-        evenements.append({"type": "revolte", "faction": pays["id"],
+        evenements.append({"type": "revolte", "faction": pays["id"], "territoire": perdu, "icone": "✊",
                            "texte": f"RÉVOLTE : {_nom_territoire(perdu)} se soulève et fait sécession !"})
     if s < 12 and pays.get("unites") and random.random() < 0.5:
         u = random.choice(pays["unites"])
@@ -1331,6 +1332,7 @@ def _progresser_recherche(pays: dict, evenements: list) -> None:
     merv_pct = pays.get("merveilles_effet", {}).get("recherche_pct", 0)
     points = 12.0 * (1 + eff.get("recherche_pct", 0) + merv_pct)
     points += pays.get("ressources", {}).get("population", 0) * 0.1
+    pays["recherche_points"] = round(points, 1)  # affiché par l'arbre (tours restants)
 
     rec = pays.get("recherche_en_cours")
     if not rec:
@@ -1615,19 +1617,23 @@ def _recalculer_puissances(state: dict) -> None:
         espionnage = "reseau_espionnage" in joueur.get("technologies", [])
     for p in pays.values():
         reelle = calculer_puissance(p)
-        if p.get("est_joueur"):
+        # Force ARMÉE seule (sans l'or ni la population) : c'est elle que le joueur
+        # veut comparer avant d'attaquer — la puissance globale, gonflée par le trésor,
+        # faisait passer un royaume sans soldats pour un colosse.
+        armee = _force_militaire(p)
+        if p.get("est_joueur") or espionnage:
             p["puissance"] = reelle
+            p["force_armee"] = armee
             p.pop("puissance_estimee", None)
+            p.pop("force_armee_estimee", None)
         else:
-            if espionnage:
-                p["puissance"] = reelle
-                p.pop("puissance_estimee", None)
-            else:
-                # Estimation ±20% déterministe (seed liée à l'id + tour).
-                rng = random.Random(f"{p['id']}-{state.get('meta', {}).get('tour')}")
-                marge = rng.uniform(-0.20, 0.20)
-                p["puissance_estimee"] = int(round(reelle * (1 + marge)))
-                p.pop("puissance", None)
+            # Estimation ±20% déterministe (seed liée à l'id + tour).
+            rng = random.Random(f"{p['id']}-{state.get('meta', {}).get('tour')}")
+            marge = rng.uniform(-0.20, 0.20)
+            p["puissance_estimee"] = int(round(reelle * (1 + marge)))
+            p["force_armee_estimee"] = int(round(armee * (1 + marge)))
+            p.pop("puissance", None)
+            p.pop("force_armee", None)
 
 
 def verifier_victoire(state: dict) -> dict | None:
@@ -1853,7 +1859,7 @@ def resoudre_bataille(state: dict, att_id: str, def_id: str, prov: str,
         _perdre_unite(att)
         if random.random() < 0.4:
             _perdre_unite(dfn)
-        evenements.append({"type": "guerre", "faction": att_id,
+        evenements.append({"type": "guerre", "faction": att_id, "territoire": prov, "icone": "⚔",
                            "texte": f"⚔ {nom_a} lance l'assaut sur {_nom_territoire(prov)}"
                                     f"{' (capitale)' if est_cap else ''} : REPOUSSÉ par {nom_d} !"})
         return False
@@ -1882,7 +1888,7 @@ def resoudre_bataille(state: dict, att_id: str, def_id: str, prov: str,
     att.setdefault("prov_stab", {})[prov] = 22.0
     att["ressources"]["population"] = round(att["ressources"].get("population", 0) + pop, 1)
     dfn["ressources"]["population"] = max(0.0, round(dfn["ressources"].get("population", 0) - pop, 1))
-    evenements.append({"type": "guerre", "faction": att_id,
+    evenements.append({"type": "guerre", "faction": att_id, "territoire": prov, "icone": "⚔",
                        "texte": f"⚔ Bataille : {nom_a} arrache {_nom_territoire(prov)} à {nom_d} !"})
     return True
 
@@ -2427,10 +2433,17 @@ def appliquer_action(state: dict, action: dict) -> dict:
         tech_id = params.get("tech")
         ok, _ = tech_tree.peut_rechercher(tech_id, pays.get("technologies", []))
         if ok:
+            # Changer de cible ne jette plus le travail accompli : le progrès de
+            # chaque techno entamée est mis de côté et repris si l'on y revient.
+            banque = pays.setdefault("recherche_progres", {})
+            rec = pays.get("recherche_en_cours") or {}
+            if rec.get("tech") and rec.get("tech") != tech_id and rec.get("progres", 0) > 0:
+                banque[rec["tech"]] = max(banque.get(rec["tech"], 0), rec.get("progres", 0))
             pays["recherche_en_cours"] = {
-                "tech": tech_id, "progres": 0,
+                "tech": tech_id, "progres": banque.pop(tech_id, 0),
                 "cout": tech_tree.cout_recherche(tech_id)}
-            return {"texte": f"Recherche orientée vers {tech_id}.",
+            nom = (tech_tree.tech_par_id(tech_id) or {}).get("nom", tech_id)
+            return {"texte": f"Recherche orientée vers {nom}.",
                     "resultat": "Recherche en cours."}
         return {"texte": "Recherche", "resultat": "Échec : prérequis non remplis."}
 

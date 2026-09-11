@@ -63,8 +63,8 @@ export default function ResourceBar({ meta, joueur }) {
           return (
             <div key={key} className="group relative flex items-baseline gap-1.5 whitespace-nowrap">
               <span style={{ color: meta2.tint }} className="text-sm">{meta2.icon}</span>
-              <span className="text-xs text-parchment/70">{meta2.label}</span>
-              <span className="font-semibold tabular-nums">{num(value)}</span>
+              <span className="hidden text-xs text-parchment/70 lg:inline">{meta2.label}</span>
+              <span className="font-semibold tabular-nums" title={meta2.label}>{num(value)}</span>
               {prod != null && (
                 <span className={'text-xs tabular-nums ' + (prod > 0 ? 'text-emerald-300' : prod < 0 ? 'text-red-300' : 'text-parchment/50')}>
                   {prodSuffix(prod)}

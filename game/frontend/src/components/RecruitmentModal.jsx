@@ -11,10 +11,16 @@ const UNIT_LABELS = {
   levee: 'Levée paysanne', infanterie_legere: 'Infanterie légère',
   legionnaire: 'Légionnaire', hoplite: 'Hoplite', phalange: 'Phalange',
   cavalerie: 'Cavalerie', elephant: 'Éléphant de guerre', trireme: 'Trirème',
-  mercenaire: 'Mercenaires (or pur, 0 pop)',
+  mercenaire: 'Mercenaires',
 }
+const TECH_NOMS = { tactique_elephants: 'Tactique des éléphants', navigation_maritime: 'Navigation maritime',
+                    legion_tactique: 'Tactique de la légion', marine_guerre: 'Marine de guerre' }
+const RES_LABEL = { fer: 'fer', bois: 'bois', pierre: 'pierre', or: 'or', nourriture: 'nourriture' }
+// Où trouver la ressource qui manque : évite au joueur de chercher pourquoi il ne
+// peut lever que des paysans après vingt tours.
+const RES_SOURCE = { fer: 'Mine', bois: 'Scierie', pierre: 'Carrière', nourriture: 'Ferme' }
 
-export default function RecruitmentModal({ state, forcedTerr, onClose, onStateChange }) {
+export default function RecruitmentModal({ state, forcedTerr, provNames = {}, onClose, onStateChange }) {
   const [catalog, setCatalog] = useState(null)
   const [busy, setBusy] = useState(null)
   const [flash, setFlash] = useState(null)
@@ -59,7 +65,7 @@ export default function RecruitmentModal({ state, forcedTerr, onClose, onStateCh
           {territoires.length > 0 && (
             <select value={region} onChange={(e) => setRegion(e.target.value)} title="Région de levée"
                     className="max-w-[150px] rounded border border-bronze-dark/60 bg-night px-1.5 py-0.5 text-parchment">
-              {territoires.map((t) => <option key={t} value={t}>{t}</option>)}
+              {territoires.map((t) => <option key={t} value={t}>{provNames[t] || t}</option>)}
             </select>
           )}
           <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
@@ -77,10 +83,16 @@ export default function RecruitmentModal({ state, forcedTerr, onClose, onStateCh
             const resOk = Object.entries(coutRes).every(([rr, v]) => (ress[rr] || 0) >= v)
             const ok = techOk && or >= u.cout && pop >= (u.cout_pop || 1) && resOk
             const resTxt = Object.entries(coutRes).map(([rr, v]) => `${v} ${rr}`).join(', ')
+            // POURQUOI c'est grisé : dit explicitement, plutôt qu'un card-disabled muet.
+            const manques = []
+            if (!techOk) manques.push(`requiert ${TECH_NOMS[u.tech_requise] || u.tech_requise}`)
+            if (or < u.cout) manques.push(`${u.cout - or} or`)
+            if (pop < (u.cout_pop || 1)) manques.push('population')
+            for (const [rr, v] of Object.entries(coutRes)) if ((ress[rr] || 0) < v) manques.push(`${v - (ress[rr] || 0)} ${RES_LABEL[rr] || rr}${RES_SOURCE[rr] ? ` (→ ${RES_SOURCE[rr]})` : ''}`)
             return (
               <button key={u.id} disabled={!ok || !!busy}
                       onClick={() => recruit(u)}
-                      title={techOk ? `Force ${u.force}` : `Requiert : ${u.tech_requise}`}
+                      title={ok ? `Force ${u.force}` : manques.join(', ')}
                       className={'card flex items-center gap-2.5 text-left ' + (ok ? '' : 'card-disabled')}>
                 <UnitIcon type={u.id} className="shrink-0 text-bronze" size={26} />
                 <div className="min-w-0">
@@ -91,6 +103,11 @@ export default function RecruitmentModal({ state, forcedTerr, onClose, onStateCh
                     {resTxt && <span className={resOk ? '' : 'text-red-300'}>· {resTxt}</span>}
                     <span>· force {u.force}</span>
                   </div>
+                  {manques.length > 0 && (
+                    <div className="mt-0.5 text-[11px] text-red-300/90">
+                      {manques[0].startsWith('requiert') ? '🔒 ' : 'Manque : '}{manques.join(', ')}
+                    </div>
+                  )}
                 </div>
               </button>
             )

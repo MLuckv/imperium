@@ -667,6 +667,9 @@ Anachronismes du monde moderne = hérésie. Ne sors jamais du rôle.
 Réponds en JSON STRICT : {{"message":"<ton message>","intent":"reproche|menace|ultimatum|alliance|guerre|neutre"}}"""
 
 
+_DERNIERS_ECLATS: dict[str, list[str]] = {}  # faction → derniers éclats servis (anti-répétition)
+
+
 def message_spontane(faction: str, raison: str, situation_joueur: str = "",
                      relation: str = "neutres", date_jeu: str = "5-03",
                      pays_joueur: str = "rome", utiliser_ia: bool = True,
@@ -697,26 +700,38 @@ def message_spontane(faction: str, raison: str, situation_joueur: str = "",
                 return {"message": _nettoyer_reponse(str(data["message"])), "intent": intent,
                         "auteur": auteur, "source": "ollama"}
     # Repli déterministe VARIÉ : une phrase type + une ligne liée à la raison.
+    # On évite de resservir les dernières phrases de ce dirigeant : sur une année
+    # avancée d'un clic, le même « éclat » revenait cinq fois de suite.
     phrases = _phrases_types(faction) or ["Sache que je te surveille."]
+    recentes = _DERNIERS_ECLATS.setdefault(faction, [])
+    fraiches = [ph for ph in phrases if ph not in recentes] or phrases
     if "manœuvre" in raison or "secrè" in raison:
         intent, ouvertures = "reproche", [
-            "On me rapporte tes intrigues. {P}", "Tes ombres rôdent chez moi. {P}",
-            "Crois-tu que je ne vois rien ? {P}"]
+            "On me rapporte des intrigues. {P}", "Des ombres rôdent chez moi. {P}",
+            "Croit-on que je ne vois rien ? {P}"]
     elif "armée" in raison or "frontière" in raison:
         intent, ouvertures = "menace", [
-            "Tes soldats campent trop près de mes terres. {P}",
-            "Éloigne tes lances de ma frontière. {P}", "Je vois tes étendards depuis mes murs. {P}"]
+            "Ces soldats campent trop près de mes terres. {P}",
+            "Que ces lances s'éloignent de ma frontière. {P}", "Je vois des étendards depuis mes murs. {P}"]
     elif "allian" in raison:
         intent, ouvertures = "alliance", [
             "Le moment est venu de parler d'alliance. {P}",
             "Nos intérêts convergent, parlons-en. {P}"]
     elif "faibl" in raison:
         intent, ouvertures = "menace", [
-            "Ton royaume vacille, et le monde le sait. {P}",
+            "Ce royaume vacille, et le monde le sait. {P}",
             "La faiblesse attire les loups. {P}"]
+    elif "exécrable" in raison or "relations" in raison:
+        intent, ouvertures = "menace", [
+            "Je ne cache pas mon mépris. {P}",
+            "Entre nous, les mots sont comptés. {P}",
+            "Mon opinion n'a pas changé. {P}"]
     else:
-        intent, ouvertures = "neutre", ["{P}", "Écoute bien : {P}"]
-    msg = random.choice(ouvertures).replace("{P}", random.choice(phrases))
+        intent, ouvertures = "neutre", ["{P}", "Écoute bien : {P}", "Retiens ceci : {P}", "{P} Médite cela."]
+    phrase = random.choice(fraiches)
+    recentes.append(phrase)
+    del recentes[:-4]  # mémoire des 4 derniers éclats
+    msg = random.choice(ouvertures).replace("{P}", phrase)
     return {"message": msg, "intent": intent, "auteur": auteur, "source": "fallback"}
 
 

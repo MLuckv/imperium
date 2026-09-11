@@ -20,6 +20,9 @@ export default function TechTree({ state, onClose, onStateChange }) {
   const joueur = joueurId && state.pays ? state.pays[joueurId] : null
   const connues = useMemo(() => new Set((joueur && joueur.technologies) || []), [joueur])
   const enCours = joueur && joueur.recherche_en_cours
+  const ptsTour = (joueur && joueur.recherche_points) || 0
+  // Tours restants pour une techno : ce que le joueur veut VRAIMENT savoir.
+  const toursPour = (cout, progres = 0) => ptsTour > 0 ? Math.max(1, Math.ceil((cout - progres) / ptsTour)) : null
 
   useEffect(() => {
     let cancel = false
@@ -83,13 +86,22 @@ export default function TechTree({ state, onClose, onStateChange }) {
           <h2 className="font-display text-lg font-bold tracking-wide text-gold">Arbre technologique</h2>
           <div className="flex items-center gap-3">
             {enCours && enCours.tech && (
-              <span className="text-xs text-amber-200">Recherche : {byId[enCours.tech] ? byId[enCours.tech].nom : enCours.tech} ({Math.round(enCours.progres || 0)}/{enCours.cout || '?'})</span>
+              <span className="text-xs text-amber-200">
+                Recherche : {byId[enCours.tech] ? byId[enCours.tech].nom : enCours.tech} ({Math.round(enCours.progres || 0)}/{enCours.cout || '?'})
+                {ptsTour > 0 && <span className="text-parchment/60"> · +{Math.round(ptsTour)}/tour · ~{toursPour(enCours.cout || 0, enCours.progres || 0)} tour{toursPour(enCours.cout || 0, enCours.progres || 0) > 1 ? 's' : ''}</span>}
+              </span>
             )}
             <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
           </div>
         </div>
         {msg && <div className={'px-4 py-1.5 text-sm ' + (msg.ok ? 'bg-emerald-950/40 text-emerald-100' : 'bg-red-950/40 text-red-100')}>{msg.text}</div>}
         {error && <div className="p-4 text-red-200">{error}</div>}
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-bronze-dark/40 px-4 py-1.5 text-[11px] text-parchment/60">
+          {[['militaire', 'Militaire'], ['economie', 'Économie'], ['culture', 'Culture'], ['construction', 'Construction']].map(([k, l]) => (
+            <span key={k} className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: BRANCH_TINT[k] }} />{l}</span>
+          ))}
+          <span className="ml-auto">Une seule recherche à la fois · le bouton « Rechercher » change de cible sans perdre le progrès acquis.</span>
+        </div>
 
         <div className="thin-scroll flex-1 overflow-auto p-2">
           <div className="relative" style={{ width: layout.w, height: layout.h }}>
@@ -122,7 +134,7 @@ export default function TechTree({ state, onClose, onStateChange }) {
                   </div>
                   <div className="mt-0.5 line-clamp-2 text-[10px] text-bronze/90">{t.effet}</div>
                   <div className="absolute inset-x-2 bottom-1.5 flex items-center justify-between text-[10px] text-parchment/50">
-                    <span>Coût {t.cout_recherche}</span>
+                    <span>Coût {t.cout_recherche}{st === 'dispo' && toursPour(t.cout_recherche) ? ` · ~${toursPour(t.cout_recherche)} t` : ''}</span>
                     {st !== 'acquise' && (
                       <button onClick={() => research(t)} disabled={st === 'verrou' || !!busy}
                               className="rounded bg-bronze px-1.5 py-0.5 text-[10px] font-semibold text-ink hover:bg-bronze-dark hover:text-parchment disabled:opacity-40">
