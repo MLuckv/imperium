@@ -544,7 +544,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       const scale = cover * 1.5
       let cx = bb.minX + cw * 0.5, cy = bb.minY + ch * 0.6
       const chez = centreJoueur()
-      if (chez) { cx = chez[0]; cy = chez[1] }
+      if (chez) { cx = chez[0]; cy = chez[1]; centreFaitRef.current = true }
       viewRef.current = { scale, x: W / 2 - cx * scale, y: H / 2 - cy * scale }
       clampView()
     }
@@ -626,7 +626,15 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  useEffect(() => { if (dataRef.current) draw() /* eslint-disable-next-line */ }, [stateData, refreshKey])
+  // Recentre sur les terres du joueur dès qu'on les connaît (une seule fois) : si
+  // la carte s'est chargée avant l'état, le cadrage initial visait le milieu du monde.
+  const centreFaitRef = useRef(false)
+  useEffect(() => {
+    if (!dataRef.current) return
+    if (!centreFaitRef.current && !userAdjustedRef.current && centreJoueur()) { centreFaitRef.current = true; layout(true) }
+    draw()
+    // eslint-disable-next-line
+  }, [stateData, refreshKey])
   useEffect(() => { if (dataRef.current && marqueurs) poserMarqueurs(marqueurs) /* eslint-disable-next-line */ }, [marqueurs])
 
   return (
