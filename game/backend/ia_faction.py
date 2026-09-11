@@ -77,8 +77,15 @@ def jouer(state: dict, fid: str, evenements: list) -> list[str]:
     _impots(pays, actions)
     _gouverneurs(pays, fid, actions)
     _fonder_ville(state, fid, pays, actions)
-    _construire(pays, actions)
-    _recruter(pays, fid, prio, actions, en_guerre=bool(_guerres_de(state, fid)))
+    en_guerre = bool(_guerres_de(state, fid))
+    if en_guerre:
+        # En guerre, l'ARMÉE passe avant les chantiers, et l'on garde un trésor de
+        # guerre : sinon l'IA dépensait tout en fermes et restait à une unité.
+        _recruter(pays, fid, prio, actions, en_guerre=True)
+        _construire(pays, actions, reserve_min=160)
+    else:
+        _construire(pays, actions)
+        _recruter(pays, fid, prio, actions, en_guerre=False)
     if _chasser_hordes(state, fid, pays, prio, actions, evenements):
         pass  # la horde aux portes passe avant tout le reste
     elif not _mener_guerres(state, fid, pays, prio, actions, evenements):
@@ -147,13 +154,13 @@ def _gouverneurs(pays: dict, fid: str, actions: list) -> None:
     actions.append(f"nomme un gouverneur à {ville.get('nom')}")
 
 
-def _construire(pays: dict, actions: list) -> None:
+def _construire(pays: dict, actions: list, reserve_min: int = 40) -> None:
     """Lance un chantier dans la première ville libre (ordre de priorité du dirigeant).
     Les CONQUÉRANTS gardent une grosse réserve d'or : ils épargnent pour annexer."""
     res = pays.get("ressources", {})
     p_ia = PRIORITES_IA.get(pays.get("id"), {})
     prio = p_ia.get("batiments", [])
-    reserve = 40
+    reserve = reserve_min
     if p_ia.get("expansion", 0) >= 0.55 and len(pays.get("territoires", [])) < 5:
         nb = len(pays.get("territoires", []))
         reserve = int(ge.COUT_CONQUETE_OR * (1.3 ** nb)) + 60  # de quoi annexer d'abord
@@ -190,8 +197,9 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list,
     # Les conquérants gardent en plus leur or pour annexer tant qu'ils sont petits.
     if prio.get("expansion", 0) >= 0.55 and nb_terr < 3:
         cible = min(cible, 3)
-    # Trésor exsangue ou revenus négatifs : on cesse de recruter.
-    if res.get("or", 0) < 120 or pays.get("production", {}).get("or", 0) < 0:
+    # Trésor exsangue ou revenus négatifs : on cesse de recruter (en guerre, on
+    # racle le fond du coffre : la levée coûte 10 or).
+    if res.get("or", 0) < (40 if en_guerre else 120) or pays.get("production", {}).get("or", 0) < 0:
         return
     # TRÉSOR QUI DÉBORDE : même en paix, un royaume opulent solde des garnisons
     # (puits d'or crédible ; sinon l'IA thésaurise sans fin).
@@ -232,7 +240,7 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list,
     cout = ge._cout_inflation(pays, COUTS_UNITES.get(type_u, 0))
     cout_pop = COUT_POP_UNITES.get(type_u, 1)
     cout_res = COUT_RES_UNITES.get(type_u, {})
-    if res.get("or", 0) < cout + 60 or res.get("population", 0) < cout_pop + 8:
+    if res.get("or", 0) < cout + (10 if en_guerre else 60) or res.get("population", 0) < cout_pop + 8:
         return
     if any(res.get(r, 0) < v for r, v in cout_res.items()):
         return
@@ -260,6 +268,68 @@ def _centre(tid: str) -> tuple[float, float]:
 def _distance(a: str, b: str) -> float:
     ca, cb = _centre(a), _centre(b)
     return ((ca[0] - cb[0]) ** 2 + (ca[1] - cb[1]) ** 2) ** 0.5
+
+
+# ---------------------------------------------------------------- marche des armées
+def _a_navigation(pays: dict) -> bool:
+    return "navigation_maritime" in pays.get("technologies", [])
+
+
+def _voisins(tid: str, naval: bool) -> list[str]:
+    v = list(ge._adjacents(tid))
+    if naval:
+        v += [m for m in ge._adjacents_mer(tid) if m not in v]
+    return v
+
+
+def _chemin_vers(state: dict, fid: str, depart: str, cibles: set[str], naval: bool,
+                 limite: int = 14) -> list[str] | None:
+    """Plus court chemin (en pas) de `depart` vers l'une des `cibles`, en ne traversant
+    que des provinces NEUTRES ou à soi — la cible elle-même peut être ennemie (c'est
+    la bataille). Retourne la liste des pas (sans le départ), ou None si hors d'atteinte.
+    Remplace l'ancienne marche « à vol d'oiseau » qui s'échouait sur les côtes."""
+    if depart in cibles:
+        return []
+    parents = {depart: None}
+    file = [depart]
+    for _ in range(limite):
+        suivante = []
+        for cur in file:
+            for v in _voisins(cur, naval):
+                if v in parents:
+                    continue
+                parents[v] = cur
+                if v in cibles:
+                    chemin = [v]
+                    while parents[chemin[-1]] not in (None, depart):
+                        chemin.append(parents[chemin[-1]])
+                    return list(reversed(chemin))
+                if ge._proprietaire(state, v) in (None, fid):
+                    suivante.append(v)
+        file = suivante
+        if not file:
+            break
+    return None
+
+
+def portee_guerre(state: dict, fid: str, cible: str, limite: int = 14) -> int | None:
+    """Nombre de pas séparant les forces de `fid` des terres de `cible` (None = hors
+    d'atteinte : pas de chemin terrestre, ni maritime sans navigation). Sert à ne
+    déclarer que des guerres que l'on peut MENER, et à clore celles qu'on ne peut pas."""
+    pays = state.get("pays", {}).get(fid, {})
+    cp = state.get("pays", {}).get(cible, {})
+    cibles = set(cp.get("territoires", []))
+    if not cibles:
+        return None
+    naval = _a_navigation(pays)
+    positions = set(pays.get("territoires", []))
+    positions.update(u.get("territoire") for u in pays.get("unites", []))
+    meilleur = None
+    for pos in positions:
+        ch = _chemin_vers(state, fid, pos, cibles, naval, limite)
+        if ch is not None and (meilleur is None or len(ch) < meilleur):
+            meilleur = len(ch)
+    return meilleur
 
 
 def _expansion(state: dict, fid: str, pays: dict, prio: dict,
@@ -375,10 +445,11 @@ def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
         cap_e = ge._capitale_faction(ennemi)
         # Le front = provinces ennemies adjacentes à MES territoires OU à MES armées
         # (une armée en marche peut donc porter la guerre chez l'ennemi).
+        naval = _a_navigation(pays)
         positions = set(pays.get("territoires", []))
         positions.update(u.get("territoire") for u in pays.get("unites", []))
         frontieres = [t for t in cible.get("territoires", [])
-                      if any(v in positions for v in ge._adjacents(t))]
+                      if any(v in positions for v in _voisins(t, naval))]
         provinces = [t for t in frontieres if t != cap_e]
         ma_force, sa_force = _force_totale(pays), _force_totale(cible)
         if provinces:  # d'abord les provinces ordinaires
@@ -405,15 +476,21 @@ def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
                                    "texte": f"⚔ {ge.META_FACTIONS.get(fid, {}).get('nom', fid)} assiège "
                                             f"{ge._nom_territoire(cap_e)} : la garnison s'épuise."})
                 return True
-        elif cap_e:  # pas de front : les armées MARCHENT vers l'ennemi
+        else:  # pas de front : les armées MARCHENT vers la province ennemie la plus proche
+            cibles = set(cible.get("territoires", []))
+            marche = 0
             for u in [x for x in pays.get("unites", []) if not x.get("a_bouge")]:
-                pas = [t for t in ge._adjacents(u.get("territoire", ""))
-                       if ge._proprietaire(state, t) in (None, fid)]
-                if pas:
-                    meilleur = min(pas, key=lambda t: _distance(t, cap_e))
-                    if _distance(meilleur, cap_e) < _distance(u.get("territoire", ""), cap_e):
-                        u["territoire"] = meilleur
-                        u["a_bouge"] = True
+                ch = _chemin_vers(state, fid, u.get("territoire", ""), cibles, naval)
+                if not ch:
+                    continue
+                pas = ch[0]
+                if pas in cibles:  # l'ennemi est à portée : on s'arrête au contact,
+                    continue        # la bataille se joue au prochain tour (front établi)
+                u["territoire"] = pas
+                u["a_bouge"] = True
+                marche += 1
+            if marche:
+                actions.append(f"fait marcher {marche} unité(s) vers {ge.META_FACTIONS.get(ennemi, {}).get('nom', ennemi)}")
     return True  # en guerre : on ne s'étend pas en parallèle
 
 
@@ -459,6 +536,19 @@ def _faire_la_paix(state: dict, fid: str, pays: dict, evenements: list) -> None:
     for g in list(_guerres_de(state, fid)):
         autre_id = g["a"] if g.get("b") == fid else g["b"]
         autre = state.get("pays", {}).get(autre_id, {})
+        # Guerre HORS D'ATTEINTE (pas de chemin, ni terrestre ni maritime) : au bout de
+        # six mois sans pouvoir porter le fer, on y renonce — plus de guerres nominales
+        # qui traînent trente tours sans un seul combat.
+        if tour - g.get("depuis", tour) >= 6 and portee_guerre(state, fid, autre_id) is None \
+                and abs(g.get("score", 0.0)) < 5 and random.random() < 0.5:
+            diplo["guerres_actives"].remove(g)
+            for x, y in ((fid, autre_id), (autre_id, fid)):
+                rep = state["pays"].get(x, {}).setdefault("reputation", {})
+                rep[y] = min(100, rep.get(y, 0) + 5)
+            evenements.append({"type": "paix", "faction": fid,
+                               "texte": f"🕊 {ge.META_FACTIONS.get(fid, {}).get('nom', fid)}, ne pouvant porter le fer "
+                                        f"jusqu'à {ge.META_FACTIONS.get(autre_id, {}).get('nom', autre_id)}, renonce à la guerre."})
+            continue
         f1, f2 = _force_totale(pays), _force_totale(autre)
         if max(f1, f2) > min(f1, f2) * 1.5 + 2:
             continue  # quelqu'un domine : pas de paix, la guerre se poursuit

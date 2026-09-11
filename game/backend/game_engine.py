@@ -1468,6 +1468,13 @@ def _resoudre_conflits(state: dict) -> list[dict]:
         fb = _force_militaire(pays[b])
         if fa == fb:
             continue
+        # Pas d'escarmouches abstraites entre royaumes qui ne se touchent pas : il
+        # faut des armées au contact (frontière commune ou colonne aux portes).
+        pos_a = set(pays[a].get("territoires", [])) | {u.get("territoire") for u in pays[a].get("unites", [])}
+        pos_b = set(pays[b].get("territoires", [])) | {u.get("territoire") for u in pays[b].get("unites", [])}
+        contact = any(v in pos_b for t in pos_a for v in _adjacents(t))
+        if not contact:
+            continue
         gagnant, perdant = (a, b) if fa > fb else (b, a)
         # Le perdant subit des pertes de moral et un effectif réduit.
         for u in pays[perdant].get("unites", []):
@@ -1793,7 +1800,18 @@ def _appliquer_intent_diplo(state: dict, fid: str, joueur: str, intent: str, eve
     rep = state["pays"][fid].setdefault("reputation", {})
     cur = rep.get(joueur, 0)
     if intent == "guerre":
+        import ia_faction
         ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
+        if ia_faction.portee_guerre(state, fid, joueur) is None:
+            # Hors d'atteinte : pas de guerre nominale. Le souverain ROMPT plutôt toute
+            # relation — traités déchirés, réputation au plus bas.
+            traites = state.setdefault("diplomatie", {}).setdefault("traites_actifs", [])
+            traites[:] = [tr for tr in traites if {fid, joueur} != {tr.get("a"), tr.get("b")}]
+            rep[joueur] = max(-100, cur - 30)
+            evenements.append({"type": "message_ia", "faction": fid,
+                               "texte": f"✉ {ai_director.nom_dirigeant(fid)} ({_nom_pays(fid)}) rompt toute relation "
+                                        f"avec {_nom_pays(joueur)} : ses ambassadeurs quittent votre cour."})
+            return
         if not any({g.get("a"), g.get("b")} == {fid, joueur} for g in ga):
             ga.append({"a": fid, "b": joueur, "depuis": state.get("meta", {}).get("tour"), "score": 0.0})
             evenements.append({"type": "guerre", "faction": fid,
@@ -2063,9 +2081,11 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     # 7) Vérifie la victoire (basique).
     victoire = verifier_victoire(state)
     if victoire:
+        deja = state.get("victoire")  # n'annonce la fin qu'une seule fois
         state["victoire"] = victoire
-        evenements.append({"type": "victoire", "faction": victoire["gagnant"],
-                           "texte": victoire["raison"]})
+        if not deja:
+            evenements.append({"type": "victoire", "faction": victoire["gagnant"],
+                               "texte": victoire["raison"]})
 
     # 8) MAJ world_state.md tous les 6 tours — TOUJOURS déterministe (résumé par code :
     # aucune IA dans la fin de tour, cf. demande v20).
