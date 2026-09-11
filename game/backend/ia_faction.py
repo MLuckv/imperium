@@ -13,6 +13,8 @@ from __future__ import annotations
 import random
 
 import game_engine as ge
+import ai_director
+import conversations
 from models.unit import FORCES_UNITES, COUTS_UNITES, COUT_RES_UNITES, COUT_POP_UNITES
 from models.city import COUT_BATIMENTS, COUT_RES_BATIMENTS, DUREE_BATIMENTS
 
@@ -95,7 +97,8 @@ def jouer(state: dict, fid: str, evenements: list) -> list[str]:
         pass  # la horde aux portes passe avant tout le reste
     elif not _mener_guerres(state, fid, pays, prio, actions, evenements):
         _expansion(state, fid, pays, prio, actions, evenements)
-        _repartir_garnisons(state, fid, pays)
+        if not _campagne(state, fid, pays, prio, actions, evenements):
+            _repartir_garnisons(state, fid, pays)
     _alliances(state, fid, pays, prio, actions, evenements)
     _declarer_guerre(state, fid, pays, prio, evenements)
     _faire_la_paix(state, fid, pays, evenements)
@@ -223,7 +226,7 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list,
     cible = min(prio.get("armee_cible", 3), 2 + int(nb_terr * 1.5))
     # Le revenu borne aussi l'armée : au-delà, la solde étrangle le royaume.
     revenu = pays.get("production", {}).get("or", 0)
-    if not en_guerre:
+    if not en_guerre and not pays.get("_plan_guerre"):
         cible = min(cible, max(2, int(2 + revenu / 6)))
     # Les conquérants gardent en plus leur or pour annexer tant qu'ils sont petits.
     if prio.get("expansion", 0) >= 0.55 and nb_terr < 3:
@@ -246,6 +249,9 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list,
             actions.append("solde une garnison de mercenaires")
             return
 
+    plan = pays.get("_plan_guerre")
+    if plan and not en_guerre:  # CAMPAGNE en préparation : on lève l'armée du plan
+        cible = max(cible, min(prio.get("armee_cible", 3) + 2, 2 + int(nb_terr * 1.5) + 2))
     if en_guerre:  # en GUERRE, on mobilise davantage (l'IA se bat pour de bon)
         cible += 3
         # Trésor de guerre : les riches soldent des MERCENAIRES (or pur, pas de pop).
@@ -400,25 +406,184 @@ def _expansion(state: dict, fid: str, pays: dict, prio: dict,
                 evenements.append({"type": "expansion", "faction": fid,
                                    "texte": f"{ge.META_FACTIONS.get(fid, {}).get('nom', fid)} annexe {ge._nom_territoire(tid)}."})
                 return
-    # 2) Sinon, déplace une unité libre vers la meilleure cible neutre adjacente —
-    # ou, si elle est ENFERMÉE dans l'empire, vers la frontière (province possédée
-    # qui touche une neutre), pour ne jamais rester coincée.
+    # 2) Sinon, une unité libre MARCHE (plus court chemin) vers la meilleure terre
+    # neutre de la SPHÈRE d'ambition — le Nil pour Ptolémée, la mer Égée pour
+    # Alexandre, l'île pour Arthur — et à défaut vers la neutre la plus proche.
     libre = next((u for u in pays.get("unites", []) if not u.get("a_bouge")), None)
     if not libre:
         return
-    voisins = [t for t in ge._adjacents(libre.get("territoire", ""))
-               if ge._proprietaire(state, t) is None]
-    if voisins:
-        cible = max(voisins, key=score)
-        libre["territoire"] = cible
-        libre["a_bouge"] = True
+    naval = _a_navigation(pays)
+    sphere = _sphere(state, fid)
+    cibles = [tid for tid in sphere if ge._proprietaire(state, tid) is None]
+    if not cibles:
+        cibles = [t for own in pays.get("territoires", []) for t in _voisins(own, naval)
+                  if ge._proprietaire(state, t) is None]
+    if not cibles:
         return
-    frontiere = [t for t in ge._adjacents(libre.get("territoire", ""))
-                 if t in pays.get("territoires", [])
-                 and any(ge._proprietaire(state, v) is None for v in ge._adjacents(t))]
-    if frontiere:
-        libre["territoire"] = random.choice(frontiere)
+    # Dépenses en vue : on ne marche que si l'annexion sera payable sous peu.
+    cout = ge._cout_inflation(pays, ge.COUT_CONQUETE_OR * (1.3 ** len(pays.get("territoires", []))))
+    if res.get("or", 0) + 6 * max(0.0, pays.get("production", {}).get("or", 0)) < cout:
+        return
+    meilleure = max(cibles, key=score)
+    ch = _chemin_vers(state, fid, libre.get("territoire", ""), {meilleure}, naval)
+    if not ch:
+        # La meilleure est inaccessible : la neutre atteignable la plus proche.
+        for c in sorted(cibles, key=lambda c: -score(c))[:6]:
+            ch = _chemin_vers(state, fid, libre.get("territoire", ""), {c}, naval)
+            if ch:
+                break
+    if ch:
+        libre["territoire"] = ch[0]
         libre["a_bouge"] = True
+
+
+# ---------------------------------------------------------------- stratégie
+def _sphere(state: dict, fid: str) -> list[str]:
+    """SPHÈRE D'AMBITION d'une faction : les provinces à trois pas de sa capitale
+    (terre et mer), sans les capitales d'autrui, de la plus proche à la plus
+    lointaine. C'est là qu'elle veut s'étendre, et ce qu'elle veut reprendre."""
+    cache = state.setdefault("_spheres", {})
+    if fid in cache:
+        return cache[fid]
+    cap = ge._capitale_faction(fid)
+    autres_caps = {ge._capitale_faction(f) for f in state.get("pays", {}) if f != fid}
+    ordre, vus, file = [], {cap}, [cap]
+    for _ in range(3):
+        suivante = []
+        for cur in file:
+            for v in _voisins(cur, True):
+                if v in vus:
+                    continue
+                vus.add(v); suivante.append(v)
+                if v not in autres_caps:
+                    ordre.append(v)
+        file = suivante
+    cache[fid] = ordre
+    return ordre
+
+
+def _choisir_proie(state: dict, fid: str, pays: dict, prio: dict) -> tuple[str, list[str]] | None:
+    """Contre qui partir en campagne ? Celui qui tient des provinces de MA sphère,
+    mon rival de cœur, ou un voisin nettement plus faible — à condition de pouvoir
+    l'atteindre. Retourne (proie, provinces visées) ou None."""
+    joueur = state.get("meta", {}).get("joueur_pays")
+    tour = state.get("meta", {}).get("tour", 1)
+    ma_force = _force_totale(pays)
+    sphere = set(_sphere(state, fid))
+    meilleur = None
+    for cid, cp in state.get("pays", {}).items():
+        if cid == fid or cp.get("elimine") or _allies_entre(state, fid, cid):
+            continue
+        if cid == joueur and tour < 36:
+            continue  # trois ans de grâce : le joueur apprend le jeu
+        rep = pays.get("reputation", {}).get(cid, 0)
+        tenues = [t for t in cp.get("territoires", []) if t in sphere and t != ge._capitale_faction(cid)]
+        sa_force = _force_totale(cp)
+        ratio = ma_force / max(1.0, sa_force)
+        score = len(tenues) * 3.0 + (5.0 if cid == prio.get("rival") else 0.0) + min(6.0, ratio * 2)
+        if rep > 30 and cid != prio.get("rival"):
+            score -= 8  # on ne fait pas la guerre à un ami
+        if cid == joueur:
+            score -= 2  # un peu de retenue envers le joueur (il négocie, lui)
+        portee = portee_guerre(state, fid, cid)
+        if portee is None:
+            continue
+        proche = portee <= 2  # voisin direct ou à une province près
+        if not tenues and not proche:
+            continue
+        if not tenues and ratio < 1.3:
+            continue  # un voisin qu'on ne domine pas nettement : pas de guerre gratuite
+        if score <= 0:
+            continue
+        if meilleur is None or score > meilleur[0]:
+            # Objectif : les provinces de ma sphère qu'il tient, sinon ses 2 provinces
+            # frontalières les plus proches de ma capitale.
+            objectif = tenues[:3] or sorted(
+                [tt for tt in cp.get("territoires", []) if tt != ge._capitale_faction(cid)],
+                key=lambda tt: _distance(tt, ge._capitale_faction(fid) or tt))[:2]
+            meilleur = (score, cid, objectif)
+    return (meilleur[1], meilleur[2]) if meilleur else None
+
+
+def _campagne(state: dict, fid: str, pays: dict, prio: dict,
+              actions: list, evenements: list) -> bool:
+    """PLAN DE GUERRE : quand la sphère n'offre plus de terres neutres (ou qu'un
+    rival en tient), l'IA choisit une proie, lève l'armée du plan, la masse à la
+    frontière, puis déclare la guerre — ou, contre le joueur, pose un CASUS BELLI
+    (un courrier de menace, trois mois pour réagir). Retourne True si l'armée est
+    mobilisée (pas de répartition des garnisons ce tour-là)."""
+    tour = state.get("meta", {}).get("tour", 1)
+    plan = pays.get("_plan_guerre")
+    if plan and (tour - plan.get("depuis", tour) > 30 or state.get("pays", {}).get(plan["cible"], {}).get("elimine")):
+        pays["_plan_guerre"] = None; plan = None  # plan éventé
+    if plan is None:
+        if len(pays.get("territoires", [])) < 3 or pays.get("stabilite", 60) < 45:
+            return False
+        if pays.get("production", {}).get("or", 0) < 15:
+            return False
+        neutres_sphere = [t for t in _sphere(state, fid) if ge._proprietaire(state, t) is None]
+        # Tant qu'il reste des terres libres proches, on préfère les prendre sans sang —
+        # sauf pour les conquérants, qui n'attendent pas.
+        envie = prio.get("agressivite", 0.3) * (0.10 if neutres_sphere else 0.35)
+        if random.random() > envie:
+            return False
+        proie = _choisir_proie(state, fid, pays, prio)
+        if not proie:
+            return False
+        cible, objectif = proie
+        pays["_plan_guerre"] = {"cible": cible, "objectif": objectif, "depuis": tour, "menace": None}
+        actions.append(f"prépare une campagne contre {ge.META_FACTIONS.get(cible, {}).get('nom', cible)}")
+        return False
+    cible = plan["cible"]
+    cp = state.get("pays", {}).get(cible, {})
+    joueur = state.get("meta", {}).get("joueur_pays")
+    ma_force, sa_force = _force_totale(pays), _force_totale(cp)
+    seuil = 1.15 if cible == prio.get("rival") else 1.3
+    pret = ma_force >= sa_force * seuil and len(pays.get("unites", [])) >= 3
+    # Masse l'armée vers la province visée (au contact, pas dessus : ce serait la guerre).
+    objectifs = set(plan.get("objectif") or cp.get("territoires", []))
+    naval = _a_navigation(pays)
+    for u in [x for x in pays.get("unites", []) if not x.get("a_bouge")]:
+        ch = _chemin_vers(state, fid, u.get("territoire", ""), objectifs, naval)
+        if ch and len(ch) > 1 and ge._proprietaire(state, ch[0]) in (None, fid):
+            u["territoire"] = ch[0]; u["a_bouge"] = True
+    if not pret:
+        return True
+    if cible == joueur:
+        # CASUS BELLI : un courrier de menace, puis la guerre au bout de trois mois
+        # si rien ne change (alliance conclue, tribut consenti…).
+        if plan.get("menace") is None:
+            nd = ai_director.nom_dirigeant(fid)
+            noms = [ge._nom_territoire(o) for o in plan.get("objectif", [])[:2]]
+            vis = " et ".join(noms) if noms else "votre soumission"
+            texte = (f"Mes armées sont massées à vos portes et je réclame {vis}. "
+                     f"Cédez, payez-moi tribut, ou préparez-vous à la guerre : vous avez trois mois.")
+            conversations.ajouter_message(state, fid, role="ia", auteur=nd, texte=texte, tour=tour)
+            pays["attente_reponse"] = {"intent": "casus_belli", "tour_msg": tour}
+            plan["menace"] = tour
+            evenements.append({"type": "message_ia", "faction": fid,
+                               "texte": f"✉ {nd} ({_nom(fid)}) vous écrit : « {texte} »"})
+        return True
+    # Proie IA : déclaration directe.
+    _declarer(state, fid, cible, evenements, objectif=plan.get("objectif"))
+    pays["_plan_guerre"] = None
+    return True
+
+
+def _nom(fid: str) -> str:
+    return ge.META_FACTIONS.get(fid, {}).get("nom", fid)
+
+
+def _declarer(state: dict, fid: str, cible: str, evenements: list, objectif: list | None = None) -> None:
+    ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
+    if any({g.get("a"), g.get("b")} == {fid, cible} for g in ga):
+        return
+    ga.append({"a": fid, "b": cible, "depuis": state.get("meta", {}).get("tour", 1), "score": 0.0,
+               "objectif": list(objectif or []), "pris": 0})
+    r = state["pays"][cible].setdefault("reputation", {})
+    r[fid] = max(-100, r.get(fid, 0) - 40)
+    evenements.append({"type": "guerre", "faction": fid,
+                       "texte": f"⚔ {_nom(fid)} déclare la GUERRE à {_nom(cible)} !"})
 
 
 # ---------------------------------------------------------------- guerre
@@ -487,10 +652,33 @@ def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
                       if any(v in positions for v in _voisins(t, naval))]
         provinces = [t for t in frontieres if t != cap_e]
         ma_force, sa_force = _force_totale(pays), _force_totale(cible)
-        if provinces:  # d'abord les provinces ordinaires
+        # Buts de guerre atteints (provinces visées prises, ou trois provinces) : contre
+        # une IA, on accorde la paix ; contre le joueur, on la PROPOSE (à lui de la
+        # négocier — ou de continuer).
+        objectif = g.get("objectif") or []
+        joueur = state.get("meta", {}).get("joueur_pays")
+        attaquant = g.get("a") == fid  # seul l'AGRESSEUR a des buts de guerre à cocher
+        buts_atteints = attaquant and (
+            (objectif and all(o in pays.get("territoires", []) for o in objectif)) or g.get("pris", 0) >= 3)
+        if buts_atteints and ennemi != joueur:
+            state["diplomatie"]["guerres_actives"].remove(g)
+            evenements.append({"type": "paix", "faction": fid,
+                               "texte": f"🕊 {_nom(fid)}, satisfait de ses conquêtes, accorde la paix à {_nom(ennemi)}."})
+            return True
+        if buts_atteints and ennemi == joueur and not g.get("paix_proposee"):
+            g["paix_proposee"] = state.get("meta", {}).get("tour", 1)
+            nd = ai_director.nom_dirigeant(fid)
+            texte = "J'ai pris ce que je voulais. Faisons la paix — ou continuons, si vous tenez à perdre davantage."
+            conversations.ajouter_message(state, fid, role="ia", auteur=nd, texte=texte,
+                                          tour=state.get("meta", {}).get("tour", 1))
+            evenements.append({"type": "message_ia", "faction": fid,
+                               "texte": f"✉ {nd} ({_nom(fid)}) vous écrit : « {texte} »"})
+        if provinces:  # d'abord les provinces ordinaires — celles de l'objectif en tête
             if ma_force >= sa_force * 1.15 and random.random() < 0.6:
-                prov = random.choice(provinces)
+                visees = [t for t in provinces if t in objectif]
+                prov = random.choice(visees or provinces)
                 if ge.resoudre_bataille(state, fid, ennemi, prov, evenements):
+                    g["pris"] = g.get("pris", 0) + 1
                     actions.append(f"prend {ge._nom_territoire(prov)}")
                 return True
         elif cap_e in frontieres:  # il ne reste que la capitale : SIÈGE puis assaut final
@@ -599,11 +787,9 @@ def _declarer_guerre(state: dict, fid: str, pays: dict, prio: dict, evenements: 
         return
     candidats.sort()
     proie = candidats[0][2]
-    state.setdefault("diplomatie", {}).setdefault("guerres_actives", []).append(
-        {"a": fid, "b": proie, "depuis": state.get("meta", {}).get("tour", 1), "score": 0.0})
-    evenements.append({"type": "guerre", "faction": fid,
-                       "texte": f"⚔ {ge.META_FACTIONS.get(fid, {}).get('nom', fid)} déclare la GUERRE "
-                                f"à {ge.META_FACTIONS.get(proie, {}).get('nom', proie)} !"})
+    sphere = set(_sphere(state, fid))
+    objectif = [t for t in state["pays"][proie].get("territoires", []) if t in sphere][:3]
+    _declarer(state, fid, proie, evenements, objectif=objectif)
 
 
 def _faire_la_paix(state: dict, fid: str, pays: dict, evenements: list) -> None:

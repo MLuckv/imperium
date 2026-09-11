@@ -2009,6 +2009,23 @@ def _escalader_messages_ignores(state: dict, evenements: list) -> None:
                       for m in thread)
         rep = f.setdefault("reputation", {})
         nd = ai_director.nom_dirigeant(fid)
+        if att.get("intent") == "casus_belli":
+            # Menace de campagne : répondre ne suffit pas, il faut que la situation
+            # ait CHANGÉ (alliance scellée, réputation redressée par un accord/tribut).
+            if tour - att.get("tour_msg", tour) < 3:
+                continue
+            f["attente_reponse"] = None
+            import ia_faction
+            apaise = ia_faction._allies_entre(state, fid, joueur) or rep.get(joueur, 0) > 0
+            if apaise:
+                f["_plan_guerre"] = None
+                evenements.append({"type": "message_ia", "faction": fid,
+                                   "texte": f"✉ {nd} ({_nom_pays(fid)}) rappelle ses armées : vos gestes l'ont apaisé."})
+            else:
+                plan = f.get("_plan_guerre") or {}
+                ia_faction._declarer(state, fid, joueur, evenements, objectif=plan.get("objectif"))
+                f["_plan_guerre"] = None
+            continue
         if repondu:  # le joueur a répondu : la situation se détend un peu
             f["attente_reponse"] = None
             rep[joueur] = min(100, rep.get(joueur, 0) + 5)
