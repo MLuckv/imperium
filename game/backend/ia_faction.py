@@ -472,7 +472,7 @@ def _choisir_proie(state: dict, fid: str, pays: dict, prio: dict) -> tuple[str, 
     sphere = set(_sphere(state, fid))
     meilleur = None
     for cid, cp in state.get("pays", {}).items():
-        if cid == fid or cp.get("elimine") or _allies_entre(state, fid, cid):
+        if cid == fid or cp.get("elimine") or _allies_entre(state, fid, cid) or _pacte_entre(state, fid, cid):
             continue
         if cid == joueur and tour < 36:
             continue  # trois ans de grâce : le joueur apprend le jeu
@@ -598,8 +598,16 @@ def _guerres_de(state: dict, fid: str) -> list[dict]:
 
 
 def _allies_entre(state: dict, a: str, b: str) -> bool:
-    return any(t.get("type") == "alliance" and {a, b} == {t.get("a"), t.get("b")}
-               for t in state.get("diplomatie", {}).get("traites_actifs", []))
+    return ge.traite_entre(state, a, b, ("alliance",)) is not None
+
+
+def _pacte_entre(state: dict, a: str, b: str) -> bool:
+    """Pacte de non-agression (conclu par le dialogue) : l'IA le respecte 36 mois."""
+    tr = ge.traite_entre(state, a, b, ("non_agression",))
+    if not tr:
+        return False
+    tour = state.get("meta", {}).get("tour", 1)
+    return tour - (tr.get("tour") or tour) < 36
 
 
 def _chasser_hordes(state: dict, fid: str, pays: dict, prio: dict,
@@ -771,7 +779,7 @@ def _declarer_guerre(state: dict, fid: str, pays: dict, prio: dict, evenements: 
     candidats = []
     rival = prio.get("rival")
     for cid, cp in state.get("pays", {}).items():
-        if cid in (fid, joueur) or cp.get("elimine") or _allies_entre(state, fid, cid):
+        if cid in (fid, joueur) or cp.get("elimine") or _allies_entre(state, fid, cid) or _pacte_entre(state, fid, cid):
             continue
         # Pas de guerre sans FRONT : il faut une frontière commune (ou presque).
         proche = any(v in pays.get("territoires", [])

@@ -822,6 +822,7 @@ PROFIL : {PROFIL}
 
 Tu écris SPONTANÉMENT, de ta propre initiative, au dirigeant de {PAYS_JOUEUR}.
 RAISON qui te pousse à écrire : {RAISON}
+{RELANCE}
 Ce que tes espions savent de son royaume : {SITUATION_JOUEUR}
 Vos relations actuelles : {RELATION}
 
@@ -836,10 +837,32 @@ Réponds en JSON STRICT : {{"message":"<ton message>","intent":"reproche|menace|
 _DERNIERS_ECLATS: dict[str, list[str]] = {}  # faction → derniers éclats servis (anti-répétition)
 
 
+RELANCE_OUVERTURES = [
+    "Je vous écris une seconde fois, et j'attends toujours. {P}",
+    "Mon premier courrier est resté lettre morte ; voici le second. {P}",
+    "Deux fois je tends la main. Je ne le ferai pas trois. {P}",
+    "Nous venons vers vous une deuxième fois — la dernière, sans doute. {P}",
+]
+VEXATIONS = [
+    "Puisque mon silence vous convient, je ne vous importunerai plus.",
+    "Trois courriers sans réponse : je sais désormais ce que vaut votre amitié.",
+    "Vos scribes ont-ils perdu leurs mains ? Je cesse d'écrire à un mur.",
+    "Qu'on n'envoie plus de hérauts vers cette cour : elle ne répond pas aux rois.",
+]
+
+
+def message_vexation(faction: str, raison: str = "") -> str:
+    """Dernier mot d'un souverain ignoré trois fois : un éclat de son cru + la porte
+    qui claque."""
+    phrases = _phrases_types(faction)
+    vex = random.choice(VEXATIONS)
+    return f"{vex} {random.choice(phrases)}" if phrases and random.random() < 0.5 else vex
+
+
 def message_spontane(faction: str, raison: str, situation_joueur: str = "",
                      relation: str = "neutres", date_jeu: str = "5-03",
                      pays_joueur: str = "rome", utiliser_ia: bool = True,
-                     presents: tuple[str, ...] | None = None) -> dict:
+                     presents: tuple[str, ...] | None = None, relance: int = 0) -> dict:
     """Génère un message qu'un dirigeant IA adresse SPONTANÉMENT au joueur.
     `utiliser_ia=False` (avance rapide de plusieurs tours) → repli déterministe VARIÉ,
     sans appel Ollama. Retourne {message, intent, source}."""
@@ -851,6 +874,9 @@ def message_spontane(faction: str, raison: str, situation_joueur: str = "",
             "PROFIL": _persona_diplomatie(faction, presents) or "(profil indisponible)",
             "RAISON": raison, "SITUATION_JOUEUR": situation_joueur or "(mal connu)",
             "RELATION": relation,
+            "RELANCE": ("RELANCE : tu as DÉJÀ écrit pour cette raison et il n'a jamais répondu. "
+                        "Dis-le clairement (« une seconde fois », « mon premier courrier… ») avec "
+                        "impatience ou froideur, sans répéter ton premier message." if relance >= 2 else ""),
         })
         brut = _appel_ollama(prompt, temperature=0.85, num_predict=120, format_json=True)
         if brut:
@@ -887,6 +913,11 @@ def message_spontane(faction: str, raison: str, situation_joueur: str = "",
         intent, ouvertures = "menace", [
             "Ce royaume vacille, et le monde le sait. {P}",
             "La faiblesse attire les loups. {P}"]
+    elif "commerc" in raison or "marchés" in raison:
+        intent, ouvertures = "neutre", [
+            "Mes marchands lorgnent tes marchés : ouvrons une route commerciale, nos deux trésors y gagneront. {P}",
+            "Une route commerciale entre nos royaumes ? Mes caravanes sont prêtes ; dis oui et elles partent. {P}",
+            "Le commerce vaut mieux que la guerre : ouvrons nos ports l'un à l'autre. {P}"]
     elif "exécrable" in raison or "relations" in raison:
         intent, ouvertures = "menace", [
             "Je ne cache pas mon mépris. {P}",
@@ -897,6 +928,8 @@ def message_spontane(faction: str, raison: str, situation_joueur: str = "",
     phrase = random.choice(fraiches)
     recentes.append(phrase)
     del recentes[:-4]  # mémoire des 4 derniers éclats
+    if relance >= 2:
+        ouvertures = RELANCE_OUVERTURES  # « une seconde fois… » : le joueur sent l'agacement
     msg = random.choice(ouvertures).replace("{P}", phrase)
     return {"message": msg, "intent": intent, "auteur": auteur, "source": "fallback"}
 

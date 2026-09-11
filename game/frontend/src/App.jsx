@@ -554,7 +554,9 @@ function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
             const score = joueur && joueur.reputation && joueur.reputation[id]
             const tone = reputationTone(score)
             const enGuerre = guerres.some((g) => new Set([g.a, g.b]).has(id) && new Set([g.a, g.b]).has(joueurId))
-            const mesTraites = traites.filter((tr) => (tr.parties || []).includes(id) && (tr.parties || []).includes(joueurId))
+            const parties = (tr) => (tr.parties && tr.parties.length ? tr.parties : [tr.a, tr.b].filter(Boolean))
+            const TRAITE_LABEL = { alliance: 'Alliance', non_agression: 'Non-agression', route_commerciale: 'Commerce', commercial: 'Commerce', traite_commercial: 'Commerce' }
+            const mesTraites = traites.filter((tr) => parties(tr).includes(id) && parties(tr).includes(joueurId))
             const puissance = p.puissance != null ? p.puissance : p.puissance_estimee
             const estime = p.puissance == null
             const armee = p.force_armee != null ? p.force_armee : p.force_armee_estimee
@@ -569,7 +571,7 @@ function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
                     <span className="text-sm font-semibold text-parchment">{factionLabel(id, p.nom)}</span>
                     <span className="text-[11px] text-parchment/50">{leaderName(id)}</span>
                     {enGuerre && <span className="chip chip-war">Guerre</span>}
-                    {mesTraites.map((tr) => <span key={tr.type} className="chip text-emerald-200">{tr.type}</span>)}
+                    {mesTraites.map((tr) => <span key={tr.type} className="chip text-emerald-200">{TRAITE_LABEL[tr.type] || tr.type}</span>)}
                   </span>
                   <span className="mt-0.5 block text-[11px] text-parchment/60">
                     {(p.territoires || []).length} prov. · {(p.unites || []).length} unité{(p.unites || []).length > 1 ? 's' : ''} · ⚔ {estime ? '≈' : ''}{num(armee || 0)}

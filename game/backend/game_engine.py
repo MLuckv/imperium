@@ -500,6 +500,9 @@ def _calculer_production(pays: dict, state: dict | None = None,
     for res in ("or", "nourriture", "eau"):
         if me.get(res):
             prod[res] += me[res]; note(res, "Merveilles", me[res])
+    if state is not None:
+        for nom_part, gain in revenu_routes(pays, state):
+            prod["or"] += gain; note("or", f"Route commerciale ({nom_part})", gain)
     if "pelerinage" in me.get("speciaux", []):  # Compostelle : +1 or par province
         nb_prov = len(pays.get("territoires", []))
         if nb_prov:
@@ -1583,6 +1586,47 @@ def _analyser_conversations(state: dict) -> list[dict]:
     return appliques
 
 
+TYPES_ROUTE = ("commercial", "traite_commercial", "route_commerciale")
+
+
+def _parties_traite(t: dict) -> set:
+    """Les traités ont deux formes historiques ({a, b} ou {parties: [...]}) : on
+    normalise en ensemble."""
+    if t.get("parties"):
+        return set(t["parties"])
+    return {x for x in (t.get("a"), t.get("b")) if x}
+
+
+def traite_entre(state: dict, a: str, b: str, types: tuple[str, ...]) -> dict | None:
+    for tr in state.get("diplomatie", {}).get("traites_actifs", []):
+        if tr.get("type") in types and {a, b} == _parties_traite(tr):
+            return tr
+    return None
+
+
+def revenu_routes(pays: dict, state: dict) -> list[tuple[str, float]]:
+    """ROUTES COMMERCIALES : chaque route rapporte de l'or aux deux parties, d'autant
+    plus que le partenaire a de marchés et de ports (on commerce avec sa richesse).
+    Retourne [(nom du partenaire, or/mois)]."""
+    out = []
+    fid = pays.get("id")
+    for tr in state.get("diplomatie", {}).get("traites_actifs", []):
+        if tr.get("type") not in TYPES_ROUTE:
+            continue
+        parties = _parties_traite(tr)
+        if fid not in parties or len(parties) != 2:
+            continue
+        autre = next(x for x in parties if x != fid)
+        pa = state.get("pays", {}).get(autre)
+        if not pa or pa.get("elimine"):
+            continue
+        marches = sum(1 for v in pa.get("villes", []) if "marche" in v.get("batiments", []))
+        ports = sum(1 for v in pa.get("villes", []) if "port" in v.get("batiments", []))
+        gain = min(15.0, 5.0 + 2.0 * marches + 3.0 * ports)
+        out.append((pa.get("nom", autre), gain))
+    return out
+
+
 def _appliquer_accord(state: dict, joueur: str, faction: str, accord: dict) -> dict | None:
     """Applique les conséquences d'un accord conclu. Retourne une description."""
     typ = accord.get("type", "aucun")
@@ -1594,7 +1638,9 @@ def _appliquer_accord(state: dict, joueur: str, faction: str, accord: dict) -> d
     nom_joueur = state.get("pays", {}).get(joueur, {}).get("nom", joueur)
 
     if typ in ("traite_commercial", "non_agression", "alliance"):
-        traites.append({"type": typ, "parties": [joueur, faction], "tour": tour})
+        typ_norm = "route_commerciale" if typ == "traite_commercial" else typ
+        if not traite_entre(state, joueur, faction, (typ_norm,) + (TYPES_ROUTE if typ_norm == "route_commerciale" else ())):
+            traites.append({"type": typ_norm, "parties": [joueur, faction], "tour": tour})
         _ajuster_reputation(state, joueur, faction,
                             +25 if typ == "alliance" else +15)
     elif typ == "paix":
@@ -1641,7 +1687,8 @@ def _transferer(state: dict, source: str, cible: str, montants: dict) -> None:
 
 def _libelle_accord(typ: str, n1: str, n2: str) -> str:
     libelles = {
-        "traite_commercial": f"Traité commercial entre {n1} et {n2}.",
+        "traite_commercial": f"Route commerciale ouverte entre {n1} et {n2}.",
+        "route_commerciale": f"Route commerciale ouverte entre {n1} et {n2}.",
         "non_agression": f"Pacte de non-agression entre {n1} et {n2}.",
         "paix": f"Paix conclue entre {n1} et {n2}.",
         "alliance": f"Alliance scellée entre {n1} et {n2}.",
@@ -1789,6 +1836,12 @@ def _raison_contact(state: dict, fid: str, joueur: str):
     # 4) Relations exécrables → menace.
     if rep <= -40:
         return ("hostilite", f"Tes relations avec {nj} sont exécrables.")
+    # 4b) Relations correctes, marchands actifs, pas de route → proposition de COMMERCE
+    # (avant l'alliance : c'est le premier pas naturel entre deux cours).
+    if rep >= 0 and not traite_entre(state, fid, joueur, TYPES_ROUTE):
+        comptoirs = sum(1 for v in f.get("villes", []) for b in v.get("batiments", []) if b in ("marche", "port"))
+        if comptoirs >= 1 and state.get("meta", {}).get("tour", 1) >= 12 and random.random() < 0.6:
+            return ("commerce", f"Tes marchands réclament les marchés de {nj} : propose-lui une route commerciale.")
     # 5) Une puissance tierce te dépasse et tu n'es pas hostile au joueur → alliance.
     if rep >= -10:
         tailles = {k: len(v.get("territoires", [])) for k, v in state["pays"].items()}
@@ -1802,7 +1855,7 @@ def _raison_contact(state: dict, fid: str, joueur: str):
 
 
 _PROBA_CONTACT = {"projet_hostile": 0.85, "allie_attaque": 0.7, "armee_proche": 0.45,
-                  "hostilite": 0.5, "alliance": 0.35, "faiblesse": 0.4}
+                  "hostilite": 0.5, "alliance": 0.35, "faiblesse": 0.4, "commerce": 0.25}
 
 
 def _messages_spontanes_ia(state: dict, evenements: list, utiliser_ia: bool = True) -> list[dict]:
@@ -1825,14 +1878,39 @@ def _messages_spontanes_ia(state: dict, evenements: list, utiliser_ia: bool = Tr
             continue
         if any({g.get("a"), g.get("b")} == {fid, joueur} for g in guerres):
             continue  # déjà en guerre : les menaces n'ont plus de sens, les armes parlent
+        # BOUDERIE : un souverain ignoré trois fois ne réécrit plus pendant deux ans.
+        if f.get("_boude_jusqua", 0) > tour:
+            continue
         cle, raison = _raison_contact(state, fid, joueur)
         if not cle or random.random() > _PROBA_CONTACT.get(cle, 0.4):
             continue
+        # RELANCES : combien de fois a-t-on déjà écrit pour ce motif sans réponse ?
+        thread = conversations.get_conversation(state, fid)
+        dernier_joueur = max((m.get("tour") or 0 for m in thread if m.get("role") == "joueur"), default=-1)
+        suivi = f.setdefault("_relances", {})
+        if dernier_joueur >= derniers.get(fid, -99):
+            suivi.clear()  # le joueur a répondu depuis : on repart de zéro
+        nb = suivi.get(cle, 0) + 1
+        suivi[cle] = nb
         rel = _relation_txt(f.get("reputation", {}).get(joueur, 0))
         presents = tuple(f for f, q in state.get("pays", {}).items() if not q.get("elimine"))
+        if nb >= 3:
+            # Vexé : un dernier mot, la réputation baisse, et le silence pour 24 mois.
+            msg = ai_director.message_vexation(fid, raison)
+            conversations.ajouter_message(state, fid, role="ia", auteur=ai_director.nom_dirigeant(fid), texte=msg, tour=tour)
+            derniers[fid] = tour
+            f["_boude_jusqua"] = tour + 24
+            f["attente_reponse"] = None
+            suivi.clear()
+            rep = f.setdefault("reputation", {})
+            rep[joueur] = max(-100, rep.get(joueur, 0) - 10)
+            evenements.append({"type": "message_ia", "faction": fid,
+                               "texte": f"✉ {ai_director.nom_dirigeant(fid)} ({_nom_pays(fid)}), lassé de vos silences, vous écrit : « {msg} »"})
+            continue
         res = ai_director.message_spontane(fid, raison, situation_joueur=situ, relation=rel,
                                            date_jeu=date_jeu, pays_joueur=joueur,
-                                           utiliser_ia=utiliser_ia, presents=presents)
+                                           utiliser_ia=utiliser_ia, presents=presents,
+                                           relance=nb)
         msg = res.get("message")
         if not msg:
             continue
@@ -2051,10 +2129,10 @@ def _escalader_messages_ignores(state: dict, evenements: list) -> None:
             evenements.append({"type": "guerre", "faction": fid,
                                "texte": f"✉ Votre silence valait défi : {nd} passe des menaces aux actes."})
         elif intent == "alliance":
+            # Offre ignorée : la relation se refroidit en silence — c'est la RELANCE
+            # (« une seconde fois… ») puis la vexation qui portent le message.
             f["attente_reponse"] = None
-            rep[joueur] = max(-100, rep.get(joueur, 0) - 10)
-            evenements.append({"type": "message_ia", "faction": fid,
-                               "texte": f"✉ Lassé de votre silence, {nd} ({_nom_pays(fid)}) retire sa main tendue."})
+            rep[joueur] = max(-100, rep.get(joueur, 0) - 6)
         else:
             f["attente_reponse"] = None
 
@@ -2132,6 +2210,25 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
     for fid, p in state.get("pays", {}).items():
         if not p.get("est_joueur") and not p.get("elimine"):
             p["_actions_tour"] = ia_faction.jouer(state, fid, evenements)
+
+    # 2b') Routes commerciales entre IA : deux cours en bons termes ouvrent parfois
+    # une route (l'économie des IA en profite, et le monde a l'air de vivre).
+    vivants_ia = [f for f, p in state.get("pays", {}).items() if not p.get("elimine") and not p.get("est_joueur")]
+    if len(vivants_ia) >= 2 and random.random() < 0.08:
+        a, b = random.sample(vivants_ia, 2)
+        rep_ab = state["pays"][a].get("reputation", {}).get(b, 0)
+        en_guerre_ab = any({g.get("a"), g.get("b")} == {a, b} for g in state.get("diplomatie", {}).get("guerres_actives", []))
+        if rep_ab >= 0 and not en_guerre_ab and not traite_entre(state, a, b, TYPES_ROUTE):
+            state.setdefault("diplomatie", {}).setdefault("traites_actifs", []).append(
+                {"type": "route_commerciale", "parties": [a, b], "tour": meta.get("tour", 1)})
+            evenements.append({"type": "accord", "faction": a,
+                               "texte": f"⚖ {_nom_pays(a)} et {_nom_pays(b)} ouvrent une route commerciale."})
+
+    # 2c) La guerre rompt routes commerciales et pactes entre belligérants.
+    diplo = state.setdefault("diplomatie", {})
+    en_guerre = [{g.get("a"), g.get("b")} for g in diplo.get("guerres_actives", [])]
+    diplo["traites_actifs"] = [tr for tr in diplo.get("traites_actifs", [])
+                               if _parties_traite(tr) not in en_guerre]
 
     # 3a) Escalade des messages restés sans réponse, puis nouveaux messages SPONTANÉS.
     import guerre as _gr; _gr.eroder(state)
@@ -2584,12 +2681,22 @@ def appliquer_action(state: dict, action: dict) -> dict:
         return {"texte": "Jeux", "resultat": "Échec : or insuffisant."}
 
     if type_action == "traite_commercial" and cible:
+        nc = _nom_pays(cible)
+        if traite_entre(state, joueur_id, cible, TYPES_ROUTE):
+            return {"texte": "Route commerciale", "resultat": f"Une route commerciale relie déjà vos royaumes et {nc}."}
+        if any({g.get("a"), g.get("b")} == {joueur_id, cible} for g in state.get("diplomatie", {}).get("guerres_actives", [])):
+            return {"texte": "Route commerciale", "resultat": f"{nc} refuse : on ne commerce pas avec qui l'on combat."}
+        rep_ia = state.get("pays", {}).get(cible, {}).get("reputation", {}).get(joueur_id, 0)
+        if rep_ia < -10:
+            return {"texte": "Route commerciale",
+                    "resultat": f"{ai_director.nom_dirigeant(cible)} refuse : vos relations sont trop froides ({rep_ia:+d}). Réchauffez-les d'abord (présent, ambassadeur, dialogue)."}
         state.setdefault("diplomatie", {}).setdefault("traites_actifs", []).append({
-            "type": "commercial", "parties": [joueur_id, cible],
+            "type": "route_commerciale", "parties": [joueur_id, cible],
             "tour": state.get("meta", {}).get("tour")})
-        _ajuster_reputation(state, joueur_id, cible, +15)
-        return {"texte": f"Traité commercial proposé à {cible}.",
-                "resultat": "Relations améliorées."}
+        _ajuster_reputation(state, joueur_id, cible, +10)
+        gain = next((g for nom, g in revenu_routes(pays, state) if nom == _nom_pays(cible)), 5.0)
+        return {"texte": f"Route commerciale ouverte avec {nc}.",
+                "resultat": f"Vos caravanes rapportent +{gain:.0f} or par mois (plus s'ils bâtissent marchés et ports)."}
 
     if type_action == "envoyer_ambassadeur" and cible:
         _ajuster_reputation(state, joueur_id, cible, +5)

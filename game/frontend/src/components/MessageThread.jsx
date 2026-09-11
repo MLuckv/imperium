@@ -11,8 +11,9 @@ import { factionColor } from '../lib/format'
 // le champ d'un brouillon qu'il peut retoucher avant d'envoyer.
 const AMORCES = [
   { label: '🤝 Alliance', texte: 'Nos deux peuples ont tout à gagner à marcher ensemble. Je vous propose une alliance : nos ennemis seront les vôtres, et les vôtres les nôtres.' },
-  { label: '⚖ Commerce', texte: 'Ouvrons nos marchés l\'un à l\'autre. Un pacte commercial enrichirait nos deux trésors sans qu\'une goutte de sang ne coule.' },
-  { label: '🕊 Paix', texte: 'Cette guerre a assez duré. Je vous propose de déposer les armes et de fixer ensemble les termes d\'une paix honorable.' },
+  { label: '⚖ Commerce', texte: 'Ouvrons une route commerciale entre nos royaumes : nos caravanes et nos navires enrichiraient nos deux trésors sans qu\'une goutte de sang ne coule. Acceptez-vous ?' },
+  { label: '🕊 Non-agression', texte: 'Je vous propose un pacte de non-agression : ni l\'un ni l\'autre ne portera le fer chez son voisin pendant trois ans. Le jurez-vous ?' },
+  { label: '🏳 Paix', texte: 'Cette guerre a assez duré. Je vous propose de déposer les armes et de fixer ensemble les termes d\'une paix honorable.' },
   { label: '⚠ Avertir', texte: 'Que ce soit clair : vos troupes s\'approchent de mes frontières. Reculez, ou je considérerai cela comme une déclaration de guerre.' },
   { label: '🎁 Don', texte: 'En gage d\'amitié, j\'ai fait porter cinquante pièces d\'or à votre cour. Puisse ce geste ouvrir entre nous une ère de confiance.' },
   { label: '❓ Intentions', texte: 'Parlons franchement : que pensez-vous de mon royaume, et quelles sont vos intentions à son égard ?' },

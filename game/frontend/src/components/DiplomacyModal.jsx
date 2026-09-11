@@ -27,7 +27,11 @@ export default function DiplomacyModal({ cible, state, onClose, onStateChange })
   const enGuerre = guerres.some((g) => g && new Set([g.a, g.b, g.attaquant, g.defenseur]).has(cible)
     && new Set([g.a, g.b, g.attaquant, g.defenseur]).has(joueurId))
   const traites = (state && state.diplomatie && state.diplomatie.traites_actifs) || []
-  const traitesCiv = traites.filter((t) => (t.parties || []).includes(cible))
+  const parties = (t) => (t.parties && t.parties.length ? t.parties : [t.a, t.b].filter(Boolean))
+  const traitesCiv = traites.filter((t) => parties(t).includes(cible) && parties(t).includes(joueurId))
+  const TRAITE_LABEL = { alliance: '🤝 Alliance', non_agression: '🕊 Pacte de non-agression', route_commerciale: '⚖ Route commerciale', commercial: '⚖ Route commerciale', traite_commercial: '⚖ Route commerciale' }
+  // Revenu de la route commerciale avec cette puissance (lu dans la ventilation de l'or).
+  const routeOr = ((joueur.production_detail || {}).or || []).find((l) => l.source === `Route commerciale (${civ.nom || nomCiv})`)
   const or = (joueur.ressources && joueur.ressources.or) || 0
 
   async function action(type, params) {
@@ -85,17 +89,24 @@ export default function DiplomacyModal({ cible, state, onClose, onStateChange })
             )}
             <div className="mb-4 rounded-md border border-bronze-dark/40 bg-black/20 p-3 text-sm">
               <div>Relation avec <b style={{ color: accent }}>{nomCiv}</b> : <span className={tone.className}>{tone.label}{score != null && ` (${score > 0 ? '+' : ''}${num(score)})`}</span></div>
-              {traitesCiv.length > 0 && <div className="mt-1 text-xs text-emerald-200/80">Traités actifs : {traitesCiv.map((t) => t.type).join(', ')}</div>}
+              {traitesCiv.length > 0 && (
+                <div className="mt-1 text-xs text-emerald-200/80">
+                  Traités : {traitesCiv.map((t) => TRAITE_LABEL[t.type] || t.type).join(' · ')}
+                  {routeOr && <span className="text-gold"> — +{Math.round(routeOr.val)} or/mois</span>}
+                </div>
+              )}
             </div>
             <div className="grid grid-cols-2 gap-2">
               {enGuerre
                 ? <button onClick={() => action('demander_paix')} disabled={busy === 'demander_paix'} className="btn btn-primary">Demander la paix</button>
                 : <button onClick={() => action('declarer_guerre')} disabled={busy === 'declarer_guerre'} className="btn btn-danger">Déclarer la guerre</button>}
-              <button onClick={() => action('traite_commercial')} disabled={busy === 'traite_commercial'} className="btn btn-ghost">Traité commercial</button>
+              <button onClick={() => action('traite_commercial')} disabled={busy === 'traite_commercial' || traitesCiv.some((t) => /commercial/.test(t.type))}
+                      title="Vos caravanes et navires commercent : +5 or/mois pour chacun, davantage s'ils ont marchés et ports. Refusé si les relations sont froides (< −10)."
+                      className="btn btn-ghost">⚖ Route commerciale</button>
               <button onClick={() => action('envoyer_ambassadeur')} disabled={busy === 'envoyer_ambassadeur'} className="btn btn-ghost">Envoyer un ambassadeur</button>
               <button onClick={() => action('envoyer_ressources', { ressources: { or: 50 } })} disabled={busy === 'envoyer_ressources' || or < 50} className="btn btn-ghost">Offrir 50 or</button>
             </div>
-            <p className="mt-3 text-xs text-parchment/40">Astuce : la messagerie (onglet « Messages ») permet de négocier ; les accords conclus sont appliqués en fin de tour.</p>
+            <p className="mt-3 text-xs text-parchment/40">Astuce : tout se négocie aussi par la messagerie — route commerciale, pacte de non-agression, alliance, tribut, paix. Quand les deux parties concluent clairement, l'accord s'applique à la fin du tour.</p>
           </div>
         )}
       </div>
