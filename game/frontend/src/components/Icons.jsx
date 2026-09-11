@@ -80,3 +80,38 @@ const EMBLEM_SVG = {
 export function FactionEmblem({ faction, className, size, style }) {
   return <Svg className={className} size={size} style={style}>{EMBLEM_SVG[faction] || EMBLEM_SVG.rome}</Svg>
 }
+
+// ---------- ICÔNES D'INTERFACE (barre d'action, panneaux) ----------
+// Remplacent les emoji (✉ 🔬 …) qui ne s'affichaient pas sur toutes les machines :
+// la police de titre n'a pas ces glyphes et le repli système est imprévisible.
+const UI_SVG = {
+  // fiole (technologies)
+  tech: <g {...S}><path d="M10 3h4" /><path d="M10 3v6l-5 9a1.5 1.5 0 0 0 1.3 2.2h11.4A1.5 1.5 0 0 0 19 18l-5-9V3" /><path d="M8.5 15h7" /></g>,
+  // temple à colonnes (dogmes)
+  dogmes: <g {...S}><path d="M4 9l8-5 8 5" /><path d="M5 9h14" /><path d="M7 9v8M11 9v8M15 9v8M19 9v8" /><path d="M4 20h16" /></g>,
+  // parchemin scellé (diplomatie)
+  diplomatie: <g {...S}><path d="M6 4h9l4 4v12H6z" /><path d="M15 4v4h4" /><path d="M9 12h6M9 15h6" /><circle cx="9.5" cy="18.5" r="1.3" fill="currentColor" /></g>,
+  // buste (conseiller)
+  conseiller: <g {...S}><circle cx="12" cy="8" r="3.5" /><path d="M5 20c0-4 3-6.5 7-6.5s7 2.5 7 6.5" /></g>,
+  // livre ouvert (journal)
+  journal: <g {...S}><path d="M12 6c-2-1.5-4.5-2-8-2v14c3.5 0 6 .5 8 2 2-1.5 4.5-2 8-2V4c-3.5 0-6 .5-8 2z" /><path d="M12 6v14" /></g>,
+  // marteau (production)
+  production: <g {...S}><path d="M14 5l5 5-2 2-5-5z" /><path d="M13.5 8.5L5 17l2 2 8.5-8.5" /><path d="M16 4l1-1 4 4-1 1" /></g>,
+  // épées croisées (armée)
+  armee: <g {...S}><path d="M5 19l9-9M14 5l5 5-9 9" /><path d="M4 18l2 2M18 4l2 2" /></g>,
+  // trois traits (menu)
+  menu: <g {...S}><path d="M4 7h16M4 12h16M4 17h16" /></g>,
+  // pièces (impôts)
+  impots: <g {...S}><ellipse cx="12" cy="7" rx="7" ry="3" /><path d="M5 7v5c0 1.7 3.1 3 7 3s7-1.3 7-3V7" /><path d="M5 12v5c0 1.7 3.1 3 7 3s7-1.3 7-3v-5" /></g>,
+  // main tendue / annexer (bannière plantée)
+  annexer: <g {...S}><path d="M7 21V4" /><path d="M7 4h10l-3 3.5 3 3.5H7" /></g>,
+  // merveille (étoile à quatre branches)
+  merveille: <g {...S}><path d="M12 3c.6 4.5 3.5 7.4 8 8-4.5.6-7.4 3.5-8 8-.6-4.5-3.5-7.4-8-8 4.5-.6 7.4-3.5 8-8z" fill="currentColor" stroke="none" /></g>,
+  // cadenas (prérequis manquant)
+  lock: <g {...S}><rect x="6" y="11" width="12" height="9" rx="1.5" /><path d="M9 11V8a3 3 0 0 1 6 0v3" /></g>,
+  // merveille naturelle (montagne + soleil)
+  nature: <g {...S}><path d="M3 20l6-10 4 6 2-3 6 7z" /><circle cx="17" cy="6" r="2.2" /></g>,
+}
+export function UiIcon({ id, className, size = 16, style }) {
+  return <Svg className={className} size={size} style={style}>{UI_SVG[id] || UI_SVG.menu}</Svg>
+}

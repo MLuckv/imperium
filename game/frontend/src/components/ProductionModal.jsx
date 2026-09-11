@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCatalog, getMap, postAction } from '../api'
 import { num } from '../lib/format'
-import { BuildingIcon } from './Icons'
+import { BuildingIcon, UiIcon } from './Icons'
 import WonderArt from './WonderArt'
 
 // Modale de PRODUCTION, LIÉE À LA PROVINCE sélectionnée (forcedTerr).
@@ -27,6 +27,7 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
   const gMax = (joueur.gouverneurs_max != null) ? joueur.gouverneurs_max : 2
   const gAct = joueur.gouverneurs_actuels || 0
   const merveilles = (catalog && catalog.merveilles) || []
+  const techs = new Set(joueur.technologies || [])
   const mervStatus = (state && state.merveilles) || {}
   const mervIci = merveilles.filter((m) => m.province === terr)
   const mervConstruct = merveilles.filter((m) => m.type === 'construction')
@@ -83,7 +84,7 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
                 <div key={m.id} className="card mb-2 flex gap-3">
                   <div className="shrink-0 self-start overflow-hidden rounded-md border border-bronze-dark/50 bg-gradient-to-b from-[#211b12] to-black/40 p-1"
                        style={ruine ? { filter: 'grayscale(0.7) brightness(0.8)' } : undefined}>
-                    <WonderArt id={m.id} size={96} />
+                    <WonderArt id={m.id} type={m.type} size={96} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">
@@ -93,6 +94,7 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
                     <div className="mt-0.5 text-xs text-bronze/90">{m.desc}</div>
                     {bonusTxt && <div className="mt-0.5 text-[11px] text-emerald-300">Bonus : {bonusTxt} · prestige +{m.prestige}</div>}
                     {m.type === 'antique' && <div className="mt-1 text-[11px] text-parchment/55">Bonus actif tant que vous tenez la province.</div>}
+                    {m.type === 'naturelle' && <div className="mt-1 text-[11px] text-parchment/55">Site naturel : ne se bâtit ni ne se perd — son bonus va à qui tient la province.</div>}
                     {m.type === 'ruine' && etat === 'ruine' && (
                       <button disabled={!resOk || !!busy} onClick={() => act('restaurer_merveille', { merveille: m.id }, 'm' + m.id)}
                               className={'btn btn-primary btn-sm mt-1.5 ' + (resOk ? '' : 'opacity-50')}>Restaurer ({coutTxt} · {m.duree}t)</button>
@@ -193,7 +195,7 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
                     <div key={m.id} className="card mb-2 flex gap-3">
                       <div className="shrink-0 self-start overflow-hidden rounded-md border border-bronze-dark/50 bg-gradient-to-b from-[#211b12] to-black/40 p-1"
                            style={(!etat || etat === 'non_construite' || enChantier) ? { filter: 'grayscale(0.55) brightness(0.85)' } : undefined}>
-                        <WonderArt id={m.id} size={96} />
+                        <WonderArt id={m.id} type={m.type} size={96} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">
@@ -201,10 +203,15 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
                           <span className="chip">{ETAT_LABEL[etat] || 'Disponible'}</span>
                         </div>
                         <div className="mt-0.5 text-xs text-bronze/90">{m.desc}</div>
-                        <div className="mt-0.5 text-[11px] text-emerald-300">Bonus : stabilité +{(m.bonus && m.bonus.stabilite) || 0} · prestige +{m.prestige} (unique au monde)</div>
+                        <div className="mt-0.5 text-[11px] text-emerald-300">
+                          Bonus : {Object.entries(m.bonus || {}).map(([k, v]) => fmtBonus(k, v)).join(', ')} · prestige +{m.prestige} (unique au monde)
+                        </div>
+                        {m.tech_requise && !techs.has(m.tech_requise) && (
+                          <div className="mt-0.5 flex items-center gap-1 text-[11px] text-red-300/90"><UiIcon id="lock" size={12} />requiert {TECH_NOMS[m.tech_requise] || m.tech_requise}</div>
+                        )}
                         {(!etat || etat === 'non_construite') && (
-                          <button disabled={!resOk || !!busy} onClick={() => act('construire_merveille', { merveille: m.id, ville: ville.id }, 'm' + m.id)}
-                                  className={'btn btn-primary btn-sm mt-1.5 ' + (resOk ? '' : 'opacity-50')}>Bâtir ({coutTxt} · {m.duree}t)</button>
+                          <button disabled={!resOk || !!busy || (m.tech_requise && !techs.has(m.tech_requise))} onClick={() => act('construire_merveille', { merveille: m.id, ville: ville.id }, 'm' + m.id)}
+                                  className={'btn btn-primary btn-sm mt-1.5 ' + (resOk && !(m.tech_requise && !techs.has(m.tech_requise)) ? '' : 'opacity-50')}>Bâtir ({coutTxt} · {m.duree}t)</button>
                         )}
                         {enChantier && st.chantier && (
                           <div className="mt-1 text-[11px] text-parchment/60">Chantier : {st.chantier.duree - st.chantier.tours_restants}/{st.chantier.duree} tours{st.proprietaire && st.proprietaire !== joueurId ? ' (rival)' : ''}</div>
@@ -222,9 +229,14 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
   )
 }
 
-const BONUS_LABEL = { or: 'Or', nourriture: 'Nourriture', eau: 'Eau', stabilite: 'Stabilité', recherche_pct: 'Recherche' }
+const TECH_NOMS = {
+  philosophie_grecque: 'Philosophie grecque', navigation_maritime: 'Navigation maritime', ingenierie_hydraulique: 'Ingénierie hydraulique',
+  architecture_pierre: 'Architecture en pierre', genie_militaire: 'Génie militaire', legion_tactique: 'Tactique de la légion',
+}
+const BONUS_LABEL = { or: 'Or', nourriture: 'Nourriture', eau: 'Eau', stabilite: 'Stabilité', recherche_pct: 'Recherche',
+                      attaque_pct: 'Attaque', defense_pct: 'Défense' }
 function fmtBonus(k, v) {
-  if (k === 'recherche_pct') return `${BONUS_LABEL[k]} +${Math.round(v * 100)}%`
+  if (k.endsWith('_pct')) return `${BONUS_LABEL[k] || k} ${v > 0 ? '+' : ''}${Math.round(v * 100)}%`
   return `${BONUS_LABEL[k] || k} ${v > 0 ? '+' : ''}${v}`
 }
 

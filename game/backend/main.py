@@ -178,7 +178,7 @@ def get_state():
     state = ws.charger_etat_courant()
     if state is None:
         raise HTTPException(status_code=404, detail="Aucune partie en cours.")
-    return state
+    return merveilles.completer_etat(state)
 
 
 @app.post("/api/new-game")
@@ -710,6 +710,7 @@ def load(req: SlotReq):
     state = ws.charger_slot(req.slot)
     if state is None:
         raise HTTPException(status_code=404, detail=f"Slot {req.slot} introuvable.")
+    merveilles.completer_etat(state)
     ws.sauver_etat_courant(state)
     return state
 

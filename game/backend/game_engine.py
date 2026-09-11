@@ -1846,6 +1846,9 @@ def resoudre_bataille(state: dict, att_id: str, def_id: str, prov: str,
     nom_d = META_FACTIONS.get(def_id, {}).get("nom", def_id)
     est_cap = prov == _capitale_faction(def_id)
     fa, fd = _force_nationale(att), _force_nationale(dfn)
+    # Merveilles guerrières : Table Ronde (+attaque), Grande Muraille, Mur du Nord (+défense).
+    fa *= 1.0 + att.get("merveilles_effet", {}).get("attaque_pct", 0.0)
+    fd *= 1.0 + dfn.get("merveilles_effet", {}).get("defense_pct", 0.0)
     mult = 1.0
     if est_cap:
         mult = BONUS_DEF_CAPITALE

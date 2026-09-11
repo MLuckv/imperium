@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getCatalog, postAction } from '../api'
 import { num } from '../lib/format'
 import { Overlay } from './ProductionModal'
-import { UnitIcon } from './Icons'
+import { UnitIcon, UiIcon } from './Icons'
 
 // Modale de RECRUTEMENT. On recrute AUTANT QUE L'ON VEUT tant qu'on a assez d'or
 // ET de population. Chaque clic lève une unité sur la région choisie.
@@ -96,7 +96,7 @@ export default function RecruitmentModal({ state, forcedTerr, provNames = {}, on
                       className={'card flex items-center gap-2.5 text-left ' + (ok ? '' : 'card-disabled')}>
                 <UnitIcon type={u.id} className="shrink-0 text-bronze" size={26} />
                 <div className="min-w-0">
-                  <div className="truncate text-sm font-semibold">{UNIT_LABELS[u.id] || u.id} {!techOk && '🔒'}</div>
+                  <div className="flex items-center gap-1 truncate text-sm font-semibold">{UNIT_LABELS[u.id] || u.id}{!techOk && <UiIcon id="lock" size={13} className="text-red-300/80" />}</div>
                   <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-parchment/60">
                     <span className="text-gold">{u.cout} or</span>
                     <span>· {u.cout_pop || 1} pop</span>
@@ -105,7 +105,7 @@ export default function RecruitmentModal({ state, forcedTerr, provNames = {}, on
                   </div>
                   {manques.length > 0 && (
                     <div className="mt-0.5 text-[11px] text-red-300/90">
-                      {manques[0].startsWith('requiert') ? '🔒 ' : 'Manque : '}{manques.join(', ')}
+                      {manques[0].startsWith('requiert') ? '' : 'Manque : '}{manques.join(', ')}
                     </div>
                   )}
                 </div>

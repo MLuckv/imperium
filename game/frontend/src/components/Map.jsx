@@ -225,7 +225,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       if (lifted) g.position.set(0, -6)
       g.on('pointerover', (e) => {
         hoveredRef.current = t.id; paint(g, t, factionId, true, reach)
-        setApercu({ terr: t.id, nom: t.nom || t.id, faction: factionId, x: e.global.x, y: e.global.y })
+        setApercu({ terr: t.id, nom: t.nom || t.id, faction: factionId, merveille: t.merveille || null, x: e.global.x, y: e.global.y })
       })
       g.on('pointermove', (e) => setApercu((a) => (a && a.terr === t.id ? { ...a, x: e.global.x, y: e.global.y } : a)))
       g.on('pointerout', () => {
@@ -291,12 +291,14 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       const c = t.centre || polygonCentroid(t.polygone)
       if (!c) continue
       const etat = (mervEtats[t.merveille.id] || {}).etat
-      const actif = ['intacte', 'restauree', 'construite'].includes(etat)
-      const col = actif ? 0xe8c267 : 0x9a8c6a
+      const naturelle = t.merveille.type === 'naturelle'
+      const actif = naturelle || ['intacte', 'restauree', 'construite'].includes(etat)
+      // Doré = monument (intact/restauré), vert = site naturel, grisé = ruine/site à fouiller.
+      const col = naturelle ? 0x8fd19e : actif ? 0xe8c267 : 0x9a8c6a
       const bg = new Graphics(); bg.circle(c[0], c[1] - 2, 8.5)
       bg.fill({ color: 0x14110c, alpha: 0.6 }); bg.stroke({ width: 1.3, color: col, alpha: 0.95 })
       bg.eventMode = 'none'; labels.addChild(bg)
-      const star = new Text({ text: '✦', style: { fontFamily: 'Georgia, serif', fontSize: 13, fontWeight: '700', fill: col, stroke: { color: 0x14110c, width: 2 } } })
+      const star = new Text({ text: naturelle ? '❋' : '✦', style: { fontFamily: 'Georgia, serif', fontSize: 13, fontWeight: '700', fill: col, stroke: { color: 0x14110c, width: 2 } } })
       star.anchor.set(0.5, 0.5); star.position.set(c[0], c[1] - 2); star.eventMode = 'none'; labels.addChild(star)
     }
 
@@ -452,7 +454,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       : null
     selUnitTerrRef.current = garnison && selUnitTerrRef.current !== t.id ? t.id : null
     majArmeeSel()
-    if (typeof onSelectProvince === 'function') onSelectProvince({ id: t.id, faction: factionId, nom: t.nom })
+    if (typeof onSelectProvince === 'function') onSelectProvince({ id: t.id, faction: factionId, nom: t.nom, merveille: t.merveille || null })
     // (Le panneau de province propose « Parler à … » : on n'ouvre plus la
     // diplomatie d'office au moindre clic sur une terre étrangère.)
     draw()
@@ -473,7 +475,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     // (Production / Armée) apparaissent, comme le promet l'aide en bas d'écran.
     const t = terrById(a.territoire)
     if (t && typeof onSelectProvince === 'function')
-      onSelectProvince({ id: t.id, faction: a.faction, nom: t.nom })
+      onSelectProvince({ id: t.id, faction: a.faction, nom: t.nom, merveille: t.merveille || null })
     draw()
   }
 
@@ -737,6 +739,11 @@ function ApercuProvince({ info, stateData, host }) {
         {enGuerre && <span className="ml-1 text-red-300">⚔ en guerre</span>}
       </div>
 
+      {info.merveille && (
+        <div className={'mt-1.5 text-[11px] font-semibold ' + (info.merveille.type === 'naturelle' ? 'text-emerald-300' : 'text-gold')}>
+          {info.merveille.type === 'naturelle' ? '❋' : '✦'} {info.merveille.nom}
+        </div>
+      )}
       {ville && (
         <div className="mt-1.5 text-[11px] text-parchment/75">
           🏛 {ville.nom} · {Math.round(ville.population)} hab.

@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCatalog } from '../api'
 import { factionColor, factionLabel, leaderName, num } from '../lib/format'
-import { BuildingIcon, UnitIcon, FactionEmblem } from './Icons'
+import { BuildingIcon, UnitIcon, FactionEmblem, UiIcon } from './Icons'
 
 // PANNEAU DE PROVINCE — ce que le joueur voit quand il clique une province, façon
 // Civ / AoH : la cité, ses bâtiments, le chantier en cours, la garnison, et les
@@ -26,6 +26,13 @@ export default function ProvincePanel({ prov, state, annexable, conqueteCost, on
   const proprio = prov.faction ? pays[prov.faction] : null
   const mienne = prov.faction === joueurId
   const nomBat = (id) => ((catalog && catalog.batiments) || []).find((b) => b.id === id)?.nom || id
+  // Merveille abritée par la province (registre + état vivant).
+  const merv = prov.merveille && ((catalog && catalog.merveilles) || []).find((m) => m.id === prov.merveille.id)
+  const mervEtat = merv && ((state.merveilles || {})[merv.id] || {}).etat
+  const MERV_ETAT = { intacte: 'intacte', ruine: 'en ruine — à restaurer', site: 'à fouiller', en_restauration: 'restauration en cours',
+                      fouille_en_cours: 'fouilles en cours', restauree: 'restaurée', fouillee: 'fouillée' }
+  const BONUS = { or: 'or', nourriture: 'nourriture', eau: 'eau', stabilite: 'stabilité', recherche_pct: 'recherche', attaque_pct: 'attaque', defense_pct: 'défense' }
+  const fmtBonus = ([k, v]) => (k.endsWith('_pct') ? `${v > 0 ? '+' : ''}${Math.round(v * 100)} % ${BONUS[k]}` : `${v > 0 ? '+' : ''}${v} ${BONUS[k] || k}`)
 
   let ville = null
   for (const p of Object.values(pays)) for (const v of p.villes || []) if (v.territoire === prov.id) ville = v
@@ -89,6 +96,23 @@ export default function ProvincePanel({ prov, state, annexable, conqueteCost, on
           <div className="italic text-parchment/55">Aucune cité.{mienne && ' Fondez-en une via Production.'}</div>
         )}
 
+        {merv && (
+          <div className="rounded border border-gold/30 bg-gold/5 px-2 py-1.5">
+            <div className="flex items-center gap-1.5 text-[12px] font-semibold text-gold">
+              <UiIcon id={merv.type === 'naturelle' ? 'nature' : 'merveille'} size={13} />
+              {merv.nom}
+              <span className="ml-auto text-[10px] font-normal text-parchment/55">{MERV_ETAT[mervEtat] || mervEtat || ''}</span>
+            </div>
+            {Object.keys(merv.bonus || {}).length > 0 && (
+              <div className="mt-0.5 text-[11px] text-emerald-300/90">
+                {Object.entries(merv.bonus).map(fmtBonus).join(' · ')}
+                {['antique', 'naturelle'].includes(merv.type) ? ' — si vous tenez la province' : merv.type === 'ruine' && mervEtat !== 'restauree' ? ' — une fois restaurée' : ''}
+              </div>
+            )}
+            {merv.type === 'fouille' && mervEtat === 'site' && <div className="mt-0.5 text-[11px] text-parchment/60">Des reliques dorment sous la terre : fouillez (Production).</div>}
+          </div>
+        )}
+
         <div className="text-parchment/85">
           {garnison.length === 0 ? <span className="text-parchment/50">⚔ Aucune troupe</span> : (
             <div className="flex flex-wrap items-center gap-1">
@@ -106,14 +130,14 @@ export default function ProvincePanel({ prov, state, annexable, conqueteCost, on
 
         {/* Actions */}
         <div className="flex flex-wrap gap-1.5 pt-1">
-          {mienne && <button onClick={onProduction} className="btn btn-ghost btn-sm">⚒ Production</button>}
-          {mienne && <button onClick={onArmee} className="btn btn-ghost btn-sm">⚔ Recruter</button>}
+          {mienne && <button onClick={onProduction} className="btn btn-ghost btn-sm"><UiIcon id="production" />Production</button>}
+          {mienne && <button onClick={onArmee} className="btn btn-ghost btn-sm"><UiIcon id="armee" />Recruter</button>}
           {!prov.faction && annexable && (
             <button onClick={onAnnex} className="btn btn-primary btn-sm">Annexer ({conqueteCost} or)</button>
           )}
           {!prov.faction && !annexable && <span className="text-[11px] italic text-parchment/45">Envoyez-y une armée pour l'annexer.</span>}
           {prov.faction && !mienne && (
-            <button onClick={() => onDiplo(prov.faction)} className="btn btn-ghost btn-sm">✉ Parler à {leaderName(prov.faction)}</button>
+            <button onClick={() => onDiplo(prov.faction)} className="btn btn-ghost btn-sm"><UiIcon id="diplomatie" />Parler à {leaderName(prov.faction)}</button>
           )}
         </div>
       </div>

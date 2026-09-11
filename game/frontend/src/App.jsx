@@ -13,7 +13,7 @@ import ProvincePanel from './components/ProvincePanel'
 import TechTree from './components/TechTree'
 import DogmeTree from './components/DogmeTree'
 import { factionColor, factionLabel, leaderName, reputationTone, num } from './lib/format'
-import { FactionEmblem } from './components/Icons'
+import { FactionEmblem, UiIcon } from './components/Icons'
 
 const SLOT = 1
 
@@ -424,15 +424,15 @@ export default function App() {
           s'effacent et les icônes suffisent. */}
       <div className="flex items-stretch border-t border-bronze-dark/60 bg-night">
         <div className="thin-scroll flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-          <button onClick={() => setModal('tech')} className="btn btn-ghost btn-sm shrink-0" title="Technologies (T)">🔬<span className="hidden lg:inline"> Technos</span></button>
-          <button onClick={() => setModal('dogmes')} className="btn btn-ghost btn-sm shrink-0" title="Dogmes (G)">☩<span className="hidden lg:inline"> Dogmes</span></button>
+          <button onClick={() => setModal('tech')} className="btn btn-ghost btn-sm shrink-0" title="Technologies (T)"><UiIcon id="tech" /><span className="hidden lg:inline">Technos</span></button>
+          <button onClick={() => setModal('dogmes')} className="btn btn-ghost btn-sm shrink-0" title="Dogmes (G)"><UiIcon id="dogmes" /><span className="hidden lg:inline">Dogmes</span></button>
           <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost btn-sm relative shrink-0" title="Diplomatie (D)">
-            ✉<span className="hidden lg:inline"> Diplomatie</span>
+            <UiIcon id="diplomatie" /><span className="hidden lg:inline">Diplomatie</span>
             {msgIA > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">{msgIA}</span>}
           </button>
-          <button onClick={() => setModal('conseiller')} className="btn btn-ghost btn-sm shrink-0" title="Conseiller (C)">👤<span className="hidden lg:inline"> Conseiller</span></button>
+          <button onClick={() => setModal('conseiller')} className="btn btn-ghost btn-sm shrink-0" title="Conseiller (C)"><UiIcon id="conseiller" /><span className="hidden lg:inline">Conseiller</span></button>
           <button onClick={() => { setModal('journal'); setJournalVu(nbJournal) }} className="btn btn-ghost btn-sm relative shrink-0" title="Journal du règne (J)">
-            📜<span className="hidden lg:inline"> Journal</span>
+            <UiIcon id="journal" /><span className="hidden lg:inline">Journal</span>
             {nbJournal > journalVu && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-ink">{nbJournal - journalVu}</span>}
           </button>
 
@@ -449,7 +449,7 @@ export default function App() {
                       const r = e.currentTarget.getBoundingClientRect()
                       setMenuOuvert(menuOuvert ? null : { bas: window.innerHeight - r.top + 4, droite: window.innerWidth - r.right })
                     }}
-                    className="btn btn-ghost btn-sm" title="Partie">☰</button>
+                    className="btn btn-ghost btn-sm" title="Partie"><UiIcon id="menu" /></button>
             {menuOuvert && (
               <>
                 <div className="fixed inset-0 z-20" onClick={() => setMenuOuvert(null)} />
