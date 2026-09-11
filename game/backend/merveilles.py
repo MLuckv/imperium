@@ -258,6 +258,9 @@ def bonus_actif(pays: dict, state: dict) -> dict:
                 agg[k] = agg.get(k, 0) + v
             agg["prestige"] += w.get("prestige", 0)
             agg["nb"] += 1
+            # Un site naturel ne coûte rien à entretenir ; un monument, si.
+            if w["type"] != "naturelle":
+                agg["nb_entretien"] = agg.get("nb_entretien", 0) + 1
             agg["liste"].append(w["nom"])
             # Tourisme : un site HÉRITÉ (antique) attire peu (1 pt/mois), un site
             # naturel un peu plus (2) ; une merveille BÂTIE ou RESTAURÉE par tes

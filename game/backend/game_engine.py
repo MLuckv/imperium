@@ -531,7 +531,7 @@ def _calculer_production(pays: dict, state: dict | None = None,
     # ENTRETIEN : villes + bâtiments + merveilles (les monuments coûtent cher à tenir).
     nb_villes = len(pays.get("villes", []))
     nb_bat = sum(len(v.get("batiments", [])) for v in pays.get("villes", []))
-    nb_merv = pays.get("merveilles_effet", {}).get("nb", 0)
+    nb_merv = pays.get("merveilles_effet", {}).get("nb_entretien", 0)
     upkeep = nb_villes * 2.0 + nb_bat * 1.0 + nb_merv * 4.0
     if upkeep:
         prod["or"] -= upkeep; note("or", "Entretien (villes/bâtiments/merveilles)", -upkeep)
