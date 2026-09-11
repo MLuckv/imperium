@@ -37,6 +37,7 @@ FORCES_UNITES: dict[str, int] = {
     "elephant": 12,
     "mercenaire": 6,
     "trireme": FORCE_NAVALE_TRIREME,  # force navale nominale (cf. docstring)
+    "chevalier": 10,  # Chevalier de la Table Ronde — unité UNIQUE de la merveille
 }
 
 # Coûts en or par type d'unité (cahier §8.1).
@@ -50,6 +51,7 @@ COUTS_UNITES: dict[str, int] = {
     "elephant": 150,
     "mercenaire": 160,  # cher : payé en OR uniquement (puits d'or tardif)
     "trireme": 80,
+    "chevalier": 90,
 }
 
 # Coût en AUTRES ressources par effectif (le fer arme les soldats ; le bois, les navires).
@@ -61,6 +63,7 @@ COUT_RES_UNITES: dict[str, dict[str, int]] = {
     "cavalerie": {"fer": 5},
     "elephant": {"fer": 12},
     "trireme": {"bois": 20},
+    "chevalier": {"fer": 4},
     # levee : pas de fer (paysans) ; mercenaire : rien — tout est payé en or
 
 }
@@ -77,6 +80,7 @@ COUT_POP_UNITES: dict[str, int] = {
     "cavalerie": 2,
     "elephant": 3,
     "trireme": 2,
+    "chevalier": 2,
 }
 
 # Types d'unités navales (n'ont pas de force terrestre).
@@ -85,6 +89,11 @@ UNITES_NAVALES: set[str] = {"trireme"}
 # Tech requise pour débloquer certaines unités (cf. tech_tree / cahier §12).
 TECH_REQUISE_UNITE: dict[str, str] = {
     "elephant": "tactique_elephants",
+}
+
+# Unités débloquées par un EFFET SPÉCIAL de merveille (id de l'effet).
+MERVEILLE_REQUISE_UNITE: dict[str, str] = {
+    "chevalier": "chevaliers",
 }
 
 

@@ -376,7 +376,8 @@ def _avancer_constructions(pays: dict, evenements: list) -> None:
         chantier = ville.get("construction")
         if not chantier:
             continue
-        chantier["tours_restants"] = int(chantier.get("tours_restants", 0)) - 1
+        pas = 2 if "main_d_oeuvre" in pays.get("merveilles_effet", {}).get("speciaux", []) else 1  # Pyramides
+        chantier["tours_restants"] = int(chantier.get("tours_restants", 0)) - pas
         if chantier["tours_restants"] <= 0:
             bat = chantier.get("batiment")
             if bat and bat not in ville.get("batiments", []):
@@ -499,6 +500,10 @@ def _calculer_production(pays: dict, state: dict | None = None,
     for res in ("or", "nourriture", "eau"):
         if me.get(res):
             prod[res] += me[res]; note(res, "Merveilles", me[res])
+    if "port_franc" in me.get("speciaux", []):  # Colosse de Rhodes
+        nb_ports = sum(1 for v in villes if "port" in v.get("batiments", []))
+        if nb_ports:
+            prod["or"] += 3 * nb_ports; note("or", "Port franc (Colosse)", 3 * nb_ports)
 
     # 7) Facteur de STABILITÉ.
     fstab = _facteur_stabilite(pays.get("stabilite", 70))
@@ -590,6 +595,8 @@ def _appliquer_production(pays: dict, state: dict | None = None) -> None:
         luxe_stock["marbre"] = round(luxe_stock.get("marbre", 0) + nb_carrieres * 0.6 + marbre_gis, 1)
     # Croissance de la population globale et des villes.
     croissance = prod.get("population", 0)
+    if croissance > 0 and "croissance" in pays.get("merveilles_effet", {}).get("speciaux", []):
+        croissance = round(croissance * 1.5, 2)  # Jardins suspendus
     if croissance:
         res["population"] = round(res.get("population", 0) + croissance, 1)
         # Répartit la croissance sur les villes. On garde une DÉCIMALE : arrondir à
@@ -630,7 +637,10 @@ def _base_stab_nationale(pays: dict, state: dict | None) -> tuple[float, list[di
         if v: facteurs.append({"source": label, "val": int(v)})
     c = 50.0; f("Base", 50)
     imp = IMPOTS.get(pays.get("impots", "normal"), IMPOTS["normal"])
-    c += imp["stab"]; f(f"Impôts ({imp['nom']})", imp["stab"])
+    stab_imp = imp["stab"]
+    if stab_imp < 0 and "panem" in pays.get("merveilles_effet", {}).get("speciaux", []):
+        stab_imp = 0  # Colisée : du pain et des jeux
+    c += stab_imp; f(f"Impôts ({imp['nom']})", stab_imp)
     tb = tech_tree.effets_technologies(pays.get("technologies", [])).get("stabilite_bonus", 0)
     c += tb; f("Technologies", tb)
     db = effets_dogmes(pays.get("dogmes", [])).get("stabilite_bonus", 0)
@@ -1112,10 +1122,17 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
         return
     tour = state.get("meta", {}).get("tour", 1)
 
+    def _presages(fid: str) -> bool:
+        """Stonehenge : une catastrophe sur deux est détournée."""
+        return ("presages" in pays_vivants[fid].get("merveilles_effet", {}).get("speciaux", [])
+                and random.random() < 0.5)
+
     # 🔥 GRAND INCENDIE : une ville (capitale plus probable) perd 1-2 bâtiments.
     if random.random() < 0.007:
         fid = random.choice(list(pays_vivants))
         p = pays_vivants[fid]
+        if _presages(fid):
+            p = {}
         villes = [v for v in p.get("villes", []) if v.get("batiments")]
         if villes:
             cap = _capitale_faction(fid)
@@ -1136,11 +1153,20 @@ def _evenements_majeurs(state: dict, evenements: list) -> None:
                                         f"{noms} partent en fumée ! Il faudra rebâtir."})
 
     # 🌋 ÉRUPTION VOLCANIQUE : une province est dévastée (bâtiments, population).
-    if random.random() < 0.003:
-        fid = random.choice(list(pays_vivants))
+    # Les maîtres d'un volcan (Etna, Vésuve) y sont exposés trois fois plus.
+    volcans = [(f, v) for f, p in pays_vivants.items()
+               for v in p.get("merveilles_effet", {}).get("volcans", []) if v in p.get("territoires", [])]
+    eruption_volcan = volcans and random.random() < 0.006
+    if eruption_volcan or random.random() < 0.003:
+        if eruption_volcan:
+            fid, tid_force = random.choice(volcans)
+        else:
+            fid, tid_force = random.choice(list(pays_vivants)), None
         p = pays_vivants[fid]
+        if _presages(fid):
+            p = {}
         if p.get("territoires"):
-            tid = random.choice(p["territoires"])
+            tid = tid_force or random.choice(p["territoires"])
             ville = next((v for v in p.get("villes", []) if v.get("territoire") == tid), None)
             detail = ""
             if ville and ville.get("batiments"):
@@ -1233,8 +1259,16 @@ def _tour_hordes(state: dict, evenements: list) -> None:
         vivants = [f for f, p in state.get("pays", {}).items() if not p.get("elimine")]
         if not vivants:
             continue
-        if h.get("cible_faction") not in vivants:
-            h["cible_faction"] = min(vivants, key=lambda f: _dist_terr(
+        # Grande Muraille : les hordes renoncent à ce royaume et cherchent une autre proie.
+        murailles = {f for f in vivants if "remparts_du_monde" in state["pays"][f].get("merveilles_effet", {}).get("speciaux", [])}
+        if h.get("cible_faction") in murailles:
+            evenements.append({"type": "barbares", "faction": h["cible_faction"],
+                               "texte": f"Les {h.get('nom', 'barbares')} butent sur la Grande Muraille "
+                                        f"{_de(_nom_pays(h['cible_faction']))} et se détournent."})
+            h["cible_faction"] = None
+        candidats = [f for f in vivants if f not in murailles] or vivants
+        if h.get("cible_faction") not in candidats:
+            h["cible_faction"] = min(candidats, key=lambda f: _dist_terr(
                 h["territoire"], _capitale_faction(f) or h["territoire"]))
             h["cible_territoire"] = _capitale_faction(h["cible_faction"])
         cible_id = h["cible_faction"]
@@ -1321,7 +1355,8 @@ def _verifier_revolte(pays: dict, evenements: list) -> None:
     if not candidats:
         return
     s, perdu = candidats[0]
-    if random.random() < (0.6 if s < 12 else 0.3):
+    ferveur = "ferveur" in pays.get("merveilles_effet", {}).get("speciaux", [])  # Cathédrale
+    if not ferveur and random.random() < (0.6 if s < 12 else 0.3):
         pays["territoires"] = [t for t in pays.get("territoires", []) if t != perdu]
         pays["villes"] = [v for v in pays.get("villes", []) if v.get("territoire") != perdu]
         pays["unites"] = [u for u in pays.get("unites", []) if u.get("territoire") != perdu]
@@ -1342,6 +1377,8 @@ def _progresser_recherche(pays: dict, evenements: list) -> None:
     merv_pct = pays.get("merveilles_effet", {}).get("recherche_pct", 0)
     points = 12.0 * (1 + eff.get("recherche_pct", 0) + merv_pct)
     points += pays.get("ressources", {}).get("population", 0) * 0.1
+    if "academie" in pays.get("merveilles_effet", {}).get("speciaux", []):  # Parthénon
+        points += len(pays.get("villes", []))
     pays["recherche_points"] = round(points, 1)  # affiché par l'arbre (tours restants)
 
     rec = pays.get("recherche_en_cours")
@@ -1631,7 +1668,8 @@ def _recalculer_puissances(state: dict) -> None:
     joueur = next((p for p in pays.values() if p.get("est_joueur")), None)
     espionnage = False
     if joueur:
-        espionnage = "reseau_espionnage" in joueur.get("technologies", [])
+        espionnage = ("reseau_espionnage" in joueur.get("technologies", [])
+                      or "merlin" in joueur.get("merveilles_effet", {}).get("speciaux", []))  # Brocéliande
     for p in pays.values():
         reelle = calculer_puissance(p)
         # Force ARMÉE seule (sans l'or ni la population) : c'est elle que le joueur
@@ -2246,6 +2284,11 @@ def appliquer_action(state: dict, action: dict) -> dict:
         if tech_req and tech_req not in pays.get("technologies", []):
             return {"texte": "Recrutement",
                     "resultat": f"Échec : technologie requise ({tech_req})."}
+        from models.unit import MERVEILLE_REQUISE_UNITE
+        speciaux = pays.get("merveilles_effet", {}).get("speciaux", [])
+        merv_req = MERVEILLE_REQUISE_UNITE.get(type_unite)
+        if merv_req and merv_req not in speciaux:
+            return {"texte": "Recrutement", "resultat": "Échec : cette unité exige la merveille qui la consacre."}
         # L'unité est recrutée SUR une région possédée (sinon la capitale).
         region = params.get("region")
         if region not in pays.get("territoires", []):
@@ -2256,6 +2299,8 @@ def appliquer_action(state: dict, action: dict) -> dict:
         # Remise « camp militaire » (-20% au recrutement) si la nation en possède un.
         if any("camp_militaire" in v.get("batiments", []) for v in pays.get("villes", [])):
             cout = int(round(cout * 0.8))
+        if type_unite == "trireme" and "arsenal" in speciaux:  # Grand Phare
+            cout = int(round(cout * 0.5))
         cout = _cout_inflation(pays, cout)
         cout_pop = COUT_POP_UNITES.get(type_unite, 1) * quantite
         cout_res = {r: v * quantite for r, v in COUT_RES_UNITES.get(type_unite, {}).items()}
@@ -2392,6 +2437,8 @@ def appliquer_action(state: dict, action: dict) -> dict:
         if not all(p in adoptes for p in d.get("prerequis", [])):
             return {"texte": "Dogme", "resultat": "Échec : prérequis non adoptés."}
         cout = int(d.get("cout_or", 150))
+        if "dogmes_moins_chers" in pays.get("merveilles_effet", {}).get("speciaux", []):
+            cout = int(round(cout * 0.7))  # Panthéon
         if res.get("or", 0) < cout:
             return {"texte": "Dogme", "resultat": f"Échec : il faut {cout} or."}
         res["or"] = round(res.get("or", 0) - cout, 1)

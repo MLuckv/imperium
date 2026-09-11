@@ -61,6 +61,11 @@ def _valider_action_interne(action: dict, pays: dict, state: dict) -> dict:
         if type_unite not in COUTS_UNITES:
             return _verdict(False, f"Type d'unité inconnu : {type_unite}.",
                             f"Unités possibles : {', '.join(sorted(COUTS_UNITES))}.")
+        from models.unit import MERVEILLE_REQUISE_UNITE
+        merv_req = MERVEILLE_REQUISE_UNITE.get(type_unite)
+        if merv_req and merv_req not in pays.get("merveilles_effet", {}).get("speciaux", []):
+            return _verdict(False, f"L'unité « {type_unite} » n'est levée que par le maître d'une merveille.",
+                            "Bâtissez la Salle de la Table Ronde.")
         tech_requise = TECH_REQUISE_UNITE.get(type_unite)
         if tech_requise and tech_requise not in technologies:
             t = tech_tree.tech_par_id(tech_requise)

@@ -10,6 +10,7 @@ import { BuildingIcon, UnitIcon, FactionEmblem, UiIcon } from './Icons'
 const UNIT_LABELS = {
   levee: 'Levée', infanterie_legere: 'Inf. légère', legionnaire: 'Légionnaire', hoplite: 'Hoplite',
   phalange: 'Phalange', cavalerie: 'Cavalerie', elephant: 'Éléphant', trireme: 'Trirème', mercenaire: 'Mercenaires',
+  chevalier: 'Chevalier',
 }
 
 export default function ProvincePanel({ prov, state, annexable, conqueteCost, onProduction, onArmee, onAnnex, onDiplo, onClose }) {

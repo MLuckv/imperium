@@ -27,8 +27,11 @@ const UNIT_SVG = {
   ship: <g {...S}><path d="M3 15h17l-2 4H6z" /><path d="M11 14V4l6 4-6 1" /><path d="M11 14V7" /></g>,
   // épées croisées (par défaut)
   swords: <g {...S}><path d="M5 19l9-9M14 5l5 5-9 9" /><path d="M4 18l2 2M18 4l2 2" /></g>,
+  // chevalier : cavalier en armure, lance levée, bannière
+  knight: <g {...S}><path d="M5 20c0-5 2-8 6-9l1-3 2 2 3 .5-2 2c1 2 1 4 0 7" /><path d="M5 20h12" /><path d="M16 15V3" /><path d="M16 3h5l-2 2 2 2h-5" fill="currentColor" /></g>,
 }
 function unitKey(type) {
+  if (type === 'chevalier') return 'knight'
   if (type === 'trireme') return 'ship'
   if (type === 'elephant') return 'elephant'
   if (type === 'cavalerie') return 'horse'

@@ -93,6 +93,7 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
                     </div>
                     <div className="mt-0.5 text-xs text-bronze/90">{m.desc}</div>
                     {bonusTxt && <div className="mt-0.5 text-[11px] text-emerald-300">Bonus : {bonusTxt} · prestige +{m.prestige}</div>}
+                    {m.special && <div className="mt-0.5 text-[11px] text-sky-200"><b>✦ {m.special.nom}</b> — {m.special.desc}</div>}
                     {m.type === 'antique' && <div className="mt-1 text-[11px] text-parchment/55">Bonus actif tant que vous tenez la province.</div>}
                     {m.type === 'naturelle' && <div className="mt-1 text-[11px] text-parchment/55">Site naturel : ne se bâtit ni ne se perd — son bonus va à qui tient la province.</div>}
                     {m.type === 'ruine' && etat === 'ruine' && (
@@ -206,6 +207,7 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
                         <div className="mt-0.5 text-[11px] text-emerald-300">
                           Bonus : {Object.entries(m.bonus || {}).map(([k, v]) => fmtBonus(k, v)).join(', ')} · prestige +{m.prestige} (unique au monde)
                         </div>
+                        {m.special && <div className="mt-0.5 text-[11px] text-sky-200"><b>✦ {m.special.nom}</b> — {m.special.desc}</div>}
                         {m.tech_requise && !techs.has(m.tech_requise) && (
                           <div className="mt-0.5 flex items-center gap-1 text-[11px] text-red-300/90"><UiIcon id="lock" size={12} />requiert {TECH_NOMS[m.tech_requise] || m.tech_requise}</div>
                         )}

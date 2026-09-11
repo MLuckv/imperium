@@ -11,7 +11,7 @@ const UNIT_LABELS = {
   levee: 'Levée paysanne', infanterie_legere: 'Infanterie légère',
   legionnaire: 'Légionnaire', hoplite: 'Hoplite', phalange: 'Phalange',
   cavalerie: 'Cavalerie', elephant: 'Éléphant de guerre', trireme: 'Trirème',
-  mercenaire: 'Mercenaires',
+  mercenaire: 'Mercenaires', chevalier: 'Chevalier de la Table Ronde',
 }
 const TECH_NOMS = { tactique_elephants: 'Tactique des éléphants', navigation_maritime: 'Navigation maritime',
                     legion_tactique: 'Tactique de la légion', marine_guerre: 'Marine de guerre' }
@@ -32,6 +32,7 @@ export default function RecruitmentModal({ state, forcedTerr, provNames = {}, on
   const or = ress.or || 0
   const pop = ress.population || 0
   const techs = useMemo(() => new Set(joueur.technologies || []), [joueur])
+  const speciaux = new Set((joueur.merveilles_effet && joueur.merveilles_effet.speciaux) || [])
 
   const defReg = (forcedTerr && territoires.includes(forcedTerr)) ? forcedTerr : territoires[0]
   const [region, setRegion] = useState(defReg)
@@ -78,14 +79,16 @@ export default function RecruitmentModal({ state, forcedTerr, provNames = {}, on
         <p className="mb-3 text-xs text-parchment/50">Recrutez autant d'unités que vos réserves d'or et votre population le permettent. Chaque unité est levée sur la région choisie.</p>
         <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
           {unites.map((u) => {
-            const techOk = !u.tech_requise || techs.has(u.tech_requise)
+            const mervOk = !u.merveille_requise || speciaux.has(u.merveille_requise)
+            const techOk = (!u.tech_requise || techs.has(u.tech_requise)) && mervOk
             const coutRes = u.cout_res || {}
             const resOk = Object.entries(coutRes).every(([rr, v]) => (ress[rr] || 0) >= v)
             const ok = techOk && or >= u.cout && pop >= (u.cout_pop || 1) && resOk
             const resTxt = Object.entries(coutRes).map(([rr, v]) => `${v} ${rr}`).join(', ')
             // POURQUOI c'est grisé : dit explicitement, plutôt qu'un card-disabled muet.
             const manques = []
-            if (!techOk) manques.push(`requiert ${TECH_NOMS[u.tech_requise] || u.tech_requise}`)
+            if (!mervOk) manques.push('requiert la Salle de la Table Ronde')
+            else if (!techOk) manques.push(`requiert ${TECH_NOMS[u.tech_requise] || u.tech_requise}`)
             if (or < u.cout) manques.push(`${u.cout - or} or`)
             if (pop < (u.cout_pop || 1)) manques.push('population')
             for (const [rr, v] of Object.entries(coutRes)) if ((ress[rr] || 0) < v) manques.push(`${v - (ress[rr] || 0)} ${RES_LABEL[rr] || rr}${RES_SOURCE[rr] ? ` (→ ${RES_SOURCE[rr]})` : ''}`)

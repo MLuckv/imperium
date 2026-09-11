@@ -26,18 +26,24 @@ MERVEILLES: dict[str, dict] = {
         "nom": "Parthénon", "type": "antique", "province": "sterea_ellada",
         "desc": "Le temple d'Athéna domine Athènes. Le contrôler éclaire la civilisation.",
         "bonus": {"recherche_pct": 0.15, "stabilite": 6}, "prestige": 3,
+        "special": {"id": "academie", "nom": "Académie",
+                    "desc": "Les philosophes affluent : +1 point de recherche par cité, chaque mois."},
     },
     "stonehenge": {
         "nom": "Stonehenge", "type": "antique", "province": "devon",
         "desc": "Le cercle de pierres levées observe le ciel depuis l'aube des temps. "
                 "Les druides y lisent les saisons et les présages.",
         "bonus": {"recherche_pct": 0.10, "stabilite": 5}, "prestige": 3,
+        "special": {"id": "presages", "nom": "Présages",
+                    "desc": "Les druides lisent le ciel : incendies et éruptions frappent deux fois moins le royaume."},
     },
     "pyramides": {
         "nom": "Pyramides de Gizeh", "type": "antique", "province": "al_jizah",
         "desc": "Trois montagnes de pierre bâties par les dieux-rois. Le monde entier "
                 "vient s'incliner devant elles — et paie le passage.",
         "bonus": {"stabilite": 5, "or": 4}, "prestige": 5,
+        "special": {"id": "main_d_oeuvre", "nom": "Main-d'œuvre pharaonique",
+                    "desc": "Les chantiers de bâtiments avancent deux fois plus vite dans toutes vos cités."},
     },
     # ---------------------------------------------------------- NATURELLES
     "chaine_des_puys": {
@@ -51,6 +57,8 @@ MERVEILLES: dict[str, dict] = {
         "desc": "Brume, sources et chênes millénaires : la forêt de Merlin. Ceux qui "
                 "savent l'écouter en reviennent plus sages.",
         "bonus": {"recherche_pct": 0.10, "stabilite": 3}, "prestige": 2,
+        "special": {"id": "merlin", "nom": "L'œil de Merlin",
+                    "desc": "Vous voyez la puissance et l'armée RÉELLES de chaque rival (plus d'estimation)."},
     },
     "dune_du_pilat": {
         "nom": "Dune du Pilat", "type": "naturelle", "province": "gironde",
@@ -75,12 +83,16 @@ MERVEILLES: dict[str, dict] = {
         "desc": "Le volcan vivant de Sicile : ses cendres nourrissent des vergers sans "
                 "pareils, mais sa colère fait trembler les villes.",
         "bonus": {"nourriture": 8, "stabilite": -2}, "prestige": 3,
+        "special": {"id": "colere", "nom": "Colère du volcan",
+                    "desc": "Le sol est béni, mais l'éruption frappe cette province trois fois plus souvent."},
     },
     "vesuve": {
         "nom": "Vésuve", "type": "naturelle", "province": "foggia",
         "desc": "La montagne qui fume au-dessus de la baie. Vignes et oliviers "
                 "prospèrent sur ses pentes — tant qu'elle dort.",
         "bonus": {"nourriture": 5, "or": 3}, "prestige": 2,
+        "special": {"id": "colere", "nom": "Colère du volcan",
+                    "desc": "Le sol est béni, mais l'éruption frappe cette province trois fois plus souvent."},
     },
     "cataractes_du_nil": {
         "nom": "Cataractes du Nil", "type": "naturelle", "province": "al_minya",
@@ -94,6 +106,8 @@ MERVEILLES: dict[str, dict] = {
         "desc": "Le géant de bronze, abattu par un séisme, gît dans le port de Rhodes.",
         "cout_or": 300, "cout_res": {"marbre": 30, "pierre": 40}, "duree": 30,
         "bonus": {"or": 8, "stabilite": 3}, "prestige": 4,
+        "special": {"id": "port_franc", "nom": "Port franc",
+                    "desc": "Chaque Port de votre royaume rapporte +3 or de plus par mois."},
     },
     "mur_d_hadrien": {
         "nom": "Mur du Nord", "type": "ruine", "province": "north_yorkshire",
@@ -151,6 +165,8 @@ MERVEILLES: dict[str, dict] = {
         "desc": "Amphithéâtre colossal : du pain et des jeux pour tout l'empire.",
         "tech_requise": None, "cout_or": 400, "cout_res": {"marbre": 50, "pierre": 60},
         "duree": 48, "bonus": {"stabilite": 12}, "prestige": 5,
+        "special": {"id": "panem", "nom": "Du pain et des jeux",
+                    "desc": "Les impôts élevés ne coûtent plus de stabilité : le peuple a son cirque."},
     },
     "grande_bibliotheque": {
         "nom": "Grande Bibliothèque", "type": "construction", "ville": True,
@@ -158,6 +174,8 @@ MERVEILLES: dict[str, dict] = {
                 "s'y pressent.",
         "tech_requise": "philosophie_grecque", "cout_or": 350, "cout_res": {"marbre": 30, "pierre": 40},
         "duree": 36, "bonus": {"recherche_pct": 0.25}, "prestige": 4,
+        "special": {"id": "eureka", "nom": "Eurêka",
+                    "desc": "À l'achèvement, la recherche en cours est terminée d'un coup."},
     },
     "grand_phare": {
         "nom": "Grand Phare", "type": "construction", "ville": True,
@@ -165,18 +183,24 @@ MERVEILLES: dict[str, dict] = {
                 "affluent, et les pêcheurs rentrent au port.",
         "tech_requise": "navigation_maritime", "cout_or": 300, "cout_res": {"pierre": 60, "bois": 30},
         "duree": 30, "bonus": {"or": 10, "nourriture": 3}, "prestige": 4,
+        "special": {"id": "arsenal", "nom": "Arsenal",
+                    "desc": "Les trirèmes coûtent moitié moins d'or."},
     },
     "jardins_suspendus": {
         "nom": "Jardins suspendus", "type": "construction", "ville": True,
         "desc": "Des terrasses de verdure irriguées jusqu'au ciel, au cœur de la cité.",
         "tech_requise": "ingenierie_hydraulique", "cout_or": 350, "cout_res": {"pierre": 40, "bois": 40},
         "duree": 36, "bonus": {"nourriture": 8, "eau": 5, "stabilite": 3}, "prestige": 4,
+        "special": {"id": "croissance", "nom": "Terre d'abondance",
+                    "desc": "La population croît moitié plus vite dans tout le royaume."},
     },
     "pantheon": {
         "nom": "Panthéon", "type": "construction", "ville": True,
         "desc": "Un temple à tous les dieux sous la plus vaste coupole jamais coulée.",
         "tech_requise": "architecture_pierre", "cout_or": 400, "cout_res": {"marbre": 50, "pierre": 50},
         "duree": 42, "bonus": {"stabilite": 8}, "prestige": 5,
+        "special": {"id": "dogmes_moins_chers", "nom": "Maison de tous les dieux",
+                    "desc": "Les dogmes coûtent 30 % de moins."},
     },
     "grande_muraille": {
         "nom": "Grande Muraille", "type": "construction", "ville": True,
@@ -184,6 +208,8 @@ MERVEILLES: dict[str, dict] = {
                 "surprend plus le royaume.",
         "tech_requise": "genie_militaire", "cout_or": 450, "cout_res": {"pierre": 120},
         "duree": 48, "bonus": {"defense_pct": 0.30, "stabilite": 2}, "prestige": 4,
+        "special": {"id": "remparts_du_monde", "nom": "Remparts du monde",
+                    "desc": "Les hordes barbares renoncent à vous attaquer et cherchent une autre proie."},
     },
     "cathedrale": {
         "nom": "Grande Cathédrale", "type": "construction", "ville": True,
@@ -191,6 +217,8 @@ MERVEILLES: dict[str, dict] = {
                 "s'y rassemble et s'y apaise.",
         "tech_requise": "architecture_pierre", "cout_or": 420, "cout_res": {"marbre": 40, "pierre": 70},
         "duree": 48, "bonus": {"stabilite": 10}, "prestige": 5,
+        "special": {"id": "ferveur", "nom": "Ferveur",
+                    "desc": "Aucune province ne fait plus sécession, même à bout de patience."},
     },
     "table_ronde": {
         "nom": "Salle de la Table Ronde", "type": "construction", "ville": True,
@@ -198,6 +226,8 @@ MERVEILLES: dict[str, dict] = {
                 "marchent au combat d'un seul cœur.",
         "tech_requise": None, "cout_or": 260, "cout_res": {"bois": 60, "pierre": 30},
         "duree": 24, "bonus": {"attaque_pct": 0.15, "stabilite": 4}, "prestige": 3,
+        "special": {"id": "chevaliers", "nom": "Chevaliers de la Table Ronde",
+                    "desc": "Débloque une unité unique : le Chevalier de la Table Ronde (force 10)."},
     },
     "mausolee": {
         "nom": "Mausolée", "type": "construction", "ville": True,
@@ -205,6 +235,8 @@ MERVEILLES: dict[str, dict] = {
                 "les autres. On vient de loin pour le voir.",
         "tech_requise": "architecture_pierre", "cout_or": 380, "cout_res": {"marbre": 60},
         "duree": 40, "bonus": {"stabilite": 3}, "prestige": 6,
+        "special": {"id": "renommee", "nom": "Renommée",
+                    "desc": "Votre tourisme est doublé : le monde entier vient voir le tombeau."},
     },
 }
 
@@ -251,11 +283,17 @@ def bonus_actif(pays: dict, state: dict) -> dict:
     """Somme des bonus des merveilles actives pour cette faction."""
     agg = {"or": 0.0, "nourriture": 0.0, "eau": 0.0, "recherche_pct": 0.0,
            "stabilite": 0, "attaque_pct": 0.0, "defense_pct": 0.0,
-           "prestige": 0, "nb": 0, "tourisme": 0, "liste": []}
+           "prestige": 0, "nb": 0, "tourisme": 0, "liste": [], "speciaux": [],
+           "volcans": []}
     for wid, w in MERVEILLES.items():
         if proprietaire(wid, state) == pays.get("id"):
             for k, v in w.get("bonus", {}).items():
                 agg[k] = agg.get(k, 0) + v
+            sp = w.get("special")
+            if sp and sp["id"] not in agg["speciaux"]:
+                agg["speciaux"].append(sp["id"])
+            if sp and sp["id"] == "colere":
+                agg["volcans"].append(w["province"])
             agg["prestige"] += w.get("prestige", 0)
             agg["nb"] += 1
             # Un site naturel ne coûte rien à entretenir ; un monument, si.
@@ -266,6 +304,8 @@ def bonus_actif(pays: dict, state: dict) -> dict:
             # naturel un peu plus (2) ; une merveille BÂTIE ou RESTAURÉE par tes
             # soins attire son plein prestige.
             agg["tourisme"] += {"antique": 1, "naturelle": 2}.get(w["type"], w.get("prestige", 0))
+    if "renommee" in agg["speciaux"]:
+        agg["tourisme"] *= 2
     return agg
 
 
@@ -302,6 +342,13 @@ def avancer_chantiers(state: dict, evenements: list) -> None:
             st["etat"] = "construite"
             evenements.append({"type": "merveille", "faction": fid, "icone": "✦",
                                "texte": f"Merveille achevée : {w['nom']} s'élève, à la gloire de l'empire !"})
+            if (w.get("special") or {}).get("id") == "eureka":
+                pays = state.get("pays", {}).get(fid)
+                rec = pays and pays.get("recherche_en_cours")
+                if rec:
+                    rec["progres"] = rec.get("cout", 9999)
+                    evenements.append({"type": "merveille", "faction": fid,
+                                       "texte": f"Eurêka ! Les savants de la Grande Bibliothèque achèvent la recherche en cours."})
         elif w["type"] == "fouille":
             st["etat"] = "fouillee"
             rel = random.choice(w.get("reliques") or RELIQUES)
@@ -335,5 +382,5 @@ def info_publique() -> list[dict]:
              "cout_or": w.get("cout_or"), "cout_res": w.get("cout_res", {}),
              "duree": w.get("duree"), "tech_requise": w.get("tech_requise"),
              "bonus": w.get("bonus", {}), "prestige": w.get("prestige", 0),
-             "ville": w.get("ville", False)}
+             "ville": w.get("ville", False), "special": w.get("special")}
             for wid, w in MERVEILLES.items()]

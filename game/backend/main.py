@@ -34,7 +34,7 @@ import merveilles             # noqa: E402
 import luxe                   # noqa: E402
 import guerre                 # noqa: E402
 from models.city import CATALOGUE_BATIMENTS  # noqa: E402
-from models.unit import COUTS_UNITES, FORCES_UNITES, TECH_REQUISE_UNITE, COUT_POP_UNITES, COUT_RES_UNITES  # noqa: E402
+from models.unit import COUTS_UNITES, FORCES_UNITES, TECH_REQUISE_UNITE, COUT_POP_UNITES, COUT_RES_UNITES  # noqa: E402, MERVEILLE_REQUISE_UNITE
 
 RACINE = Path(__file__).resolve().parent.parent
 CHEMIN_TERRITOIRES = RACINE / "data" / "map" / "territories.json"
@@ -669,6 +669,7 @@ def catalog():
             "cout_res": COUT_RES_UNITES.get(type_unite, {}),
             "force": FORCES_UNITES.get(type_unite, 0),
             "tech_requise": TECH_REQUISE_UNITE.get(type_unite),
+            "merveille_requise": MERVEILLE_REQUISE_UNITE.get(type_unite),
         })
     return {
         "batiments": CATALOGUE_BATIMENTS,
