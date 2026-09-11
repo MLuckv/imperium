@@ -95,6 +95,7 @@ def jouer(state: dict, fid: str, evenements: list) -> list[str]:
         pass  # la horde aux portes passe avant tout le reste
     elif not _mener_guerres(state, fid, pays, prio, actions, evenements):
         _expansion(state, fid, pays, prio, actions, evenements)
+        _repartir_garnisons(state, fid, pays)
     _alliances(state, fid, pays, prio, actions, evenements)
     _declarer_guerre(state, fid, pays, prio, evenements)
     _faire_la_paix(state, fid, pays, evenements)
@@ -105,9 +106,19 @@ def jouer(state: dict, fid: str, evenements: list) -> list[str]:
 
 # ---------------------------------------------------------------- économie
 def _impots(pays: dict, actions: list) -> None:
+    """Impôts avec HYSTÉRÉSIS : on baisse sous 35, on relève au-dessus de 75, et l'on
+    revient au normal entre 50 et 62 — Alexandre changeait de régime fiscal soixante
+    fois en dix ans, ce qui ruinait sa stabilité et son trésor."""
     stab = pays.get("stabilite", 60)
-    niveau = "bas" if stab < 40 else ("eleve" if stab > 70 else "normal")
-    if pays.get("impots") != niveau:
+    actuel = pays.get("impots", "normal")
+    niveau = actuel
+    if stab < 35:
+        niveau = "bas"
+    elif stab > 75:
+        niveau = "eleve"
+    elif 50 <= stab <= 62:
+        niveau = "normal"
+    if niveau != actuel:
         pays["impots"] = niveau
         actions.append(f"ajuste ses impôts ({niveau})")
 
@@ -169,6 +180,11 @@ def _construire(pays: dict, actions: list, reserve_min: int = 40) -> None:
     if p_ia.get("expansion", 0) >= 0.55 and len(pays.get("territoires", [])) < 5:
         nb = len(pays.get("territoires", []))
         reserve = int(ge.COUT_CONQUETE_OR * (1.3 ** nb)) + 60  # de quoi annexer d'abord
+    # …mais JAMAIS au prix de l'économie : une cité sans ses bâtiments de base
+    # (ferme, scierie, marché, mine) ne rapporte rien, et le conquérant sans revenu
+    # finit avec sept unités, un or par mois et pas un chantier en dix ans.
+    if any(len(v.get("batiments", [])) < 4 for v in pays.get("villes", [])):
+        reserve = min(reserve, 40)
     import luxe as lx
     for ville in pays.get("villes", []):
         if ville.get("construction") or ville.get("pacification", 0) > 0:
@@ -205,6 +221,10 @@ def _recruter(pays: dict, fid: str, prio: dict, actions: list,
     # les provinces peuvent porter, sinon la solde ruine le royaume et il se révolte.
     nb_terr = len(pays.get("territoires", []))
     cible = min(prio.get("armee_cible", 3), 2 + int(nb_terr * 1.5))
+    # Le revenu borne aussi l'armée : au-delà, la solde étrangle le royaume.
+    revenu = pays.get("production", {}).get("or", 0)
+    if not en_guerre:
+        cible = min(cible, max(2, int(2 + revenu / 6)))
     # Les conquérants gardent en plus leur or pour annexer tant qu'ils sont petits.
     if prio.get("expansion", 0) >= 0.55 and nb_terr < 3:
         cible = min(cible, 3)
@@ -349,6 +369,10 @@ def _expansion(state: dict, fid: str, pays: dict, prio: dict,
     Ptolémée privilégie les terres fertiles (le Nil), les autres la proximité."""
     if random.random() > prio.get("expansion", 0.5):
         return
+    # Consolider avant de s'étendre : un royaume instable qui annexe encore voit ses
+    # provinces faire sécession les unes après les autres (Alexandre : 5 → 1).
+    if pays.get("stabilite", 60) < 45 and len(pays.get("territoires", [])) >= 2:
+        return
     res = pays.setdefault("ressources", {})
     cap = ge._capitale_faction(fid)
     cx, cy = _centre(cap) if cap else (0, 0)
@@ -471,7 +495,18 @@ def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
                 return True
         elif cap_e in frontieres:  # il ne reste que la capitale : SIÈGE puis assaut final
             seuil = sa_force * (ge.BONUS_DEF_CAPITALE + 0.6) + 3
-            if ma_force > seuil and random.random() < prio.get("agressivite", 0.3):
+            # L'assaut final (= élimination d'un royaume) exige un siège INSTALLÉ : au
+            # moins 18 mois de guerre. Sans cela, une IA en rayait une autre de la carte
+            # en huit ans de jeu, et le monde se vidait de ses souverains.
+            tour = state.get("meta", {}).get("tour", 1)
+            siege_mur = tour - g.get("depuis", tour) >= 18
+            # Seul le JOUEUR peut rayer un royaume de la carte : entre IA, la guerre
+            # s'arrête aux portes de la capitale (les provinces changent de mains, les
+            # souverains restent — le monde garde ses voix).
+            joueur = state.get("meta", {}).get("joueur_pays")
+            if ennemi != joueur:
+                siege_mur = False
+            if siege_mur and ma_force > seuil and random.random() < prio.get("agressivite", 0.3):
                 if ge.resoudre_bataille(state, fid, ennemi, cap_e, evenements):
                     actions.append(f"renverse {ge.META_FACTIONS.get(ennemi, {}).get('nom', ennemi)}")
                 return True
@@ -503,6 +538,38 @@ def _mener_guerres(state: dict, fid: str, pays: dict, prio: dict,
             if marche:
                 actions.append(f"fait marcher {marche} unité(s) vers {ge.META_FACTIONS.get(ennemi, {}).get('nom', ennemi)}")
     return True  # en guerre : on ne s'étend pas en parallèle
+
+
+def _repartir_garnisons(state: dict, fid: str, pays: dict) -> None:
+    """En paix, l'armée se RÉPARTIT : au-delà de deux unités, une province subit une
+    « occupation pesante » (−4 de stabilité par unité en trop) — l'IA entassait ses
+    huit unités dans sa capitale et s'en étonnait. Les surplus rejoignent les
+    provinces dégarnies du royaume (ce qui les protège aussi des hordes)."""
+    terrs = list(pays.get("territoires", []))
+    if len(terrs) < 2:
+        return
+    par_prov: dict[str, list] = {t: [] for t in terrs}
+    for u in pays.get("unites", []):
+        if u.get("territoire") in par_prov:
+            par_prov[u["territoire"]].append(u)
+    for tid, unites in par_prov.items():
+        while len(unites) > 2:
+            u = next((x for x in unites if not x.get("a_bouge")), None)
+            if u is None:
+                break
+            dest = next((t for t in ge._adjacents(tid) if t in par_prov and len(par_prov[t]) < 2), None)
+            if dest is None:  # aucune voisine dégarnie : on cherche la plus vide du royaume
+                dest = min((t for t in terrs if t != tid), key=lambda t: len(par_prov[t]), default=None)
+                if dest is None or len(par_prov[dest]) >= 2:
+                    break
+                ch = _chemin_vers(state, fid, tid, {dest}, _a_navigation(pays))
+                if not ch:
+                    break
+                dest = ch[0]
+                if dest not in par_prov:
+                    break
+            unites.remove(u); par_prov[dest].append(u)
+            u["territoire"] = dest; u["a_bouge"] = True
 
 
 def _declarer_guerre(state: dict, fid: str, pays: dict, prio: dict, evenements: list) -> None:
@@ -561,6 +628,19 @@ def _faire_la_paix(state: dict, fid: str, pays: dict, evenements: list) -> None:
                                         f"jusqu'à {ge.META_FACTIONS.get(autre_id, {}).get('nom', autre_id)}, renonce à la guerre."})
             continue
         f1, f2 = _force_totale(pays), _force_totale(autre)
+        # Vaincu réduit à sa capitale (guerre entre IA) : le vainqueur, ayant pris ce
+        # qu'il voulait, accorde la paix au bout de douze mois.
+        joueur = state.get("meta", {}).get("joueur_pays")
+        if autre_id != joueur and fid != joueur and len(autre.get("territoires", [])) <= 1 \
+                and tour - g.get("depuis", tour) >= 12 and random.random() < 0.4:
+            diplo["guerres_actives"].remove(g)
+            for x, y in ((fid, autre_id), (autre_id, fid)):
+                rep = state["pays"].get(x, {}).setdefault("reputation", {})
+                rep[y] = min(100, rep.get(y, 0) + 5)
+            evenements.append({"type": "paix", "faction": fid,
+                               "texte": f"🕊 {ge.META_FACTIONS.get(fid, {}).get('nom', fid)}, maître du terrain, accorde la paix à "
+                                        f"{ge.META_FACTIONS.get(autre_id, {}).get('nom', autre_id)}, réduit à sa capitale."})
+            continue
         if max(f1, f2) > min(f1, f2) * 1.5 + 2:
             continue  # quelqu'un domine : pas de paix, la guerre se poursuit
         if tour - g.get("depuis", tour) >= 18 and random.random() < 0.2:
