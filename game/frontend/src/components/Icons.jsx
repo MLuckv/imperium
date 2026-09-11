@@ -118,3 +118,35 @@ const UI_SVG = {
 export function UiIcon({ id, className, size = 16, style }) {
   return <Svg className={className} size={size} style={style}>{UI_SVG[id] || UI_SVG.menu}</Svg>
 }
+
+// ---------- GISEMENTS DE LUXE ----------
+// Glyphes pleins (currentColor) : lisibles à 12 px, cohérents avec le reste.
+export const LUXE_COULEURS = {
+  vin: '#8e44ad', grain: '#d4a83a', epices: '#d35400', ivoire: '#efe6cf', ambre: '#e69b2c',
+  pourpre: '#c0398b', or: '#f1c40f', fer: '#95a5a6', sel: '#ecf0f1', marbre: '#dcd6c8',
+}
+const LUXE_SVG = {
+  // grappe : trois cercles
+  vin: <g fill="currentColor"><circle cx="9" cy="10" r="3.6" /><circle cx="15" cy="10" r="3.6" /><circle cx="12" cy="15.5" r="3.6" /><path d="M12 6V3" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" /></g>,
+  // épi
+  grain: <g {...S}><path d="M12 21V6" /><path d="M12 9c-2.5 0-4-1.5-4-4 2.5 0 4 1.5 4 4zM12 9c2.5 0 4-1.5 4-4-2.5 0-4 1.5-4 4z" fill="currentColor" /><path d="M12 14c-2.5 0-4-1.5-4-4 2.5 0 4 1.5 4 4zM12 14c2.5 0 4-1.5 4-4-2.5 0-4 1.5-4 4z" fill="currentColor" /></g>,
+  // piment
+  epices: <g fill="currentColor"><path d="M7 6c-1 5 1 11 7 13 3 1 6-1 5-4-4 0-7-3-9-9z" /><path d="M9 5c1.5-1 3-1 4 .5" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round" /></g>,
+  // défense d'ivoire
+  ivoire: <g fill="none" stroke="currentColor" strokeWidth="3.2" strokeLinecap="round"><path d="M6 6c1 8 5 12 12 13" /></g>,
+  // hexagone d'ambre
+  ambre: <g fill="currentColor"><path d="M12 3l7.8 4.5v9L12 21l-7.8-4.5v-9z" /></g>,
+  // coquille (pourpre)
+  pourpre: <g fill="currentColor"><path d="M12 4c5 0 8 4 8 8s-4 8-8 8-8-3-8-7c0-3 2-5 5-5-1 2 0 4 2 4 3 0 4-4 1-8z" /></g>,
+  // lingot
+  or: <g fill="currentColor"><path d="M5 17l2-8h10l2 8z" /><path d="M8 7h8l-1-2H9z" /></g>,
+  // pioche / losange de fer
+  fer: <g fill="currentColor"><path d="M12 3l8 9-8 9-8-9z" /></g>,
+  // cube de sel
+  sel: <g fill="currentColor"><path d="M6 8l6-3 6 3v9l-6 3-6-3z" /><path d="M6 8l6 3 6-3M12 11v9" stroke="#14110c" strokeWidth="1" fill="none" /></g>,
+  // colonne de marbre
+  marbre: <g fill="currentColor"><rect x="9" y="6" width="6" height="12" /><rect x="7" y="4" width="10" height="2.5" /><rect x="7" y="17.5" width="10" height="2.5" /></g>,
+}
+export function LuxeIcon({ id, className, size = 14, style }) {
+  return <Svg className={className} size={size} style={{ color: LUXE_COULEURS[id] || '#caa53d', ...style }}>{LUXE_SVG[id] || LUXE_SVG.or}</Svg>
+}

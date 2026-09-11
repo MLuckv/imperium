@@ -1,3 +1,4 @@
+import { LuxeIcon } from './Icons'
 import {
   RESOURCE_META,
   LUXURY_META,
@@ -104,14 +105,14 @@ export default function ResourceBar({ meta, joueur }) {
       {(luxeKeys.length > 0 || Object.keys(luxeCount).length > 0) && (
         <div className="flex items-center gap-2 border-l border-bronze-dark/60 pl-3 text-xs text-amber-200">
           {luxeKeys.map(([k, v]) => (
-            <span key={k} title={((LUXURY_META[k] && LUXURY_META[k].label) || k) + ' en réserve (merveilles)'}>
-              {(LUXURY_META[k] && LUXURY_META[k].icon) || ''}{(LUXURY_META[k] && LUXURY_META[k].label) || k} {num(v)}
+            <span key={k} className="flex items-center gap-1" title={((LUXURY_META[k] && LUXURY_META[k].label) || k) + ' en réserve (merveilles)'}>
+              <LuxeIcon id={k} size={13} />{(LUXURY_META[k] && LUXURY_META[k].label) || k} {num(v)}
             </span>
           ))}
           {Object.entries(luxeCount).map(([k, nb]) => (
-            <span key={'g' + k} className="rounded-full border border-amber-300/40 bg-amber-300/10 px-1.5 py-0.5 text-[11px]"
+            <span key={'g' + k} className="flex items-center gap-0.5 rounded-full border border-amber-300/40 bg-amber-300/10 px-1.5 py-0.5 text-[11px]"
                   title={`Gisement exploité : ${(LUXURY_META[k] && LUXURY_META[k].label) || k}${nb > 1 ? ` ×${nb}` : ''}`}>
-              {(LUXURY_META[k] && LUXURY_META[k].icon) || '•'}{nb > 1 ? ` ×${nb}` : ''}
+              <LuxeIcon id={k} size={13} />{nb > 1 ? ` ×${nb}` : ''}
             </span>
           ))}
         </div>

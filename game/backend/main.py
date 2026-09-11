@@ -362,10 +362,9 @@ def diplomatie_message_stream(req: MessageReq):
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
     situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
     presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
-    prompt = ai_director.prompt_diplomatique(
-        req.cible, req.texte, etat_monde=etat_monde, historique=historique,
-        date_jeu=date_jeu, pays_joueur=pays_joueur,
-        situation_joueur=situation_joueur, situation_ia=situation_ia,
+    msgs = ai_director.messages_diplomatiques(
+        req.cible, ai_director._rappel_absents(req.texte, presents), historique=historique,
+        pays_joueur=pays_joueur, situation_joueur=situation_joueur, situation_ia=situation_ia,
         presents=presents)
     auteur = ai_director.nom_dirigeant(req.cible)
 
@@ -374,7 +373,7 @@ def diplomatie_message_stream(req: MessageReq):
         morceaux: list[str] = []
         tampon = ""          # bufferise le début pour couper les tics d'ouverture
         demarre = False
-        for chunk in ai_director.flux_ollama(prompt, temperature=0.72, num_predict=110):
+        for chunk in ai_director.flux_chat(msgs, temperature=0.65, num_predict=120):
             if not demarre:
                 tampon += chunk
                 if len(tampon) < 12:

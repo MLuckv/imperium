@@ -33,6 +33,7 @@ DOSSIER_PROMPTS = Path(__file__).resolve().parent / "prompts"
 # --- Configuration Ollama ---
 OLLAMA_URL = "http://localhost:11434"
 OLLAMA_GENERATE = f"{OLLAMA_URL}/api/generate"
+OLLAMA_CHAT = f"{OLLAMA_URL}/api/chat"
 OLLAMA_TAGS = f"{OLLAMA_URL}/api/tags"
 # Modèle Ollama (surchargez via la variable d'environnement IMPERIUM_MODELE).
 # qwen2.5:7b retenu après benchmark : compréhension et français nettement meilleurs
@@ -167,7 +168,8 @@ def _charger_template(nom_fichier: str, defaut: str) -> str:
 
 
 # --- Templates par défaut embarqués (cf. cahier §14) ---
-TEMPLATE_SYSTEME_DIRIGEANT = """Tu es {NOM_DIRIGEANT}, souverain de {PAYS} ({DATE_JEU}) — pas un assistant : un roi qui poursuit SES buts.
+# Copie de secours de prompts/systeme_dirigeant.md (le fichier fait foi).
+TEMPLATE_SYSTEME_DIRIGEANT = """Tu ES {NOM_DIRIGEANT}, souverain de {PAYS} — pas un assistant : un roi qui poursuit SES buts, et tu le restes en toutes circonstances.
 
 {PROFIL}
 
@@ -175,7 +177,7 @@ MA SITUATION : {SITUATION_IA}
 L'INTERLOCUTEUR ({PAYS_JOUEUR}), selon mes espions : {SITUATION_JOUEUR}
 LES AUTRES ROIS (tous VIVANTS, régnant en ce moment) : {RIVAUX}
 
-FIL DE LA CONVERSATION :
+FIL DE LA CONVERSATION (du plus ancien au plus récent) :
 {HISTORIQUE}
 
 RÈGLES :
@@ -183,6 +185,7 @@ RÈGLES :
   les camps) ; les faits ci-dessus sont la vérité, ne réattribue aucun royaume.
 - N'INVENTE aucun fait sur un peuple, une religion ou un groupe : tiens-t'en à ce que
   disent ton profil et la situation. Attaque les souverains, jamais les peuples.
+  N'invente ni l'apparence, ni les vêtements, ni les gestes de ton interlocuteur.
 - Les SEULS souverains de ce monde sont ceux listés plus haut. Si l'on te parle d'un
   autre nom, tu ne le connais pas : dis-le franchement (« ce nom ne me dit rien »,
   « nul ne règne sous ce nom ») et ramène l'échange à ceux qui règnent vraiment.
@@ -191,17 +194,22 @@ RÈGLES :
 - Un accord qui sert CLAIREMENT tes intérêts mérite d'être accepté — ne refuse pas par
   posture. Quand tu conclus, énonce-le SANS ambiguïté (« Marché conclu : je donne X, tu
   donnes Y ») ; quand tu refuses, motive-le en une phrase. Pas d'entre-deux flou.
-- Tu ne connais que TON époque (celle de ta propre vie) : tout ce qui vient d'un monde
-  plus tardif ou moderne t'est INCONNU — sorcellerie, hérésie ou folie, jamais expliqué.
-  Tu n'es ni une IA ni un personnage : tu ne sors jamais du rôle.
+- Tu vis ton époque sans jamais la nommer : aucune date, ère, siècle ni calendrier dans
+  ta bouche. Ce qui vient d'un monde plus tardif (poudre, machines, électricité) t'est
+  INCONNU — sorcellerie ou folie, jamais expliqué. Tu n'es ni une IA ni un personnage.
 - TOUS les souverains de ce monde (toi compris) sont VIVANTS, ici et maintenant, même
   ceux d'autres siècles : n'évoque JAMAIS la mort ni la fin d'aucun d'entre eux.
 - VARIE tes ouvertures (jamais deux fois la même adresse, pas d'onomatopées) et ne
   RECOPIE jamais des phrases de tes propres réponses précédentes ; paroles directes,
   sans narration ni parenthèses.
-- FRANÇAIS impeccable UNIQUEMENT (alphabet latin, aucun autre), 1 à 3 phrases denses.
+- FRANÇAIS impeccable UNIQUEMENT (alphabet latin, aucun autre), 1 à 4 phrases denses.
 
-{PAYS_JOUEUR} te dit : "{MESSAGE}"
+LE FIL, À L'INSTANT :
+{DERNIERE_REPLIQUE}
+Le dirigeant de {PAYS_JOUEUR} te répond : « {MESSAGE} »
+
+Réagis PRÉCISÉMENT à ces derniers mots : s'il accepte, refuse ou conclut, prends-en acte ;
+s'il pose une question, réponds-y ; s'il te provoque, réponds selon ton caractère.
 
 {NOM_DIRIGEANT} répond :"""
 
@@ -503,6 +511,21 @@ def _conseil_repli(faction: str, message: str, situation: str,
 # =====================================================================
 #  1) Réponse diplomatique d'un dirigeant à un message joueur
 # =====================================================================
+def _rappel_absents(message_joueur: str, presents: tuple[str, ...] | None) -> str:
+    """Rappel CIBLÉ : si le joueur nomme un souverain qui ne règne pas dans cette
+    partie, on le signale explicitement (une règle générale ne suffit pas au 7B,
+    qui répond alors de sa culture générale)."""
+    if not presents or "[RAPPEL" in (message_joueur or ""):
+        return message_joueur
+    cites = [n for f, n in NOMS_DIRIGEANTS.items()
+             if f not in presents and n.split()[0].lower() in (message_joueur or "").lower()]
+    if cites:
+        return (f"{message_joueur}\n[RAPPEL : {' et '.join(cites)} ne règne(nt) NULLE PART "
+                f"dans ce monde — ce nom t'est totalement inconnu. Dis-le et parle des "
+                f"souverains qui règnent vraiment.]")
+    return message_joueur
+
+
 def prompt_diplomatique(
     faction_cible: str,
     message_joueur: str,
@@ -516,17 +539,16 @@ def prompt_diplomatique(
 ) -> str:
     """Construit le prompt complet d'une réponse de dirigeant (partagé stream/non-stream)."""
     template = _charger_template("systeme_dirigeant.md", TEMPLATE_SYSTEME_DIRIGEANT)
-    # Rappel CIBLÉ : si le joueur nomme un souverain qui ne règne pas dans cette
-    # partie, on le signale explicitement (une règle générale ne suffit pas au 7B,
-    # qui répond alors de sa culture générale).
-    if presents:
-        cites = [n for f, n in NOMS_DIRIGEANTS.items()
-                 if f not in presents and n.split()[0].lower() in (message_joueur or "").lower()]
-        if cites:
-            message_joueur = (
-                f"{message_joueur}\n[RAPPEL : {' et '.join(cites)} ne règne(nt) NULLE PART "
-                f"dans ce monde — ce nom t'est totalement inconnu. Dis-le et parle des "
-                f"souverains qui règnent vraiment.]")
+    message_joueur = _rappel_absents(message_joueur, presents)
+    # Le message courant est déjà dans le fil (ajouté avant l'appel) : on l'en retire
+    # pour ne pas le montrer deux fois, et l'on isole TA dernière réplique pour que
+    # le modèle réagisse au dernier échange au lieu de repartir de zéro.
+    hist = list(historique or [])
+    if hist and hist[-1].get("role") == "joueur" and (hist[-1].get("texte") or "").strip() == (message_joueur or "").split("\n[RAPPEL")[0].strip():
+        hist = hist[:-1]
+    derniere = next((h for h in reversed(hist) if h.get("role") == "ia"), None)
+    derniere_txt = (f"Toi, {nom_dirigeant(faction_cible)}, viens de dire : « {_trim(derniere.get('texte', ''), 260)} »"
+                    if derniere else "(c'est le premier message qu'il t'adresse)")
     return _remplir(
         template,
         {
@@ -534,6 +556,7 @@ def prompt_diplomatique(
             "PAYS": _nom_pays(faction_cible),
             "PAYS_JOUEUR": _nom_pays(pays_joueur),
             "DATE_JEU": _date_lisible(date_jeu),
+            "DERNIERE_REPLIQUE": derniere_txt,
             "PROFIL": _persona_diplomatie(faction_cible, presents) or "(profil indisponible)",
             "RIVAUX": ", ".join(f"{n} ({_nom_pays(f)})" for f, n in NOMS_DIRIGEANTS.items()
                                 if f != faction_cible
@@ -541,10 +564,114 @@ def prompt_diplomatique(
             "SITUATION_JOUEUR": situation_joueur or "(situation du joueur mal connue)",
             "SITUATION_IA": situation_ia or "(rien de particulier à signaler)",
             "ETAT_MONDE": "",  # retiré du template (redondant avec les situations)
-            "HISTORIQUE": _formater_historique(historique),
+            "HISTORIQUE": _formater_historique(hist),
             "MESSAGE": message_joueur,
         },
     )
+
+
+def messages_diplomatiques(
+    faction_cible: str,
+    message_joueur: str,
+    historique: list[dict] | None = None,
+    pays_joueur: str = "rome",
+    situation_joueur: str = "",
+    situation_ia: str = "",
+    presents: tuple[str, ...] | None = None,
+) -> list[dict]:
+    """Même contenu que prompt_diplomatique, mais au format CHAT (système + tours
+    utilisateur/assistant). Un modèle 7B suit bien mieux le fil quand chaque
+    réplique est un vrai tour de conversation : il ne confond plus qui parle à qui,
+    ni ne repart de zéro après un « donc vous refusez »."""
+    template = _charger_template("systeme_dirigeant.md", TEMPLATE_SYSTEME_DIRIGEANT)
+    # Le système = tout le gabarit SAUF la partie « fil à l'instant » (les tours
+    # de chat la remplacent).
+    systeme = template.split("LE FIL, À L'INSTANT")[0]
+    nom_joueur = nom_dirigeant(pays_joueur)
+    systeme = _remplir(systeme, {
+        "NOM_DIRIGEANT": nom_dirigeant(faction_cible),
+        "PAYS": _nom_pays(faction_cible),
+        "PAYS_JOUEUR": f"{_nom_pays(pays_joueur)} (son souverain : {nom_joueur})",
+        "PROFIL": _persona_diplomatie(faction_cible, presents) or "(profil indisponible)",
+        "RIVAUX": ", ".join(f"{n} ({_nom_pays(f)})" for f, n in NOMS_DIRIGEANTS.items()
+                            if f != faction_cible and (presents is None or f in presents)) or "(aucun)",
+        "SITUATION_JOUEUR": situation_joueur or "(situation du joueur mal connue)",
+        "SITUATION_IA": situation_ia or "(rien de particulier à signaler)",
+        "HISTORIQUE": "(voir les tours de la conversation ci-dessous)",
+    }).rstrip()
+    systeme += (f"\n\nTu parles avec {nom_joueur}, souverain de {_nom_pays(pays_joueur)} : c'est LUI "
+                f"que tu tutoies et à qui tu réponds — jamais à un autre roi, jamais à toi-même. "
+                f"Réagis précisément à son dernier message : s'il accepte, refuse ou conclut, "
+                f"prends-en acte ; s'il pose une question, réponds-y. 1 à 4 phrases, en français.")
+    msgs = [{"role": "system", "content": systeme}]
+    hist = list(historique or [])
+    # Le message courant est déjà en fin de fil : on l'y laisse comme dernier tour.
+    if not hist or hist[-1].get("role") != "joueur" or (hist[-1].get("texte") or "").strip() != (message_joueur or "").split("\n[RAPPEL")[0].strip():
+        hist.append({"role": "joueur", "texte": message_joueur})
+    else:
+        hist[-1] = {"role": "joueur", "texte": message_joueur}  # avec le RAPPEL éventuel
+    # Bornage : les 14 derniers tours intégralement, les plus anciens du joueur résumés.
+    n = len(hist)
+    for i, h in enumerate(hist):
+        if "role" not in h:
+            continue
+        recent = i >= n - 14
+        txt = h.get("texte", "") or ""
+        if h.get("role") == "ia":
+            if not recent:
+                continue
+            msgs.append({"role": "assistant", "content": txt})
+        else:
+            msgs.append({"role": "user", "content": txt if recent else _trim(txt, 140)})
+    return msgs
+
+
+def _appel_chat(messages: list[dict], temperature: float = 0.7, num_predict: int = 160) -> str | None:
+    """Appel /api/chat (non-stream). Retourne le texte ou None."""
+    if not modele_pret():
+        return None
+    try:
+        payload = {"model": MODELE, "messages": messages, "stream": False, "keep_alive": "30m",
+                   "options": {"temperature": temperature, "num_predict": num_predict,
+                               "seed": random.randint(1, 2_000_000_000),
+                               "top_p": 0.92, "repeat_penalty": 1.15}}
+        r = httpx.post(OLLAMA_CHAT, json=payload, timeout=TIMEOUT_S)
+        if r.status_code != 200:
+            return None
+        return (r.json().get("message") or {}).get("content", "").strip() or None
+    except Exception:
+        return None
+
+
+def flux_chat(messages: list[dict], temperature: float = 0.7, num_predict: int = 160):
+    """Générateur : chunks streamés depuis /api/chat (vide si indisponible)."""
+    if not modele_pret():
+        return
+    payload = {"model": MODELE, "messages": messages, "stream": True, "keep_alive": "30m",
+               "options": {"temperature": temperature, "num_predict": num_predict,
+                           "seed": random.randint(1, 2_000_000_000),
+                           "top_p": 0.92, "repeat_penalty": 1.15}}
+    try:
+        with httpx.stream("POST", OLLAMA_CHAT, json=payload, timeout=90.0) as r:
+            if r.status_code != 200:
+                return
+            for ligne in r.iter_lines():
+                if not ligne:
+                    continue
+                try:
+                    d = json.loads(ligne)
+                except Exception:
+                    continue
+                morceau = (d.get("message") or {}).get("content", "")
+                if morceau:
+                    # Garde-fou alphabet latin (le 7B glisse parfois vers le chinois).
+                    if any("\u4e00" <= ch <= "\u9fff" for ch in morceau):
+                        return
+                    yield morceau
+                if d.get("done"):
+                    return
+    except Exception:
+        return
 
 
 def flux_ollama(prompt: str, temperature: float = 0.72, num_predict: int = 90,
@@ -606,12 +733,12 @@ def reponse_diplomatique(
 ) -> dict:
     """Génère la réponse d'un dirigeant IA (non-stream). {reponse, auteur, source}."""
     auteur = nom_dirigeant(faction_cible)
-    prompt = prompt_diplomatique(faction_cible, message_joueur, etat_monde, historique,
-                                 date_jeu, pays_joueur, situation_joueur, situation_ia,
-                                 presents)
+    message_joueur = _rappel_absents(message_joueur, presents)
+    msgs = messages_diplomatiques(faction_cible, message_joueur, historique, pays_joueur,
+                                  situation_joueur, situation_ia, presents)
     # Température modérée : moins de « glissements » de style/faits, tout en gardant
     # de la variété (la graine aléatoire par appel fait le reste).
-    texte = _nettoyer_reponse(_appel_ollama(prompt, temperature=0.72, num_predict=110))
+    texte = _nettoyer_reponse(_appel_chat(msgs, temperature=0.65, num_predict=120))
     if texte:
         return {"reponse": texte, "auteur": auteur, "source": "ollama"}
 

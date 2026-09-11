@@ -51,7 +51,7 @@ LUXES: dict[str, dict] = {
                "desc": "Un marbre blanc sans veine : la matière des merveilles."},
 }
 
-PART_PROVINCES = 0.34   # fraction des provinces qui reçoivent un gisement
+PART_PROVINCES = 0.20   # fraction des provinces qui reçoivent un gisement (~36 sur 182)
 
 
 def _pool(terrain: str, y: float, cotier: bool, y_min: float, y_max: float) -> list[str]:

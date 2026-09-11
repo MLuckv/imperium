@@ -198,65 +198,6 @@ function Foret(props) {
   )
 }
 
-// ---- Dune du Pilat : dune, océan, pins ----
-function Dune(props) {
-  return (
-    <Frame {...props}>
-      <rect x="0" y="40" width="100" height="24" fill="#4f7fa0" />
-      <path d="M0 52 q10 -3 20 0 t20 0 t20 0 t20 0 t20 0" stroke="#bfe0ee" strokeWidth="1" fill="none" opacity="0.7" />
-      <path d="M0 62 L0 44 Q30 18 62 30 Q80 38 100 34 L100 62 Z" fill="#e6cf8f" stroke={OUTLINE} strokeWidth="1" />
-      <path d="M8 44 Q30 24 60 32" stroke="#c9ad66" strokeWidth="1" fill="none" />
-      {[74, 84, 93].map((x) => (
-        <g key={x}><rect x={x - 1} y="26" width="2" height="10" fill="#5a3d24" /><polygon points={`${x - 6},28 ${x + 6},28 ${x},16`} fill="#3f6b3a" stroke={OUTLINE} strokeWidth="0.7" /></g>
-      ))}
-    </Frame>
-  )
-}
-
-// ---- Falaises (Côte d'Opale) : craie blanche sur mer grise ----
-function Falaises(props) {
-  return (
-    <Frame {...props}>
-      <rect x="0" y="34" width="100" height="30" fill="#5f8194" />
-      <path d="M0 42 q12 -2 24 0 t24 0 t24 0 t24 0" stroke="#d8e6ec" strokeWidth="1" fill="none" opacity="0.8" />
-      <path d="M0 60 L0 18 Q20 14 34 20 L40 16 L52 22 L58 60 Z" fill={MARBLE} stroke={OUTLINE} strokeWidth="1" />
-      <path d="M0 18 Q20 12 34 18 L40 14 L52 20" fill="#7f9a5a" stroke={OUTLINE} strokeWidth="0.9" />
-      <path d="M8 24 v30 M18 22 v34 M30 24 v32 M44 22 v34" stroke={STONE_SH} strokeWidth="0.7" opacity="0.7" />
-      <path d="M70 26 l3 -2 l3 2 M80 22 l3 -2 l3 2" stroke={MARBLE} strokeWidth="1" fill="none" />
-    </Frame>
-  )
-}
-
-// ---- Loch Ness : lac sombre, collines, une ombre dans l'eau ----
-function Loch(props) {
-  return (
-    <Frame {...props}>
-      <path d="M0 30 Q18 10 36 26 Q52 8 70 24 Q86 12 100 26 L100 64 L0 64 Z" fill="#5a6f4c" stroke={OUTLINE} strokeWidth="1" />
-      <rect x="0" y="38" width="100" height="26" fill="#1f2f3a" />
-      <path d="M0 44 q12 -2 24 0 t24 0 t24 0 t24 0" stroke="#3d5666" strokeWidth="1" fill="none" />
-      <path d="M40 50 q6 -10 14 0 M58 50 q4 -6 8 -2" stroke="#2f4a3f" strokeWidth="2.2" fill="none" strokeLinecap="round" />
-      <circle cx="66" cy="45" r="1.8" fill="#2f4a3f" />
-      <rect x="0" y="34" width="100" height="6" fill="#c8d0cf" opacity="0.35" />
-    </Frame>
-  )
-}
-
-// ---- Cataractes du Nil : fleuve écumant entre rochers, palmiers ----
-function Cataractes(props) {
-  return (
-    <Frame {...props}>
-      <rect x="0" y="0" width="100" height="64" fill="#e6cf8f" />
-      <path d="M40 0 L60 0 L66 20 L54 40 L62 64 L36 64 L44 40 L34 20 Z" fill="#3f7fa8" stroke={OUTLINE} strokeWidth="0.8" />
-      {[[36, 22], [60, 20], [42, 42], [56, 44]].map(([x, y], i) => <circle key={i} cx={x} cy={y} r="4" fill="#6b5a45" stroke={OUTLINE} strokeWidth="0.8" />)}
-      <path d="M44 24 q6 6 10 0 M46 46 q4 6 8 0" stroke="#dff0f7" strokeWidth="1.4" fill="none" />
-      {[14, 84].map((x) => (
-        <g key={x}><path d={`M${x} 58 q2 -14 0 -26`} stroke="#5a3d24" strokeWidth="2" fill="none" />
-          {[-30, -10, 10, 30].map((a) => <path key={a} d={`M${x} 32 q${Math.sin(a / 57) * 12} -6 ${Math.sin(a / 57) * 16} 2`} stroke="#3f6b3a" strokeWidth="2" fill="none" strokeLinecap="round" />)}</g>
-      ))}
-    </Frame>
-  )
-}
-
 // ---- Mur (Mur du Nord, Grande Muraille) : rempart crénelé sur les crêtes ----
 function Mur(props) {
   return (
@@ -425,18 +366,86 @@ function Mausolee(props) {
   )
 }
 
+// ---- Porta Nigra : porte fortifiée à deux tours, arcades superposées ----
+function Porte(props) {
+  return (
+    <Frame {...props}>
+      <rect x="6" y="56" width="88" height="5" fill={STONE_SH} stroke={OUTLINE} strokeWidth="1" />
+      {[[10, 10], [66, 10]].map(([x, y], i) => (
+        <g key={i}>
+          <rect x={x} y={y} width="24" height="46" fill="#5d5347" stroke={OUTLINE} strokeWidth="1" />
+          {[0, 1, 2].map((r) => [x + 5, x + 14].map((ax) => <path key={ax + '-' + r} d={`M${ax} ${y + 12 + r * 13} v-6 a2.5 2.5 0 0 1 5 0 v6 Z`} fill={SHADOW} stroke={OUTLINE} strokeWidth="0.5" />))}
+        </g>
+      ))}
+      <rect x="34" y="20" width="32" height="36" fill="#6b6152" stroke={OUTLINE} strokeWidth="1" />
+      {[38, 50].map((ax) => <path key={ax} d={`M${ax} 32 v-6 a3.5 3.5 0 0 1 7 0 v6 Z`} fill={SHADOW} stroke={OUTLINE} strokeWidth="0.5" />)}
+      <path d="M40 56 v-14 a10 10 0 0 1 20 0 v14 Z" fill={SHADOW} stroke={OUTLINE} strokeWidth="0.8" />
+      <rect x="8" y="8" width="84" height="3" fill="#5d5347" stroke={OUTLINE} strokeWidth="0.8" />
+    </Frame>
+  )
+}
+
+// ---- Chersonèse : cité grecque en ruine sur la mer — colonnes brisées ----
+function RuineGrecque(props) {
+  return (
+    <Frame {...props}>
+      <rect x="0" y="48" width="100" height="16" fill="#4f7fa0" />
+      <path d="M0 52 q10 -2 20 0 t20 0 t20 0 t20 0 t20 0" stroke="#bfe0ee" strokeWidth="1" fill="none" opacity="0.6" />
+      <path d="M0 50 L0 40 Q40 34 100 42 L100 50 Z" fill="#c9ad66" stroke={OUTLINE} strokeWidth="0.9" />
+      <rect x="18" y="36" width="64" height="4" fill={MARBLE_SH} stroke={OUTLINE} strokeWidth="0.9" />
+      {[[22, 18], [32, 10], [42, 24], [58, 8], [68, 26], [76, 16]].map(([x, h], i) => (
+        <g key={i}><rect x={x} y={36 - h} width="6" height={h} fill={MARBLE} stroke={OUTLINE} strokeWidth="0.8" />
+          <path d={`M${x} ${36 - h} l1.5 -2 l2 1.5 l2.5 -1.5`} stroke={OUTLINE} strokeWidth="0.7" fill="none" /></g>
+      ))}
+      <rect x="30" y="14" width="10" height="3" fill={MARBLE_SH} stroke={OUTLINE} strokeWidth="0.7" transform="rotate(-12 35 15)" />
+      <ellipse cx="88" cy="44" rx="6" ry="2" fill={MARBLE_SH} stroke={OUTLINE} strokeWidth="0.6" />
+    </Frame>
+  )
+}
+
+// ---- Altamira : entrée de grotte, bisons ocre sur la paroi ----
+function Grotte(props) {
+  return (
+    <Frame {...props}>
+      <path d="M0 64 L0 26 Q30 4 70 12 Q96 18 100 40 L100 64 Z" fill="#6b5a45" stroke={OUTLINE} strokeWidth="1" />
+      <path d="M14 64 Q16 30 50 26 Q84 30 86 64 Z" fill="#2b2417" stroke={OUTLINE} strokeWidth="1" />
+      <path d="M30 40 q4 -5 10 -3 q6 -2 8 4 q2 6 -4 7 h-10 q-6 -1 -4 -8 Z" fill={TERRA} stroke={TERRA_DK} strokeWidth="0.8" />
+      <path d="M33 48 v5 M41 48 v5" stroke={TERRA_DK} strokeWidth="1.2" />
+      <path d="M54 46 q4 -5 10 -3 q6 -2 8 4 q2 6 -4 7 h-10 q-6 -1 -4 -8 Z" fill="#c07a3a" stroke={TERRA_DK} strokeWidth="0.8" />
+      <path d="M57 54 v4 M65 54 v4" stroke={TERRA_DK} strokeWidth="1.2" />
+      <circle cx="62" cy="34" r="2" fill="#c07a3a" /><path d="M20 36 l3 -2 l3 2" stroke="#c07a3a" strokeWidth="1" fill="none" />
+    </Frame>
+  )
+}
+
+// ---- Kourganes : tumulus de la steppe, herbe rase, stèle de pierre ----
+function Tumulus(props) {
+  return (
+    <Frame {...props}>
+      <rect x="0" y="50" width="100" height="14" fill="#8f9a5a" />
+      <path d="M0 50 Q25 40 50 50 Z" fill="#7f8a4a" stroke={OUTLINE} strokeWidth="0.8" />
+      <path d="M16 52 Q50 8 84 52 Z" fill="#9aa663" stroke={OUTLINE} strokeWidth="1.1" />
+      <path d="M22 52 Q50 20 78 52" fill="none" stroke="#7f8a4a" strokeWidth="1.2" />
+      <path d="M50 30 v22" stroke="#7f8a4a" strokeWidth="0.8" opacity="0.6" />
+      <rect x="47" y="14" width="6" height="16" rx="2" fill={STONE_SH} stroke={OUTLINE} strokeWidth="0.9" />
+      <circle cx="50" cy="19" r="1.4" fill={OUTLINE} /><path d="M48 24 h4" stroke={OUTLINE} strokeWidth="0.8" />
+      <circle cx="12" cy="10" r="5" fill={GOLD} opacity="0.8" />
+      <path d="M60 58 l4 -3 l4 3 M70 60 l4 -3 l4 3" stroke="#5a3d24" strokeWidth="1" fill="none" />
+    </Frame>
+  )
+}
+
 const ART = {
   parthenon: Parthenon, colosse_rhodes: ColosseRhodes, knossos: Knossos, colisee: Colisee,
-  stonehenge: Stonehenge, pyramides: Pyramides,
-  etna: Volcan, vesuve: Volcan, chaine_des_puys: Volcan,
-  broceliande: Foret, dune_du_pilat: Dune, cote_d_opale: Falaises, loch_ness: Loch, cataractes_du_nil: Cataractes,
+  stonehenge: Stonehenge, pyramides: Pyramides, vesuve: Volcan, broceliande: Foret,
+  compostelle: Cathedrale, porta_nigra: Porte, chersonese: RuineGrecque,
+  altamira: Grotte, kourganes: Tumulus, troie: Fouille,
   mur_d_hadrien: Mur, grande_muraille: Mur, pont_du_gard: Aqueduc,
-  tombe_de_vix: Fouille, troie: Fouille,
   grande_bibliotheque: Bibliotheque, grand_phare: Phare, jardins_suspendus: Jardins,
   pantheon: Pantheon, cathedrale: Cathedrale, table_ronde: TableRonde, mausolee: Mausolee,
 }
 // Repli par type pour toute merveille sans dessin dédié.
-const ART_TYPE = { antique: Parthenon, naturelle: Foret, ruine: Aqueduc, fouille: Fouille, construction: Bibliotheque }
+const ART_TYPE = { antique: Parthenon, naturelle: Foret, ruine: RuineGrecque, fouille: Fouille, construction: Bibliotheque }
 
 export default function WonderArt({ id, type, size, className, style }) {
   const C = ART[id] || ART_TYPE[type]

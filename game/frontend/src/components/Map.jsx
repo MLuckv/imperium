@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Application, Container, Graphics, Text } from 'pixi.js'
 import { getMap } from '../api'
 import { factionColor, factionLabel } from '../lib/format'
+import { LuxeIcon } from './Icons'
 
 // Carte façon Age of History : mer bleue, terres (parchemin) découpées en
 // provinces, empires colorés. Clic sur une province => elle se SOULÈVE (sélection).
@@ -290,19 +291,12 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     // l'exploite (cité + bâtiment), éteinte sinon — on voit d'un coup d'œil ce qui
     // dort encore sous la terre.
     const gisements = (stateRef.current && stateRef.current.gisements) || {}
-    const LUXE_ICONE = { vin: '🍇', grain: '🌾', epices: '🌶', ivoire: '🐘', ambre: '🟠', pourpre: '🐚', or: '✨', fer: '⛏', sel: '🧂', marbre: '⬜' }
     for (const [tid, lx] of Object.entries(gisements)) {
       const c = centreOf(tid); if (!c) continue
       const prop = resolveFaction(terrById(tid) || { id: tid })
       const p = prop && stateRef.current.pays[prop]
-      const exploite = !!(p && (p.villes || []).some((v) => v.territoire === tid && (v.batiments || []).length && (p.luxes_actifs || []).includes(lx)
-        && v.batiments.includes(LUXE_BAT[lx])))
-      const bg = new Graphics(); bg.circle(c[0] + 15, c[1] + 9, 8.5)
-      bg.fill({ color: exploite ? 0x3a3014 : 0x14110c, alpha: exploite ? 0.95 : 0.6 })
-      bg.stroke({ width: 1.4, color: exploite ? 0xe8c267 : 0x8a7d66, alpha: 0.95 })
-      bg.eventMode = 'none'; labels.addChild(bg)
-      const ic = new Text({ text: LUXE_ICONE[lx] || '•', style: { fontFamily: 'Georgia, serif', fontSize: 11 } })
-      ic.anchor.set(0.5, 0.5); ic.position.set(c[0] + 15, c[1] + 9); ic.alpha = exploite ? 1 : 0.75; ic.eventMode = 'none'; labels.addChild(ic)
+      const exploite = !!(p && (p.villes || []).some((v) => v.territoire === tid && (v.batiments || []).includes(LUXE_BAT[lx])))
+      drawLuxeBadge(labels, c[0] + 15, c[1] + 9, lx, exploite)
     }
 
     // Repères des merveilles sur la carte (✦ doré = active/intacte, grisé = ruine/site).
@@ -700,6 +694,50 @@ function drawBuildingGlyph(layer, cx, cy, type) {
   g.fill({ color: col, alpha: 1 }); g.stroke({ width: 1, color: 0x14110c, alpha: 0.9 })
   g.eventMode = 'none'; layer.addChild(g)
 }
+// Pastille de GISEMENT : disque sombre + glyphe vectoriel coloré (grappe, épi,
+// lingot…). Dorée quand le gisement est exploité, éteinte sinon.
+const LUXE_COULEUR = { vin: 0x9b59b6, grain: 0xd4a83a, epices: 0xe0641e, ivoire: 0xefe6cf, ambre: 0xe69b2c,
+                       pourpre: 0xd04a9a, or: 0xf1c40f, fer: 0xaab4b6, sel: 0xf4f6f7, marbre: 0xe4dfd2 }
+function drawLuxeBadge(layer, x, y, lx, exploite) {
+  const col = LUXE_COULEUR[lx] || 0xcaa53d
+  const bg = new Graphics(); bg.circle(x, y, 8)
+  bg.fill({ color: exploite ? 0x2e2612 : 0x14110c, alpha: exploite ? 0.95 : 0.7 })
+  bg.stroke({ width: 1.3, color: exploite ? 0xe8c267 : 0x7a6f5c, alpha: 0.95 })
+  bg.eventMode = 'none'; layer.addChild(bg)
+  const g = new Graphics(); g.eventMode = 'none'
+  const a = exploite ? 1 : 0.7
+  switch (lx) {
+    case 'vin':      // grappe
+      g.circle(x - 2.2, y - 1.5, 2); g.circle(x + 2.2, y - 1.5, 2); g.circle(x, y + 2, 2); g.fill({ color: col, alpha: a })
+      g.moveTo(x, y - 3.5); g.lineTo(x, y - 5.5); g.stroke({ width: 1, color: col, alpha: a }); break
+    case 'grain':    // épi
+      g.moveTo(x, y + 5); g.lineTo(x, y - 5); g.stroke({ width: 1.2, color: col, alpha: a })
+      for (const dy of [-4, -1, 2]) { g.ellipse(x - 2, y + dy, 2, 1.1); g.ellipse(x + 2, y + dy, 2, 1.1) } g.fill({ color: col, alpha: a }); break
+    case 'epices':   // piment
+      g.moveTo(x - 3, y - 4); g.bezierCurveTo(x - 4, y + 2, x - 1, y + 5, x + 3, y + 4); g.bezierCurveTo(x + 5, y + 3, x + 4, y + 1, x + 2, y + 1)
+      g.bezierCurveTo(x - 1, y, x - 2, y - 2, x - 3, y - 4); g.fill({ color: col, alpha: a }); break
+    case 'ivoire':   // défense courbe
+      g.moveTo(x - 4, y - 4); g.quadraticCurveTo(x - 3, y + 4, x + 4, y + 4); g.stroke({ width: 2.4, color: col, alpha: a, cap: 'round' }); break
+    case 'ambre':    // hexagone
+      g.poly([x, y - 5, x + 4.3, y - 2.5, x + 4.3, y + 2.5, x, y + 5, x - 4.3, y + 2.5, x - 4.3, y - 2.5]); g.fill({ color: col, alpha: a }); break
+    case 'pourpre':  // spirale de coquille (deux arcs)
+      g.circle(x, y, 4.5); g.fill({ color: col, alpha: a }); g.circle(x + 1, y + 1, 1.8); g.fill({ color: 0x14110c, alpha: 0.8 }); break
+    case 'or':       // lingot
+      g.poly([x - 5, y + 3, x - 3.5, y - 2, x + 3.5, y - 2, x + 5, y + 3]); g.fill({ color: col, alpha: a })
+      g.rect(x - 3, y - 4.5, 6, 1.8); g.fill({ color: col, alpha: a }); break
+    case 'fer':      // losange
+      g.poly([x, y - 5, x + 5, y, x, y + 5, x - 5, y]); g.fill({ color: col, alpha: a }); break
+    case 'sel':      // cube
+      g.poly([x - 4, y - 2, x, y - 4, x + 4, y - 2, x + 4, y + 3, x, y + 5, x - 4, y + 3]); g.fill({ color: col, alpha: a })
+      g.moveTo(x - 4, y - 2); g.lineTo(x, y); g.lineTo(x + 4, y - 2); g.moveTo(x, y); g.lineTo(x, y + 5); g.stroke({ width: 0.8, color: 0x14110c, alpha: 0.8 }); break
+    case 'marbre':   // colonne
+      g.rect(x - 2, y - 3, 4, 6); g.rect(x - 3.5, y - 5, 7, 1.6); g.rect(x - 3.5, y + 3.4, 7, 1.6); g.fill({ color: col, alpha: a }); break
+    default:
+      g.circle(x, y, 3); g.fill({ color: col, alpha: a })
+  }
+  layer.addChild(g)
+}
+
 // Étoile (marqueur de capitale).
 function drawStar(layer, cx, cy, outer, inner, color) {
   const pts = []
@@ -724,7 +762,6 @@ function drawScaffold(layer, cx, cy) {
 
 
 const LUXE_NOMS = { vin: 'Vin', grain: 'Grain', epices: 'Épices', ivoire: 'Ivoire', ambre: 'Ambre', pourpre: 'Pourpre', or: "Filon d'or", fer: 'Fer riche', sel: 'Sel', marbre: 'Marbre' }
-const LUXE_ICONES = { vin: '🍇', grain: '🌾', epices: '🌶', ivoire: '🐘', ambre: '🟠', pourpre: '🐚', or: '✨', fer: '⛏', sel: '🧂', marbre: '⬜' }
 const LUXE_BAT_NOM = { ferme: 'une Ferme', marche: 'un Marché', port: 'un Port', mine: 'une Mine', carriere: 'une Carrière' }
 
 // Fiche de survol : ce que le joueur peut lire d'un coup d'œil sur une province —
@@ -777,8 +814,8 @@ function ApercuProvince({ info, stateData, host }) {
       </div>
 
       {info.gisement && (
-        <div className="mt-1.5 text-[11px] text-amber-200">
-          {LUXE_ICONES[info.gisement] || '•'} Gisement : {LUXE_NOMS[info.gisement] || info.gisement}
+        <div className="mt-1.5 flex items-center gap-1 text-[11px] text-amber-200">
+          <LuxeIcon id={info.gisement} size={13} /> Gisement : {LUXE_NOMS[info.gisement] || info.gisement}
           <span className="text-parchment/50"> · {LUXE_BAT[info.gisement] ? `exploité par ${LUXE_BAT_NOM[LUXE_BAT[info.gisement]]}` : ''}</span>
         </div>
       )}

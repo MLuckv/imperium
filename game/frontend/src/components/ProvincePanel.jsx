@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { getCatalog } from '../api'
 import { factionColor, factionLabel, leaderName, num } from '../lib/format'
-import { BuildingIcon, UnitIcon, FactionEmblem, UiIcon } from './Icons'
+import { BuildingIcon, UnitIcon, FactionEmblem, UiIcon, LuxeIcon } from './Icons'
 
 // PANNEAU DE PROVINCE — ce que le joueur voit quand il clique une province, façon
 // Civ / AoH : la cité, ses bâtiments, le chantier en cours, la garnison, et les
@@ -105,7 +105,7 @@ export default function ProvincePanel({ prov, state, annexable, conqueteCost, on
           return (
             <div className={'rounded border px-2 py-1.5 ' + (exploite ? 'border-amber-300/40 bg-amber-300/5' : 'border-bronze-dark/40 bg-black/20')}>
               <div className="flex items-center gap-1.5 text-[12px] font-semibold text-amber-200">
-                <span>{lx ? lx.icone : '•'}</span>{lx ? lx.nom : prov.gisement}
+                <LuxeIcon id={prov.gisement} size={14} />{lx ? lx.nom : prov.gisement}
                 <span className="ml-auto text-[10px] font-normal text-parchment/55">{exploite ? 'exploité ✓' : 'gisement'}</span>
               </div>
               <div className="mt-0.5 text-[11px] text-parchment/65">

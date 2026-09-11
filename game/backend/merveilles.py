@@ -46,12 +46,6 @@ MERVEILLES: dict[str, dict] = {
                     "desc": "Les chantiers de bâtiments avancent deux fois plus vite dans toutes vos cités."},
     },
     # ---------------------------------------------------------- NATURELLES
-    "chaine_des_puys": {
-        "nom": "Chaîne des Puys", "type": "naturelle", "province": "puy_de_dome",
-        "desc": "Les volcans endormis d'Auvergne : leurs cendres font la terre la plus "
-                "grasse du royaume, et leurs sommets sont sacrés.",
-        "bonus": {"nourriture": 6, "stabilite": 2}, "prestige": 2,
-    },
     "broceliande": {
         "nom": "Forêt de Brocéliande", "type": "naturelle", "province": "maine_et_loire",
         "desc": "Brume, sources et chênes millénaires : la forêt de Merlin. Ceux qui "
@@ -59,32 +53,6 @@ MERVEILLES: dict[str, dict] = {
         "bonus": {"recherche_pct": 0.10, "stabilite": 3}, "prestige": 2,
         "special": {"id": "merlin", "nom": "L'œil de Merlin",
                     "desc": "Vous voyez la puissance et l'armée RÉELLES de chaque rival (plus d'estimation)."},
-    },
-    "dune_du_pilat": {
-        "nom": "Dune du Pilat", "type": "naturelle", "province": "gironde",
-        "desc": "La plus haute dune du monde connu, entre l'océan et la forêt des Landes. "
-                "Marchands et pèlerins y font halte.",
-        "bonus": {"or": 6}, "prestige": 2,
-    },
-    "cote_d_opale": {
-        "nom": "Falaises de la Côte d'Opale", "type": "naturelle", "province": "pas_de_calais",
-        "desc": "Les falaises blanches face à l'île des Bretons. Qui tient ce rivage "
-                "tient le détroit et son commerce.",
-        "bonus": {"or": 5}, "prestige": 1,
-    },
-    "loch_ness": {
-        "nom": "Loch Ness", "type": "naturelle", "province": "highland",
-        "desc": "Un lac noir et sans fond, où l'on dit qu'une bête veille. La crainte "
-                "qu'il inspire tient les clans tranquilles.",
-        "bonus": {"stabilite": 4}, "prestige": 2,
-    },
-    "etna": {
-        "nom": "Etna", "type": "naturelle", "province": "palermo",
-        "desc": "Le volcan vivant de Sicile : ses cendres nourrissent des vergers sans "
-                "pareils, mais sa colère fait trembler les villes.",
-        "bonus": {"nourriture": 8, "stabilite": -2}, "prestige": 3,
-        "special": {"id": "colere", "nom": "Colère du volcan",
-                    "desc": "Le sol est béni, mais l'éruption frappe cette province trois fois plus souvent."},
     },
     "vesuve": {
         "nom": "Vésuve", "type": "naturelle", "province": "foggia",
@@ -94,11 +62,19 @@ MERVEILLES: dict[str, dict] = {
         "special": {"id": "colere", "nom": "Colère du volcan",
                     "desc": "Le sol est béni, mais l'éruption frappe cette province trois fois plus souvent."},
     },
-    "cataractes_du_nil": {
-        "nom": "Cataractes du Nil", "type": "naturelle", "province": "al_minya",
-        "desc": "Là où le fleuve gronde entre les rochers. Chaque crue dépose le limon "
-                "qui nourrit un peuple entier.",
-        "bonus": {"nourriture": 8, "eau": 4}, "prestige": 2,
+    "compostelle": {
+        "nom": "Saint-Jacques-de-Compostelle", "type": "antique", "province": "leon",
+        "desc": "Le tombeau de l'apôtre au bout du monde. Des routes entières de "
+                "pèlerins convergent vers lui — et dépensent en chemin.",
+        "bonus": {"stabilite": 5, "or": 4}, "prestige": 4,
+        "special": {"id": "pelerinage", "nom": "Chemin des pèlerins",
+                    "desc": "Chaque province que vous tenez rapporte +1 or de plus : les pèlerins traversent tout le royaume."},
+    },
+    "porta_nigra": {
+        "nom": "Porta Nigra", "type": "antique", "province": "rheinland_pfalz",
+        "desc": "La porte noire de Trèves : le plus grand portail fortifié au nord des "
+                "Alpes. Nul ne passe sans payer.",
+        "bonus": {"defense_pct": 0.15, "or": 3}, "prestige": 3,
     },
     # -------------------------------------------------------------- RUINES
     "colosse_rhodes": {
@@ -110,9 +86,9 @@ MERVEILLES: dict[str, dict] = {
                     "desc": "Chaque Port de votre royaume rapporte +3 or de plus par mois."},
     },
     "mur_d_hadrien": {
-        "nom": "Mur du Nord", "type": "ruine", "province": "north_yorkshire",
-        "desc": "Un rempart éboulé court d'une mer à l'autre. Relevé, il ferme l'île "
-                "aux envahisseurs.",
+        "nom": "Mur d'Hadrien", "type": "ruine", "province": "north_yorkshire",
+        "desc": "Le rempart de l'empereur court d'une mer à l'autre, éboulé par les "
+                "siècles. Relevé, il ferme l'île aux envahisseurs.",
         "cout_or": 260, "cout_res": {"pierre": 80}, "duree": 28,
         "bonus": {"defense_pct": 0.25, "stabilite": 3}, "prestige": 3,
     },
@@ -122,6 +98,13 @@ MERVEILLES: dict[str, dict] = {
                 "l'aqueduc abreuve tout le pays.",
         "cout_or": 240, "cout_res": {"pierre": 60}, "duree": 24,
         "bonus": {"eau": 8, "stabilite": 2}, "prestige": 3,
+    },
+    "chersonese": {
+        "nom": "Chersonèse Taurique", "type": "ruine", "province": "crimea",
+        "desc": "La cité grecque de Crimée, comptoir du blé des steppes, tombée en "
+                "friche. Relevée, elle nourrit et enrichit qui la tient.",
+        "cout_or": 260, "cout_res": {"pierre": 60}, "duree": 26,
+        "bonus": {"or": 6, "nourriture": 4}, "prestige": 3,
     },
     # ------------------------------------------------------------ FOUILLES
     "knossos": {
@@ -135,18 +118,6 @@ MERVEILLES: dict[str, dict] = {
             {"texte": "des reliques sacrées (ferveur populaire)", "ressource": "stabilite", "valeur": 12},
         ],
     },
-    "tombe_de_vix": {
-        "nom": "Tombe de Vix", "type": "fouille", "province": "cote_d_or",
-        "desc": "Sous un tumulus de Bourgogne repose une princesse celte, et l'on parle "
-                "d'un cratère de bronze grand comme un homme.",
-        "cout_or": 110, "duree": 16, "prestige": 2,
-        "reliques": [
-            {"texte": "le cratère de bronze de la princesse", "ressource": "or", "valeur": 220},
-            {"texte": "un torque d'or pur", "ressource": "or", "valeur": 160},
-            {"texte": "des amphores grecques (savoir des marchands)", "ressource": "recherche", "valeur": 1},
-            {"texte": "la dépouille d'une reine (ferveur populaire)", "ressource": "stabilite", "valeur": 10},
-        ],
-    },
     "troie": {
         "nom": "Troie", "type": "fouille", "province": "balikesir_2",
         "desc": "Sous la colline d'Hisarlık dorment neuf cités superposées. Le trésor "
@@ -157,6 +128,29 @@ MERVEILLES: dict[str, dict] = {
             {"texte": "des armes de bronze (art de la guerre)", "ressource": "recherche", "valeur": 1},
             {"texte": "un filon de marbre antique", "ressource": "marbre", "valeur": 40},
             {"texte": "le masque d'un roi (ferveur populaire)", "ressource": "stabilite", "valeur": 12},
+        ],
+    },
+    "altamira": {
+        "nom": "Grottes d'Altamira", "type": "fouille", "province": "asturias",
+        "desc": "Sous la montagne, des bisons peints par des mains d'avant l'Histoire. "
+                "La « chapelle » des premiers hommes.",
+        "cout_or": 110, "duree": 16, "prestige": 3,
+        "reliques": [
+            {"texte": "des défenses gravées par les premiers hommes", "ressource": "or", "valeur": 200},
+            {"texte": "les pigments et le savoir des peintres anciens", "ressource": "recherche", "valeur": 1},
+            {"texte": "un sanctuaire des origines (ferveur populaire)", "ressource": "stabilite", "valeur": 12},
+        ],
+    },
+    "kourganes": {
+        "nom": "Kourganes scythes", "type": "fouille", "province": "zaporizhzhya",
+        "desc": "Les tumulus des rois de la steppe. On dit qu'ils dorment couverts d'or, "
+                "avec leurs chevaux et leurs armes.",
+        "cout_or": 140, "duree": 20, "prestige": 3,
+        "reliques": [
+            {"texte": "l'or des Scythes", "ressource": "or", "valeur": 320},
+            {"texte": "un pectoral d'or ciselé", "ressource": "or", "valeur": 200},
+            {"texte": "les armes et le harnais d'un roi de la steppe", "ressource": "recherche", "valeur": 1},
+            {"texte": "la sépulture d'une reine (ferveur populaire)", "ressource": "stabilite", "valeur": 12},
         ],
     },
     # ------------------------------------------------------- CONSTRUCTIONS

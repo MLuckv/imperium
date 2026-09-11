@@ -500,6 +500,10 @@ def _calculer_production(pays: dict, state: dict | None = None,
     for res in ("or", "nourriture", "eau"):
         if me.get(res):
             prod[res] += me[res]; note(res, "Merveilles", me[res])
+    if "pelerinage" in me.get("speciaux", []):  # Compostelle : +1 or par province
+        nb_prov = len(pays.get("territoires", []))
+        if nb_prov:
+            prod["or"] += nb_prov; note("or", "Pèlerins (Compostelle)", nb_prov)
     if "port_franc" in me.get("speciaux", []):  # Colosse de Rhodes
         nb_ports = sum(1 for v in villes if "port" in v.get("batiments", []))
         if nb_ports:
