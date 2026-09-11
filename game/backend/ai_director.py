@@ -342,8 +342,9 @@ CONSEILLERS = {
                 "serments et de la Table ; appelle le joueur « mon roi », taquine volontiers."),
 }
 
-TEMPLATE_CONSEILLER = """Tu es {IDENTITE}, le conseiller fidèle du souverain de {PAYS} en {DATE}.
-Profil : {STYLE}. Tu t'adresses à TON souverain (le joueur), jamais à un étranger.
+TEMPLATE_CONSEILLER = """Tu es {IDENTITE}, le conseiller fidèle du souverain de {PAYS}.
+Profil : {STYLE}. Tu t'adresses à TON souverain (le joueur), jamais à un étranger. Tu vis
+ton époque sans jamais la nommer : aucune date, ère ni calendrier dans ta bouche.
 
 ÉTAT ACTUEL DU ROYAUME : {SITUATION}
 PROJETS SECRETS EN COURS : {PROJETS}
@@ -354,8 +355,8 @@ PUISSANCES VOISINES (et leur capitale) : {RIVAUX}
 TON RÔLE :
 - Faire le point sur l'état du royaume et conseiller CONCRÈTEMENT quoi améliorer.
 - Si on te demande un rapport, décris l'avancement des projets en cours (ci-dessus).
-- RÈGLE D'OR : dès que le souverain ORDONNE une entreprise concrète et PLAUSIBLE pour
-  l'Antiquité (engage, envoie, espionne, forme, lève, bâtis, sabote, infiltre, soulève,
+- RÈGLE D'OR : dès que le souverain ORDONNE une entreprise concrète et PLAUSIBLE dans
+  un monde de cités, de légions et de voiles (engage, envoie, espionne, forme, lève, bâtis, sabote, infiltre, soulève,
   finance une rébellion…), tu l'organises et tu REMPLIS "directive" : tu fixes un coût en
   or et une DURÉE EN MOIS raisonnables. directive QUE pour un ordre concret.
 - LIMITES — tu REFUSES tout ordre impossible, magique, fantastique, anachronique ou qui
@@ -397,10 +398,42 @@ def conseil(faction: str, message: str, situation: str, projets: list[dict],
             presents: tuple[str, ...] | None = None) -> dict:
     """Réponse du conseiller du joueur + éventuelle directive (projet à créer).
     Retourne {reponse, directive, source}."""
-    prompt = prompt_conseil(faction, message, situation, projets, historique,
-                            date_jeu, renseignements, presents)
-    brut = _appel_ollama(prompt, temperature=0.7, num_predict=240, format_json=True)
+    msgs = messages_conseil(faction, message, situation, projets, historique,
+                            renseignements, presents)
+    brut = _appel_chat(msgs, temperature=0.65, num_predict=240, format_json=True)
     return _conseil_depuis_json(brut, faction, message, situation, pays_data)
+
+
+def messages_conseil(faction: str, message: str, situation: str, projets: list[dict],
+                     historique: list[dict] | None = None, renseignements: str = "",
+                     presents: tuple[str, ...] | None = None) -> list[dict]:
+    """Même contenu que prompt_conseil, au format CHAT : le système porte le rôle et
+    l'état du royaume, le fil devient de vrais tours (le souverain / le conseiller en
+    JSON), le message courant clôt la liste. Le conseiller suit ainsi le fil comme
+    les dirigeants rivaux."""
+    ident, style = CONSEILLERS.get(faction, ("ton conseiller", "fidèle et avisé"))
+    proj_txt = "; ".join(f"{p.get('nom')} ({p.get('statut')}, {p.get('tours_restants',0)} tours restants)"
+                         for p in projets) or "(aucun)"
+    systeme = _remplir(TEMPLATE_CONSEILLER, {
+        "IDENTITE": ident, "STYLE": style, "PAYS": _nom_pays(faction),
+        "DATE": "", "SITUATION": situation, "PROJETS": proj_txt,
+        "RENSEIGNEMENTS": renseignements or "(aucun espion n'a encore livré de rapport)",
+        "RIVAUX": ", ".join(f"{_nom_pays(f)} [id={f}]" for f in CONSEILLERS
+                            if f != faction and (presents is None or f in presents)),
+        "MESSAGE": "(voir le dernier message du souverain ci-dessous)",
+    })
+    msgs = [{"role": "system", "content": systeme}]
+    hist = [h for h in (historique or []) if "role" in h]
+    if hist and hist[-1].get("role") == "joueur" and (hist[-1].get("texte") or "").strip() == (message or "").strip():
+        hist = hist[:-1]
+    for h in hist[-12:]:
+        if h.get("role") == "ia":
+            msgs.append({"role": "assistant",
+                         "content": json.dumps({"reponse": h.get("texte", ""), "directive": None}, ensure_ascii=False)})
+        else:
+            msgs.append({"role": "user", "content": h.get("texte", "")})
+    msgs.append({"role": "user", "content": message})
+    return msgs
 
 
 def prompt_conseil(faction: str, message: str, situation: str, projets: list[dict],
@@ -439,7 +472,7 @@ def _conseil_depuis_json(brut: str | None, faction: str, message: str, situation
             "directive": None, "source": "fallback"}
 
 
-def flux_conseil(prompt: str):
+def flux_conseil(messages: list[dict]):
     """Générateur : la PAROLE du conseiller au fil de l'eau, extraite du JSON en cours
     de production. Le modèle émet {"reponse": "...", "directive": ...} ; on suit la
     valeur de « reponse » caractère par caractère pour l'afficher sans attendre.
@@ -447,7 +480,7 @@ def flux_conseil(prompt: str):
     brut = ""
     emis = 0            # nb de caractères de la réponse déjà envoyés
     debut = -1          # position du 1er caractère de la valeur "reponse"
-    for chunk in flux_ollama(prompt, temperature=0.7, num_predict=240, format_json=True):
+    for chunk in flux_chat(messages, temperature=0.65, num_predict=240, format_json=True):
         brut += chunk
         if debut < 0:
             m = re.search(r'"reponse"\s*:\s*"', brut)
@@ -626,7 +659,8 @@ def messages_diplomatiques(
     return msgs
 
 
-def _appel_chat(messages: list[dict], temperature: float = 0.7, num_predict: int = 160) -> str | None:
+def _appel_chat(messages: list[dict], temperature: float = 0.7, num_predict: int = 160,
+                format_json: bool = False) -> str | None:
     """Appel /api/chat (non-stream). Retourne le texte ou None."""
     if not modele_pret():
         return None
@@ -635,6 +669,8 @@ def _appel_chat(messages: list[dict], temperature: float = 0.7, num_predict: int
                    "options": {"temperature": temperature, "num_predict": num_predict,
                                "seed": random.randint(1, 2_000_000_000),
                                "top_p": 0.92, "repeat_penalty": 1.15}}
+        if format_json:
+            payload["format"] = "json"
         r = httpx.post(OLLAMA_CHAT, json=payload, timeout=TIMEOUT_S)
         if r.status_code != 200:
             return None
@@ -643,7 +679,8 @@ def _appel_chat(messages: list[dict], temperature: float = 0.7, num_predict: int
         return None
 
 
-def flux_chat(messages: list[dict], temperature: float = 0.7, num_predict: int = 160):
+def flux_chat(messages: list[dict], temperature: float = 0.7, num_predict: int = 160,
+              format_json: bool = False):
     """Générateur : chunks streamés depuis /api/chat (vide si indisponible)."""
     if not modele_pret():
         return
@@ -651,6 +688,8 @@ def flux_chat(messages: list[dict], temperature: float = 0.7, num_predict: int =
                "options": {"temperature": temperature, "num_predict": num_predict,
                            "seed": random.randint(1, 2_000_000_000),
                            "top_p": 0.92, "repeat_penalty": 1.15}}
+    if format_json:
+        payload["format"] = "json"
     try:
         with httpx.stream("POST", OLLAMA_CHAT, json=payload, timeout=90.0) as r:
             if r.status_code != 200:

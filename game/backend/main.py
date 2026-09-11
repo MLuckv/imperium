@@ -546,14 +546,13 @@ def conseiller_message_stream(req: ConseilReq):
                                   auteur=pj.get("nom", pays_joueur), texte=req.texte, tour=tour)
     historique = conversations.historique_pour_prompt(state, "_conseiller", limite=40)
     presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
-    prompt = ai_director.prompt_conseil(pays_joueur, req.texte, situation,
-                                        pj.get("projets", []), historique=historique,
-                                        date_jeu=date_jeu, renseignements=renseignements,
-                                        presents=presents)
+    msgs_conseil = ai_director.messages_conseil(pays_joueur, req.texte, situation,
+                                                pj.get("projets", []), historique=historique,
+                                                renseignements=renseignements, presents=presents)
 
     def flux():
         morceaux: list[str] = []
-        for chunk in ai_director.flux_conseil(prompt):
+        for chunk in ai_director.flux_conseil(msgs_conseil):
             morceaux.append(chunk)
             yield chunk
         brut = getattr(ai_director.flux_conseil, "json_brut", "") or ""
