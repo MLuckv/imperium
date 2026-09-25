@@ -236,25 +236,42 @@ Rédige un état du monde narratif en Markdown, avec EXACTEMENT ces sections :
 
 Style sobre et historique, en français. Ne dépasse pas 250 mots."""
 
-TEMPLATE_ANALYSE_ACCORDS = """Tu es un arbitre diplomatique pour un jeu de stratégie situé en {DATE_JEU}.
-Tu analyses la conversation privée RÉCENTE entre {PAYS_JOUEUR} (le joueur) et {PAYS} (dirigeant : {NOM_DIRIGEANT}).
+TEMPLATE_ANALYSE_ACCORDS = """Tu es un arbitre diplomatique impartial pour un jeu de stratégie historique.
+Tu analyses la conversation privée RÉCENTE entre {PAYS_JOUEUR} (le joueur) et {PAYS}, dirigé par {NOM_DIRIGEANT}.
 
 CONVERSATION RÉCENTE :
 {CONVERSATION}
 
 Détermine si un ACCORD CONCRET et MUTUELLEMENT consenti a été conclu dans ces échanges
-(les deux parties sont clairement d'accord). Ignore les simples intentions, menaces ou propositions sans réponse.
+(les DEUX parties expriment clairement leur accord). Ignore les simples intentions, propositions
+sans réponse, menaces, ou marques de politesse. Un accord exige une proposition ET une acceptation.
 
-Réponds UNIQUEMENT par un objet JSON (aucun texte autour) :
+Types possibles :
+- traite_commercial : ouvrir une route commerciale, un commerce DURABLE, ouvrir ses marchés ou
+  ses ports, faire circuler caravanes et navires entre les deux royaumes (même si l'on précise
+  ce qui sera échangé : grain, or, vin…).
+- non_agression : promesse mutuelle de ne pas s'attaquer.
+- alliance : alliance militaire.
+- paix : fin d'une guerre en cours.
+- echange_ressources : un transfert PONCTUEL et CHIFFRÉ (« je te donne 100 or contre 50 fer »).
+- declaration_guerre : l'un déclare la guerre à l'autre.
+- aucun : pas d'accord clair.
+
+Réponds UNIQUEMENT par un seul objet JSON, sans aucun texte autour, exactement sous cette forme :
 {
-  "accord_conclu": true/false,
-  "type": "traite_commercial" | "non_agression" | "paix" | "alliance" | "echange_ressources" | "declaration_guerre" | "aucun",
+  "accord_conclu": true,
+  "type": "traite_commercial | non_agression | paix | alliance | echange_ressources | declaration_guerre | aucun",
   "resume": "phrase courte décrivant l'accord",
   "ressources_joueur_vers_ia": {"or": 0},
   "ressources_ia_vers_joueur": {"or": 0},
   "reputation_delta": 0
 }
-Si aucun accord clair : accord_conclu=false, type="aucun". reputation_delta entre -40 et +30."""
+
+Règles :
+- Si AUCUN accord clair n'est conclu : "accord_conclu": false et "type": "aucun".
+- "reputation_delta" est un entier entre -40 et +30 (impact de l'accord sur la relation).
+- Ne renseigne les transferts de ressources que s'ils sont explicitement convenus ET chiffrés, sinon laisse {} ou 0.
+- Reste strictement factuel : n'invente pas d'accord qui n'a pas été explicitement accepté."""
 
 TEMPLATE_RESUME_TOUR = """Tu es le chroniqueur d'un jeu de grande stratégie historique en {DATE_JEU}.
 Rédige un RÉSUMÉ des événements MAJEURS du tour qui vient de s'écouler dans le monde.
@@ -368,22 +385,22 @@ TON RÔLE :
   bâtir un réseau d'influence) prend des ANNÉES — souvent 12 à 36 mois.
 
 Tu réponds en JSON STRICT, rien d'autre. Schéma :
-{{"reponse": "<ce que tu dis à voix haute, EN CARACTÈRE, 2 à 4 phrases>",
-  "directive": null | {{"nom":"<nom court>","type":"espionnage|garnison|sabotage|rebellion|commerce|autre",
+{"reponse": "<ce que tu dis à voix haute, EN CARACTÈRE, 2 à 4 phrases>",
+  "directive": null | {"nom":"<nom court>","type":"espionnage|garnison|sabotage|rebellion|commerce|autre",
   "cible_faction":"<un id parmi {RIVAUX} ou null>","cout_or":<entier>,"duree":<entier en MOIS>,
-  "rapport":"<une phrase sur ce que fait ce projet>"}}}}
+  "rapport":"<une phrase sur ce que fait ce projet>"}}
 
 EXEMPLES (réponds EXACTEMENT dans ce format) :
 Souverain: "Envoie des espions chez les Spartiates." →
-{{"reponse":"Il en sera fait, mon souverain : nos agents partent dès ce soir.","directive":{{"nom":"Espions à Sparte","type":"espionnage","cible_faction":"sparte","cout_or":90,"duree":4,"rapport":"Nos agents s'infiltrent dans les hautes sphères spartiates."}}}}
+{"reponse":"Il en sera fait, mon souverain : nos agents partent dès ce soir.","directive":{"nom":"Espions à Sparte","type":"espionnage","cible_faction":"sparte","cout_or":90,"duree":4,"rapport":"Nos agents s'infiltrent dans les hautes sphères spartiates."}}
 Souverain: "Finance une rébellion pour soulever une province d'Égypte." →
-{{"reponse":"J'allume la révolte chez les Lagides, mais cela prendra des années et beaucoup d'or.","directive":{{"nom":"Rébellion en Égypte","type":"rebellion","cible_faction":"carthage","cout_or":350,"duree":18,"rapport":"Nos agents arment et soulèvent une province égyptienne."}}}}
+{"reponse":"J'allume la révolte chez les Lagides, mais cela prendra des années et beaucoup d'or.","directive":{"nom":"Rébellion en Égypte","type":"rebellion","cible_faction":"carthage","cout_or":350,"duree":18,"rapport":"Nos agents arment et soulèvent une province égyptienne."}}
 Souverain: "Forme une armée pour prendre une province d'Égypte, sans toucher Alexandrie." →
-{{"reponse":"Des troupes se lèveront pour fondre sur leurs provinces, jamais sur leur capitale.","directive":{{"nom":"Campagne d'Égypte","type":"rebellion","cible_faction":"carthage","cout_or":320,"duree":15,"rapport":"Une armée se forme pour arracher une province à l'Égypte."}}}}
+{"reponse":"Des troupes se lèveront pour fondre sur leurs provinces, jamais sur leur capitale.","directive":{"nom":"Campagne d'Égypte","type":"rebellion","cible_faction":"carthage","cout_or":320,"duree":15,"rapport":"Une armée se forme pour arracher une province à l'Égypte."}}
 Souverain: "Invoque un démon pour détruire Sparte." →
-{{"reponse":"Mon souverain... les démons n'obéissent pas au Sénat. Donnez-moi des hommes et de l'or, pas des sortilèges.","directive":null}}
+{"reponse":"Mon souverain... les démons n'obéissent pas au Sénat. Donnez-moi des hommes et de l'or, pas des sortilèges.","directive":null}
 Souverain: "Comment se porte le royaume ?" →
-{{"reponse":"Rome prospère, mais l'armée est faible ; renforçons-la.","directive":null}}
+{"reponse":"Rome prospère, mais l'armée est faible ; renforçons-la.","directive":null}
 
 Coûts indicatifs : espionnage 60-150 or (3-6 mois), garnison 80-220 or (3-8 mois),
 sabotage 100-220 or (4-8 mois), rébellion 250-500 or (12-36 mois).
@@ -632,6 +649,9 @@ def messages_diplomatiques(
         "SITUATION_IA": situation_ia or "(rien de particulier à signaler)",
         "HISTORIQUE": "(voir les tours de la conversation ci-dessous)",
     }).rstrip()
+    femme = faction_cible == "francs"  # Jeanne ; tous les autres souverains sont des hommes
+    systeme += (f"\n\nTu es {'une femme' if femme else 'un homme'} : accorde tes adjectifs et participes "
+                f"au {'féminin' if femme else 'masculin'} quand tu parles de toi.")
     systeme += (f"\n\nTu parles avec {nom_joueur}, souverain de {_nom_pays(pays_joueur)} : c'est LUI "
                 f"que tu tutoies et à qui tu réponds — jamais à un autre roi, jamais à toi-même. "
                 f"Réagis précisément à son dernier message : s'il accepte, refuse ou conclut, "
@@ -831,7 +851,7 @@ la RAISON et à ton tempérament. Tu peux menacer, reprocher, lancer un ultimatu
 une alliance, déclarer la guerre, ou rester mesuré — selon ta personnalité et la gravité.
 Anachronismes du monde moderne = hérésie. Ne sors jamais du rôle.
 
-Réponds en JSON STRICT : {{"message":"<ton message>","intent":"reproche|menace|ultimatum|alliance|guerre|neutre"}}"""
+Réponds en JSON STRICT : {"message":"<ton message>","intent":"reproche|menace|ultimatum|alliance|guerre|neutre"}"""
 
 
 _DERNIERS_ECLATS: dict[str, list[str]] = {}  # faction → derniers éclats servis (anti-répétition)
@@ -1088,6 +1108,11 @@ def _normaliser_accord(data: dict, source: str) -> dict:
     except Exception:
         rep = 0
     rep = max(-40, min(30, rep))
+    if conclu and typ == "echange_ressources":
+        resume_bas = str(data.get("resume", "")).lower()
+        chiffre = _res(data.get("ressources_joueur_vers_ia")) or _res(data.get("ressources_ia_vers_joueur"))
+        if not chiffre and any(k in resume_bas for k in ("route", "commerc", "marché", "caravane", "port")):
+            typ = "traite_commercial"
     return {
         "accord_conclu": conclu,
         "type": typ if conclu else "aucun",
