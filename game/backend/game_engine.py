@@ -1934,6 +1934,10 @@ def _appliquer_intent_diplo(state: dict, fid: str, joueur: str, intent: str, eve
     cur = rep.get(joueur, 0)
     if intent == "guerre":
         import ia_faction
+        if ia_faction._pacte_entre(state, fid, joueur) or ia_faction._allies_entre(state, fid, joueur):
+            # Un serment tient : le souverain gronde mais ne rompt pas sa parole.
+            rep[joueur] = max(-100, cur - 15)
+            return
         ga = state.setdefault("diplomatie", {}).setdefault("guerres_actives", [])
         if ia_faction.portee_guerre(state, fid, joueur) is None:
             # Hors d'atteinte : pas de guerre nominale. Le souverain ROMPT plutôt toute
@@ -2224,8 +2228,16 @@ def end_turn(state: dict, ia_messages: bool = True, ia_analyse: bool = True) -> 
             evenements.append({"type": "accord", "faction": a,
                                "texte": f"⚖ {_nom_pays(a)} et {_nom_pays(b)} ouvrent une route commerciale."})
 
-    # 2c) La guerre rompt routes commerciales et pactes entre belligérants.
+    # 2c) Les pactes de non-agression EXPIRENT au bout de 36 mois (annoncé).
     diplo = state.setdefault("diplomatie", {})
+    for tr in list(diplo.get("traites_actifs", [])):
+        if tr.get("type") == "non_agression" and meta.get("tour", 1) - (tr.get("tour") or meta.get("tour", 1)) >= 36:
+            diplo["traites_actifs"].remove(tr)
+            noms = " et ".join(_nom_pays(x) for x in sorted(_parties_traite(tr)))
+            evenements.append({"type": "accord", "faction": None,
+                               "texte": f"⌛ Le pacte de non-agression entre {noms} arrive à son terme."})
+
+    # 2d) La guerre rompt routes commerciales et pactes entre belligérants.
     en_guerre = [{g.get("a"), g.get("b")} for g in diplo.get("guerres_actives", [])]
     diplo["traites_actifs"] = [tr for tr in diplo.get("traites_actifs", [])
                                if _parties_traite(tr) not in en_guerre]
