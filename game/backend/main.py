@@ -316,6 +316,23 @@ def province_annex(req: AnnexReq):
     return {"ok": res.get("ok", False), "raison": res.get("raison", ""), "state": state}
 
 
+def _consequence_insulte(state: dict, cible: str, pays_joueur: str, texte: str) -> None:
+    """Insulter un souverain a un prix : −10 de réputation, et au troisième affront
+    en un an, il passe aux menaces (qui escaladent si l'on ne répare pas)."""
+    if not ai_director.est_insulte(texte):
+        return
+    f = state.get("pays", {}).get(cible)
+    if not f:
+        return
+    rep = f.setdefault("reputation", {})
+    rep[pays_joueur] = max(-100, rep.get(pays_joueur, 0) - 10)
+    tour = state.get("meta", {}).get("tour", 1)
+    affronts = [x for x in f.get("_affronts", []) if tour - x < 12] + [tour]
+    f["_affronts"] = affronts
+    if len(affronts) >= 3 and not f.get("attente_reponse"):
+        f["attente_reponse"] = {"intent": "menace", "tour_msg": tour}
+
+
 def _situations_diplomatiques(state: dict, cible: str, pays_joueur: str) -> tuple[str, str]:
     """(situation_joueur, situation_ia) : le dirigeant connaît SON royaume, ses guerres,
     ses alliances et son opinion du joueur → il négocie selon ses intérêts réels."""
@@ -359,11 +376,12 @@ def diplomatie_message_stream(req: MessageReq):
         state, req.cible, role="joueur",
         auteur=state.get("pays", {}).get(pays_joueur, {}).get("nom", pays_joueur),
         texte=req.texte, tour=tour)
+    _consequence_insulte(state, req.cible, pays_joueur, req.texte)
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
     situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
     presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
     msgs = ai_director.messages_diplomatiques(
-        req.cible, ai_director._rappel_absents(req.texte, presents), historique=historique,
+        req.cible, ai_director.preparer_message(req.texte, presents), historique=historique,
         pays_joueur=pays_joueur, situation_joueur=situation_joueur, situation_ia=situation_ia,
         presents=presents)
     auteur = ai_director.nom_dirigeant(req.cible)
@@ -427,6 +445,7 @@ def diplomatie_message(req: MessageReq):
         state, req.cible, role="joueur",
         auteur=state.get("pays", {}).get(pays_joueur, {}).get("nom", pays_joueur),
         texte=req.texte, tour=tour)
+    _consequence_insulte(state, req.cible, pays_joueur, req.texte)
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
 
     situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)

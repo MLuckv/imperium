@@ -561,6 +561,52 @@ def _conseil_repli(faction: str, message: str, situation: str,
 # =====================================================================
 #  1) Réponse diplomatique d'un dirigeant à un message joueur
 # =====================================================================
+# Insultes et grossièretés (formes SMS comprises) : le 7B ne les comprend pas toujours
+# (« cc pd ») et poursuit alors l'affaire en cours comme si de rien n'était.
+_INSULTES = re.compile(
+    r"\b(pd|pédé|pede|fdp|ntm|nique|niquer|tg|ta gueule|connard|connasse|con|conne|salaud|salope|"
+    r"enculé|encule|enculer|bâtard|batard|abruti|crétin|cretin|débile|debile|idiot|imbécile|imbecile|"
+    r"merde|putain|pute|bouffon|tocard|minable|raclure|chien galeux|fils de chien|va te faire)\b",
+    re.I)
+# Abréviations familières : on les glose pour que le souverain comprenne.
+_ABREV = {"cc": "coucou", "slt": "salut", "bjr": "bonjour", "bsr": "bonsoir", "stp": "s'il te plaît",
+          "svp": "s'il vous plaît", "pq": "pourquoi", "pcq": "parce que", "jsp": "je ne sais pas",
+          "mdr": "(il rit)", "lol": "(il rit)", "ok": "d'accord", "dac": "d'accord", "tkt": "ne t'inquiète pas",
+          "bcp": "beaucoup", "qd": "quand", "tjrs": "toujours", "ptdr": "(il rit aux éclats)"}
+
+
+def est_insulte(texte: str) -> bool:
+    return bool(_INSULTES.search(texte or ""))
+
+
+def _rappel_ton(message_joueur: str) -> str:
+    """Note CIBLÉE sur le ton du message : insulte → réaction offensée (selon le
+    caractère), abréviations → glose. Sans cela, le modèle répétait l'accord en cours
+    (« Marché conclu… ») en réponse à « cc pd »."""
+    if "[NOTE" in (message_joueur or ""):
+        return message_joueur
+    notes = []
+    mots = re.findall(r"[a-zA-Zàâçéèêëîïôûùüÿœ']+", (message_joueur or "").lower())
+    gloses = [f"« {m} » = « {_ABREV[m]} »" for m in dict.fromkeys(mots) if m in _ABREV]
+    if gloses:
+        notes.append("langage très familier : " + ", ".join(gloses))
+    if est_insulte(message_joueur):
+        notes.append("ce message est une INJURE obscène adressée à ta personne — un affront public "
+                     "qu'aucun roi ne laisse passer. Ta réponse doit commencer par relever l'insulte. "
+                     "Réagis selon ton caractère (colère, mépris glacial, menace), en une à trois phrases. "
+                     "Ne parle PAS du commerce ni d'aucun accord, ne sois pas aimable")
+    elif len(mots) <= 3 and gloses:
+        notes.append("message bref et désinvolte : réponds brièvement à ce ton, sans relancer l'affaire précédente")
+    if not notes:
+        return message_joueur
+    return f"{message_joueur}\n[NOTE : " + " ; ".join(notes) + ".]"
+
+
+def preparer_message(message_joueur: str, presents: tuple[str, ...] | None) -> str:
+    """Message du joueur tel que présenté au modèle (rappels ciblés ajoutés)."""
+    return _rappel_ton(_rappel_absents(message_joueur, presents))
+
+
 def _rappel_absents(message_joueur: str, presents: tuple[str, ...] | None) -> str:
     """Rappel CIBLÉ : si le joueur nomme un souverain qui ne règne pas dans cette
     partie, on le signale explicitement (une règle générale ne suffit pas au 7B,
@@ -589,12 +635,12 @@ def prompt_diplomatique(
 ) -> str:
     """Construit le prompt complet d'une réponse de dirigeant (partagé stream/non-stream)."""
     template = _charger_template("systeme_dirigeant.md", TEMPLATE_SYSTEME_DIRIGEANT)
-    message_joueur = _rappel_absents(message_joueur, presents)
+    message_joueur = preparer_message(message_joueur, presents)
     # Le message courant est déjà dans le fil (ajouté avant l'appel) : on l'en retire
     # pour ne pas le montrer deux fois, et l'on isole TA dernière réplique pour que
     # le modèle réagisse au dernier échange au lieu de repartir de zéro.
     hist = list(historique or [])
-    if hist and hist[-1].get("role") == "joueur" and (hist[-1].get("texte") or "").strip() == (message_joueur or "").split("\n[RAPPEL")[0].strip():
+    if hist and hist[-1].get("role") == "joueur" and (hist[-1].get("texte") or "").strip() == (message_joueur or "").split("\n[")[0].strip():
         hist = hist[:-1]
     derniere = next((h for h in reversed(hist) if h.get("role") == "ia"), None)
     derniere_txt = (f"Toi, {nom_dirigeant(faction_cible)}, viens de dire : « {_trim(derniere.get('texte', ''), 260)} »"
@@ -659,10 +705,22 @@ def messages_diplomatiques(
     msgs = [{"role": "system", "content": systeme}]
     hist = list(historique or [])
     # Le message courant est déjà en fin de fil : on l'y laisse comme dernier tour.
-    if not hist or hist[-1].get("role") != "joueur" or (hist[-1].get("texte") or "").strip() != (message_joueur or "").split("\n[RAPPEL")[0].strip():
+    if not hist or hist[-1].get("role") != "joueur" or (hist[-1].get("texte") or "").strip() != (message_joueur or "").split("\n[")[0].strip():
         hist.append({"role": "joueur", "texte": message_joueur})
     else:
         hist[-1] = {"role": "joueur", "texte": message_joueur}  # avec le RAPPEL éventuel
+    # Une NOTE ciblée (insulte, abréviations) est extraite du tour utilisateur et
+    # donnée en consigne système FINALE : c'est la place où le 7B la respecte.
+    note_finale = None
+    dernier = hist[-1].get("texte", "") if hist else ""
+    if "\n[NOTE : " in dernier:
+        brut, note = dernier.split("\n[NOTE : ", 1)
+        if est_insulte(brut):
+            # L'affront est DÉCRIT dans le tour lui-même : le 7B ne peut plus le prendre
+            # pour une formule obscure et poursuivre aimablement l'affaire en cours.
+            brut = f"(Il t'adresse une injure obscène, sans autre mot : « {brut} ».)"
+        hist[-1] = {"role": "joueur", "texte": brut}
+        note_finale = "À PROPOS DE SON DERNIER MESSAGE : " + note.rstrip("]").strip()
     # Bornage : les 14 derniers tours intégralement, les plus anciens du joueur résumés.
     n = len(hist)
     for i, h in enumerate(hist):
@@ -675,7 +733,11 @@ def messages_diplomatiques(
                 continue
             msgs.append({"role": "assistant", "content": txt})
         else:
+            if i < n - 1 and est_insulte(txt):
+                txt = f"(injure) {txt}"
             msgs.append({"role": "user", "content": txt if recent else _trim(txt, 140)})
+    if note_finale:
+        msgs.append({"role": "system", "content": note_finale})
     return msgs
 
 
@@ -792,7 +854,7 @@ def reponse_diplomatique(
 ) -> dict:
     """Génère la réponse d'un dirigeant IA (non-stream). {reponse, auteur, source}."""
     auteur = nom_dirigeant(faction_cible)
-    message_joueur = _rappel_absents(message_joueur, presents)
+    message_joueur = preparer_message(message_joueur, presents)
     msgs = messages_diplomatiques(faction_cible, message_joueur, historique, pays_joueur,
                                   situation_joueur, situation_ia, presents)
     # Température modérée : moins de « glissements » de style/faits, tout en gardant
