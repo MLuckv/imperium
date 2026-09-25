@@ -1884,19 +1884,20 @@ def _messages_spontanes_ia(state: dict, evenements: list, utiliser_ia: bool = Tr
         cle, raison = _raison_contact(state, fid, joueur)
         if not cle or random.random() > _PROBA_CONTACT.get(cle, 0.4):
             continue
-        # RELANCES : combien de fois a-t-on déjà écrit pour ce motif sans réponse ?
+        # RELANCES : combien de courriers de ce souverain sont restés sans réponse
+        # (tous motifs confondus — c'est le silence qui vexe, pas le sujet) ?
         thread = conversations.get_conversation(state, fid)
         dernier_joueur = max((m.get("tour") or 0 for m in thread if m.get("role") == "joueur"), default=-1)
         suivi = f.setdefault("_relances", {})
         if dernier_joueur >= derniers.get(fid, -99):
             suivi.clear()  # le joueur a répondu depuis : on repart de zéro
-        nb = suivi.get(cle, 0) + 1
-        suivi[cle] = nb
+        nb = suivi.get("sans_reponse", 0) + 1
+        suivi["sans_reponse"] = nb
         rel = _relation_txt(f.get("reputation", {}).get(joueur, 0))
         presents = tuple(f for f, q in state.get("pays", {}).items() if not q.get("elimine"))
         if nb >= 3:
             # Vexé : un dernier mot, la réputation baisse, et le silence pour 24 mois.
-            msg = ai_director.message_vexation(fid, raison)
+            msg = ai_director.message_vexation(fid)
             conversations.ajouter_message(state, fid, role="ia", auteur=ai_director.nom_dirigeant(fid), texte=msg, tour=tour)
             derniers[fid] = tour
             f["_boude_jusqua"] = tour + 24

@@ -839,24 +839,36 @@ _DERNIERS_ECLATS: dict[str, list[str]] = {}  # faction → derniers éclats serv
 
 RELANCE_OUVERTURES = [
     "Je vous écris une seconde fois, et j'attends toujours. {P}",
-    "Mon premier courrier est resté lettre morte ; voici le second. {P}",
-    "Deux fois je tends la main. Je ne le ferai pas trois. {P}",
+    "Mon précédent courrier est resté lettre morte. {P}",
+    "Je reviens vers vous, puisque vous vous taisez. {P}",
     "Nous venons vers vous une deuxième fois — la dernière, sans doute. {P}",
 ]
-VEXATIONS = [
+# Le dernier mot d'un souverain ignoré trois fois — à SA manière.
+VEXATIONS = {
+    "rome": ["Mon théâtre a toujours un public — sauf chez vous, semble-t-il. Je baisse le rideau.",
+             "Trois lettres de Néron sans réponse ? L'affront est noté. Rome n'écrira plus."],
+    "carthage": ["Trois lettres, aucune réponse. Alexandrie a d'autres correspondants ; vous n'en êtes plus.",
+                 "Je sais attendre, mais pas un mur. Mes scribes ont mieux à faire."],
+    "macedoine": ["Je n'écris pas une quatrième fois. La prochaine fois, ce sont mes Compagnons qui frapperont à votre porte.",
+                  "Le silence est une réponse. Je l'ai entendue."],
+    "sparte": ["Trois fois. À Sparte on dit les choses une fois ; nous n'en dirons plus.",
+               "Si. — C'est tout ce que Sparte vous répondra désormais."],
+    "francs": ["J'ai prié pour vous trois fois. Désormais je prierai sans vous écrire.",
+               "La porte que j'ouvrais, vous l'avez laissée battre au vent. Je la referme."],
+    "bretons": ["Un chevalier ne supplie pas. Camelot ferme ses portes à votre héraut.",
+                "Trois messagers sans réponse : à la Table Ronde, votre siège restera vide."],
+}
+VEXATIONS_DEFAUT = [
     "Puisque mon silence vous convient, je ne vous importunerai plus.",
     "Trois courriers sans réponse : je sais désormais ce que vaut votre amitié.",
-    "Vos scribes ont-ils perdu leurs mains ? Je cesse d'écrire à un mur.",
-    "Qu'on n'envoie plus de hérauts vers cette cour : elle ne répond pas aux rois.",
 ]
 
 
-def message_vexation(faction: str, raison: str = "") -> str:
-    """Dernier mot d'un souverain ignoré trois fois : un éclat de son cru + la porte
-    qui claque."""
-    phrases = _phrases_types(faction)
-    vex = random.choice(VEXATIONS)
-    return f"{vex} {random.choice(phrases)}" if phrases and random.random() < 0.5 else vex
+def message_vexation(faction: str) -> str:
+    """Dernier mot d'un souverain ignoré trois fois : la porte qui claque, dans le
+    style du personnage (pas de phrase de profil ajoutée : elle contredisait
+    parfois la bouderie — « charge avec moi… » juste après « je cesse d'écrire »)."""
+    return random.choice(VEXATIONS.get(faction) or VEXATIONS_DEFAUT)
 
 
 def message_spontane(faction: str, raison: str, situation_joueur: str = "",
