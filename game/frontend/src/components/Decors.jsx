@@ -1,6 +1,6 @@
 // DÉCORS ILLUSTRÉS des menus (SVG fait main, aucune image externe) :
 // panorama antique au crépuscule, bannières héraldiques, ornements.
-import { EmblemeTrace } from './Icons'
+import Embleme from './Emblemes'
 
 // ------------------------------------------------------------------ panorama
 // Étoiles réparties au hasard (graine fixe : le ciel ne change pas d'un rendu à l'autre).
@@ -198,11 +198,9 @@ export function Banniere({ faction, couleur, className = '', style }) {
         return <path key={'d' + i} d={`M${x} ${126 + (i * 20) / 10.5} l0 7`} stroke="#c99a3a" strokeWidth="1.3" />
       })}
       {/* Emblème brodé */}
-      <circle cx="60" cy="70" r="27" fill="#000" opacity="0.18" />
-      <circle cx="60" cy="70" r="27" fill="none" stroke={`url(#${id}-or)`} strokeWidth="1.2" />
-      <g transform="translate(36 46) scale(2)" style={{ color: '#f2d58a' }}>
-        <EmblemeTrace faction={faction} />
-      </g>
+      <circle cx="60" cy="70" r="28" fill="#000" opacity="0.16" />
+      <circle cx="60" cy="70" r="28" fill="none" stroke={`url(#${id}-or)`} strokeWidth="1.2" />
+      <Embleme faction={faction} variante="or" taille={50} x={35} y={45} />
     </svg>
   )
 }

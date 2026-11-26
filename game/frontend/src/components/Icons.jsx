@@ -1,3 +1,4 @@
+import Embleme from './Emblemes'
 // Jeu d'icônes SVG (sans dépendance externe) : unités, bâtiments, emblèmes de
 // faction. Couleur héritée via currentColor (s'accorde au thème bronze/parchemin).
 
@@ -102,8 +103,8 @@ const EMBLEM_SVG = {
 export function EmblemeTrace({ faction }) {
   return EMBLEM_SVG[faction] || EMBLEM_SVG.rome
 }
-export function FactionEmblem({ faction, className, size, style }) {
-  return <Svg className={className} size={size} style={style}>{EMBLEM_SVG[faction] || EMBLEM_SVG.rome}</Svg>
+export function FactionEmblem({ faction, className, size = 22, style }) {
+  return <Embleme faction={faction} taille={size} variante="plein" className={className} style={style} />
 }
 
 // ---------- ICÔNES D'INTERFACE (barre d'action, panneaux) ----------

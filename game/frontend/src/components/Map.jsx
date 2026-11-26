@@ -4,7 +4,8 @@ import { getMap } from '../api'
 import { factionColor, factionLabel } from '../lib/format'
 import { LuxeIcon } from './Icons'
 import { indexerAretes, peindreFond, peindreRoyaumes, ECHELLE_FOND, ECHELLE_ROYAUMES } from '../map/peinture'
-import { dessinerCite, dessinerCapitale, etiquetteCite, dessinerBouclier, dessinerMerveille, dessinerHorde, dessinerIconeEvenement } from '../map/glyphes'
+import { dessinerCite, dessinerCapitale, etiquetteCite, dessinerMerveille, dessinerHorde, dessinerIconeEvenement } from '../map/glyphes'
+import { creerArmee } from '../map/unites'
 
 // Carte « ancienne » peinte (cf. map/peinture.js) : mer gravée, parchemin, reliefs,
 // lavis aquarelle des royaumes ; glyphes vectoriels pour cités et armées. Clic sur une province => elle se SOULÈVE (sélection).
@@ -45,7 +46,8 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   const provLabelsRef = useRef(null)    // noms des provinces sans cité (visibles zoomé)
   const marqueursRef = useRef([])       // [{x, y, icone, t0}] en cours d'animation
   const [armeeSel, setArmeeSel] = useState(null) // {territoire, nom, effectif} : armée sélectionnée
-  const marcheRef = useRef(null)        // {from,to,t0,duree,col,effectif}
+  const marcheRef = useRef(null)        // {from,to,t0,duree,col,effectif,types,moral}
+  const armeeSelGraphRef = useRef(null) // conteneur de l'armée sélectionnée (animation)
   const dataRef = useRef(null)
   const stateRef = useRef(stateData)
   const hoveredRef = useRef(null)
@@ -118,25 +120,29 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     for (const [pid, p] of Object.entries(st.pays))
       for (const u of p.unites || []) {
         const key = `${u.territoire}|${pid}`
-        if (!groups[key]) groups[key] = { faction: pid, territoire: u.territoire, effectif: 0, idsLibres: [], pos: centreOf(u.territoire) }
+        if (!groups[key]) groups[key] = { faction: pid, territoire: u.territoire, effectif: 0, idsLibres: [], pos: centreOf(u.territoire), types: [], moraux: [] }
         groups[key].effectif += u.effectif || 1
+        groups[key].types.push(u.type); groups[key].moraux.push(u.moral ?? 100)
         if (!u.a_bouge) groups[key].idsLibres.push(u.id)
       }
+    for (const g of Object.values(groups)) g.moral = g.moraux.length ? g.moraux.reduce((s, m) => s + m, 0) / g.moraux.length : 100
     return Object.values(groups).filter((g) => g.pos)
   }
+  // Point d'ancrage au sol d'une armée : à droite de la cité, pour ne pas la masquer.
+  const ARMEE_DX = 19, ARMEE_DY = 5
 
   function fillFor(factionId) { return factionId ? hexToNumber(factionColor(factionId)) : LAND_NEUTRAL }
 
   // --- Animation de MARCHE : la colonne glisse de la province de départ vers sa
   // destination (façon Risk), avec une traînée et un badge qui suit. Purement
   // visuel : l'état réel est mis à jour par l'API en parallèle.
-  function lancerMarche(from, to, col, effectif) {
+  function lancerMarche(from, to, col, effectif, types = ['levee'], moral = 100) {
     if (!from || !to) return
     const dist = Math.hypot(to[0] - from[0], to[1] - from[1])
     marcheRef.current = {
       from, to, t0: performance.now(),
-      duree: Math.min(900, Math.max(380, dist * 3.2)),   // plus c'est loin, plus c'est long
-      col, effectif,
+      duree: Math.min(1500, Math.max(700, dist * 5)),   // plus c'est loin, plus c'est long
+      col, effectif, types, moral, poussieres: [], derniere: 0,
     }
   }
 
@@ -152,20 +158,60 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     const x = m.from[0] + (m.to[0] - m.from[0]) * e
     const y = m.from[1] + (m.to[1] - m.from[1]) * e
 
-    // Traînée : le chemin déjà parcouru s'estompe derrière la colonne.
-    const trail = new Graphics()
-    trail.moveTo(m.from[0], m.from[1]); trail.lineTo(x, y)
-    trail.stroke({ width: 3, color: m.col, alpha: 0.45 * (1 - e) + 0.15 })
-    trail.eventMode = 'none'; layer.addChild(trail)
+    const now = performance.now()
+    const fx = m.from[0] + ARMEE_DX, fy = m.from[1] + ARMEE_DY, tx = m.to[0] + ARMEE_DX, ty = m.to[1] + ARMEE_DY
+    const ax = fx + (tx - fx) * e, ay = fy + (ty - fy) * e
 
-    // Halo de progression + badge de la colonne.
-    const halo = new Graphics(); halo.circle(x, y, 15 - 5 * e)
-    halo.fill({ color: m.col, alpha: 0.30 * (1 - e) })
-    halo.eventMode = 'none'; layer.addChild(halo)
+    // Itinéraire en pointillés (reste du trajet) et pas déjà faits.
+    const chemin = new Graphics(); chemin.eventMode = 'none'
+    const L = Math.hypot(tx - fx, ty - fy) || 1, ux = (tx - fx) / L, uy = (ty - fy) / L
+    for (let d = e * L; d < L - 4; d += 6) { chemin.circle(fx + ux * d, fy + uy * d, 0.9) }
+    chemin.fill({ color: 0xe8c267, alpha: 0.85 })
+    chemin.circle(tx, ty, 3.2); chemin.stroke({ width: 1, color: 0xe8c267, alpha: 0.9 })
+    layer.addChild(chemin)
 
-    dessinerBouclier(layer, x + 17, y - 7, '#' + m.col.toString(16).padStart(6, '0'), m.effectif, true)
+    // Poussière soulevée par la colonne.
+    if (now - m.derniere > 70 && av < 0.95) { m.poussieres.push({ x: ax - ux * 4 + (Math.random() - 0.5) * 5, y: ay + 0.5, t0: now }); m.derniere = now }
+    m.poussieres = m.poussieres.filter((p) => now - p.t0 < 650)
+    const poussiere = new Graphics(); poussiere.eventMode = 'none'
+    for (const p of m.poussieres) {
+      const k = (now - p.t0) / 650
+      poussiere.circle(p.x, p.y - k * 3, 1.4 + k * 2.6); poussiere.fill({ color: 0xcbb68a, alpha: 0.45 * (1 - k) })
+    }
+    layer.addChild(poussiere)
 
-    if (av >= 1) { marcheRef.current = null; layer.removeChildren(); draw() }
+    // La colonne en marche : figurines au pas cadencé, drapeau en tête.
+    const col = creerArmee({ couleur: m.col, effectif: m.effectif, types: m.types, moral: m.moral, selection: false,
+                             phase: (now - m.t0) * 0.024, marche: av < 1, sens: tx >= fx ? 1 : -1 })
+    col.position.set(ax, ay)
+    layer.addChild(col)
+
+    if (av >= 1) {
+      marcheRef.current = null; layer.removeChildren()
+      eclatsRef.current.push({ x: tx, y: ty - 2, t0: performance.now(), col: m.col })  // arrivée : l'étendard est planté
+      draw()
+    }
+  }
+
+  // Petites animations persistantes : l'armée sélectionnée « respire », les éclats
+  // (arrivée d'une colonne, province gagnée) s'évasent puis s'effacent.
+  const eclatsRef = useRef([])
+  function animerVie() {
+    const now = performance.now()
+    const sel = armeeSelGraphRef.current
+    if (sel && !sel.destroyed) { sel.position.y = sel.__baseY + Math.sin(now / 260) * 0.7 }
+    const layer = marcheLayerRef.current; if (!layer) return
+    const vivants = eclatsRef.current.filter((e) => now - e.t0 < 900)
+    eclatsRef.current = vivants
+    let g = layer.__eclats
+    if (!g || g.destroyed) { g = new Graphics(); g.eventMode = 'none'; layer.__eclats = g }
+    if (g.parent !== layer) layer.addChild(g)
+    g.clear()
+    for (const e of vivants) {
+      const k = (now - e.t0) / 900
+      g.ellipse(e.x, e.y, 4 + k * 14, (4 + k * 14) * 0.35); g.stroke({ width: 1.4 * (1 - k), color: 0xe8c267, alpha: 1 - k })
+      g.ellipse(e.x, e.y, 2 + k * 8, (2 + k * 8) * 0.35); g.stroke({ width: 1, color: e.col, alpha: 0.8 * (1 - k) })
+    }
   }
 
   // --- MARQUEURS D'ÉVÉNEMENTS : à chaque fin de tour, batailles, incendies,
@@ -211,7 +257,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     const world = worldRef.current, labels = labelLayerRef.current
     const units = unitLayerRef.current, arrows = arrowLayerRef.current, data = dataRef.current
     if (!world || !labels || !units || !arrows || !data) return
-    labels.removeChildren(); units.removeChildren(); arrows.removeChildren()
+    labels.removeChildren(); units.removeChildren(); arrows.removeChildren(); armeeSelGraphRef.current = null
 
     const reach = selUnitTerrRef.current ? reachable(selUnitTerrRef.current) : null
     majRoyaumes()
@@ -336,15 +382,20 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
 
     const enMarche = marcheRef.current
     for (const a of collectArmies()) {
-      if (enMarche && a.pos && Math.hypot(a.pos[0] - enMarche.from[0], a.pos[1] - enMarche.from[1]) < 2) continue
+      // Pendant la marche, la colonne animée remplace l'armée au départ comme à l'arrivée.
+      if (enMarche && a.faction === joueurId() && a.pos && (Math.hypot(a.pos[0] - enMarche.from[0], a.pos[1] - enMarche.from[1]) < 2
+          || Math.hypot(a.pos[0] - enMarche.to[0], a.pos[1] - enMarche.to[1]) < 2)) continue
       const [x, y] = a.pos; const mine = a.faction === joueurId()
       const sel = mine && selUnitTerrRef.current === a.territoire
-      // L'écu se pose en haut à droite de la cité (ou du centre de la province).
-      const ax = x + 17, ay = y - 7
-      dessinerBouclier(units, ax, ay, factionColor(a.faction), a.effectif, sel, mine && !a.idsLibres.length)
+      const ax = x + ARMEE_DX, ay = y + ARMEE_DY
+      const armee = creerArmee({ couleur: factionColor(a.faction), effectif: a.effectif, types: a.types, moral: a.moral,
+                                 selection: sel, enRepos: mine && !a.idsLibres.length })
+      armee.position.set(ax, ay); armee.__baseY = ay
+      units.addChild(armee)
+      if (sel) armeeSelGraphRef.current = armee
       if (mine) {
-        // Zone de clic GÉNÉREUSE autour du jeton.
-        const zone = new Graphics(); zone.circle(ax, ay, 15)
+        // Zone de clic GÉNÉREUSE : figurines + drapeau.
+        const zone = new Graphics(); zone.roundRect(ax - 12, ay - 36, 24, 40, 6)
         zone.fill({ color: 0xffffff, alpha: 0.001 })
         zone.eventMode = 'static'; zone.cursor = 'pointer'
         zone.on('pointertap', (e) => { e.stopPropagation && e.stopPropagation(); onArmyTap(a) })
@@ -401,6 +452,11 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     const sig = JSON.stringify([proprio, couleurs])
     const R = royaumesRef.current
     if (sig === R.signature && R.sprite) return
+    // Provinces qui viennent de changer de mains : un éclat de leur nouvelle couleur.
+    if (R.proprio) for (const [id, f] of Object.entries(proprio)) {
+      if (f && R.proprio[id] !== f) { const c = centreOf(id); if (c) eclatsRef.current.push({ x: c[0], y: c[1], t0: performance.now(), col: hexToNumber(couleurs[f]) }) }
+    }
+    R.proprio = proprio
     R.signature = sig
     R.canvas = peindreRoyaumes(R.canvas, data, tr, (id) => proprio[id] || null, (fid) => couleurs[fid])
     if (R.sprite) { R.sprite.texture.source.update() }
@@ -475,7 +531,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
           // La colonne se met en marche TOUT DE SUITE (retour immédiat au joueur),
           // pendant que l'ordre part au serveur.
           lancerMarche(centreOf(armyTerr), centreOf(t.id),
-                       hexToNumber(factionColor(joueurId())), grp.effectif)
+                       hexToNumber(factionColor(joueurId())), grp.effectif, grp.types, grp.moral)
           onMoveStack(grp.idsLibres, t.id)
         }
         draw(); return
@@ -537,7 +593,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   function applyTransform() {
     const { scale, x, y } = viewRef.current
     ajusterEtiquettes()
-    for (const l of [worldRef.current, labelLayerRef.current, unitLayerRef.current, arrowLayerRef.current, marqueurLayerRef.current])
+    for (const l of [worldRef.current, labelLayerRef.current, unitLayerRef.current, arrowLayerRef.current, marqueurLayerRef.current, marcheLayerRef.current])
       if (l) { l.scale.set(scale); l.position.set(x, y) }
   }
   function layout(resetView = true) {
@@ -607,7 +663,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       unitLayerRef.current = new Container(); app.stage.addChild(unitLayerRef.current)
       marqueurLayerRef.current = new Container(); app.stage.addChild(marqueurLayerRef.current)
       marcheLayerRef.current = new Container(); app.stage.addChild(marcheLayerRef.current)
-      app.ticker.add(animerMarche); app.ticker.add(animerMarqueurs)
+      app.ticker.add(animerMarche); app.ticker.add(animerMarqueurs); app.ticker.add(animerVie)
       try {
         const data = await getMap(); if (destroyed) return
         dataRef.current = data; setError(null)
