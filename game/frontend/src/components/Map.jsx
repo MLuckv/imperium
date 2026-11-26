@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { Application, Container, Graphics, Text } from 'pixi.js'
+import { Application, Container, Graphics, Sprite, Text, Texture } from 'pixi.js'
 import { getMap } from '../api'
 import { factionColor, factionLabel } from '../lib/format'
 import { LuxeIcon } from './Icons'
+import { indexerAretes, peindreFond, peindreRoyaumes, ECHELLE_FOND, ECHELLE_ROYAUMES } from '../map/peinture'
+import { dessinerCite, dessinerCapitale, etiquetteCite, dessinerBouclier, dessinerMerveille, dessinerHorde } from '../map/glyphes'
 
-// Carte façon Age of History : mer bleue, terres (parchemin) découpées en
-// provinces, empires colorés. Clic sur une province => elle se SOULÈVE (sélection).
+// Carte « ancienne » peinte (cf. map/peinture.js) : mer gravée, parchemin, reliefs,
+// lavis aquarelle des royaumes ; glyphes vectoriels pour cités et armées. Clic sur une province => elle se SOULÈVE (sélection).
 // Clic sur SON armée => des FLÈCHES montrent où aller (terre, et mer si la techno
 // « Navigation maritime » est acquise). Zoom molette + glisser. Conquête des
 // provinces neutres en s'y déplaçant.
@@ -30,6 +32,11 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   const hostRef = useRef(null)
   const appRef = useRef(null)
   const worldRef = useRef(null)
+  const fondLayerRef = useRef(null)      // sprites peints : fond + royaumes
+  const hitLayerRef = useRef(null)       // polygones invisibles (survol / clic)
+  const surbrillanceRef = useRef(null)   // survol, sélection, destinations
+  const tronconsRef = useRef(null)       // arêtes classées par voisin
+  const royaumesRef = useRef({ canvas: null, sprite: null, signature: '' })
   const labelLayerRef = useRef(null)
   const unitLayerRef = useRef(null)
   const arrowLayerRef = useRef(null)
@@ -156,11 +163,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     halo.fill({ color: m.col, alpha: 0.30 * (1 - e) })
     halo.eventMode = 'none'; layer.addChild(halo)
 
-    const badge = new Graphics(); badge.roundRect(x - 13, y - 30, 26, 18, 5)
-    badge.fill({ color: m.col, alpha: 0.98 }); badge.stroke({ width: 2, color: ARROW_LAND })
-    badge.eventMode = 'none'; layer.addChild(badge)
-    const txt = new Text({ text: `⚔ ${m.effectif}`, style: { fontFamily: 'Georgia, serif', fontSize: 12, fontWeight: '700', fill: 0xfdf6e3, stroke: { color: 0x14110c, width: 2 } } })
-    txt.anchor.set(0.5); txt.position.set(x, y - 21); txt.eventMode = 'none'; layer.addChild(txt)
+    dessinerBouclier(layer, x + 17, y - 7, '#' + m.col.toString(16).padStart(6, '0'), m.effectif, true)
 
     if (av >= 1) { marcheRef.current = null; layer.removeChildren(); draw() }
   }
@@ -204,63 +207,26 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     const world = worldRef.current, labels = labelLayerRef.current
     const units = unitLayerRef.current, arrows = arrowLayerRef.current, data = dataRef.current
     if (!world || !labels || !units || !arrows || !data) return
-    world.removeChildren(); labels.removeChildren(); units.removeChildren(); arrows.removeChildren()
+    labels.removeChildren(); units.removeChildren(); arrows.removeChildren()
 
     const reach = selUnitTerrRef.current ? reachable(selUnitTerrRef.current) : null
+    majRoyaumes()
+    peindreSurbrillance(reach)
 
-    for (const t of data.territoires || []) {
-      const poly = t.polygone
-      if (!Array.isArray(poly) || poly.length < 3) continue
-      const factionId = resolveFaction(t)
-      const flat = poly.flat()
-      const lifted = selProvRef.current === t.id
-
-      if (lifted) { // ombre portée sous la province soulevée
-        const sh = new Graphics(); sh.poly(flat); sh.fill({ color: 0x000000, alpha: 0.5 })
-        sh.position.set(0, 5); sh.eventMode = 'none'; world.addChild(sh)
-      }
-      const g = new Graphics()
-      g.poly(flat)
-      g.fill({ color: fillFor(factionId), alpha: factionId ? 0.96 : 0.88 })
-      g.stroke({ width: 0.8, color: BORDER_COLOR, alpha: 0.9 })
-      g.eventMode = 'static'; g.cursor = 'pointer'
-      g.__terr = t; g.__factionId = factionId
-      if (lifted) g.position.set(0, -6)
-      g.on('pointerover', (e) => {
-        hoveredRef.current = t.id; paint(g, t, factionId, true, reach)
-        setApercu({ terr: t.id, nom: t.nom || t.id, faction: factionId, merveille: t.merveille || null, gisement: ((stateRef.current || {}).gisements || {})[t.id] || null, x: e.global.x, y: e.global.y })
-      })
-      g.on('pointermove', (e) => setApercu((a) => (a && a.terr === t.id ? { ...a, x: e.global.x, y: e.global.y } : a)))
-      g.on('pointerout', () => {
-        if (hoveredRef.current === t.id) hoveredRef.current = null
-        paint(g, t, factionId, false, reach)
-        setApercu((a) => (a && a.terr === t.id ? null : a))
-      })
-      g.on('pointertap', () => onProvinceTap(t, factionId))
-      paint(g, t, factionId, hoveredRef.current === t.id, reach)
-      world.addChild(g)
-    }
-
+    const villesParTerr = {}
+    for (const [pid, p] of Object.entries((stateRef.current && stateRef.current.pays) || {}))
+      for (const v of p.villes || []) villesParTerr[v.territoire] = { faction: pid, pop: v.population || 0 }
     for (const c of collectCities()) {
-      if (c.capitale) {
-        // Capitale : étoile dorée laurée pour bien la démarquer.
-        const ring = new Graphics(); ring.circle(c.pos[0], c.pos[1], 9)
-        ring.fill({ color: 0x14110c, alpha: 0.55 }); ring.stroke({ width: 1.5, color: 0xe8c267, alpha: 0.9 })
-        ring.eventMode = 'none'; labels.addChild(ring)
-        drawStar(labels, c.pos[0], c.pos[1], 7, 3, 0xe8c267)
-      } else {
-        const dot = new Graphics(); dot.circle(c.pos[0], c.pos[1], 4)
-        dot.fill({ color: 0x2b2417, alpha: 0.95 }); dot.stroke({ width: 2, color: 0xfdf6e3, alpha: 0.95 })
-        dot.eventMode = 'none'; labels.addChild(dot)
-      }
-      const label = new Text({ text: c.nom, style: { fontFamily: 'Georgia, serif', fontSize: c.capitale ? 16 : 15, fontWeight: '700', fill: c.capitale ? 0xf3d488 : 0xfdf6e3, stroke: { color: 0x14110c, width: 3.5 } } })
-      label.anchor.set(0.5, 0); label.position.set(c.pos[0], c.pos[1] + (c.capitale ? 10 : 6)); label.eventMode = 'none'; labels.addChild(label)
+      const info = villesParTerr[c.terr] || {}
+      if (c.capitale) dessinerCapitale(labels, c.pos[0], c.pos[1], factionColor(info.faction))
+      else dessinerCite(labels, c.pos[0], c.pos[1], Math.max(0.85, Math.min(1.35, 0.8 + (info.pop || 0) / 60)))
+      etiquetteCite(labels, c.pos[0], c.pos[1] + (c.capitale ? 7 : 5), c.nom, c.capitale)
 
       // Bâtiments construits + échafaud (au-dessus du badge d'armée, pour ne pas
       // le recouvrir). Dessinés en Pixi Graphics (rendu fiable, sans emoji).
       const bats = c.batiments || []
       let bx = c.pos[0] - (bats.length * 7) / 2
-      const by = c.pos[1] - 40
+      const by = c.pos[1] - (c.capitale ? 23 : 12)
       for (const b of bats) {
         drawBuildingGlyph(labels, bx + 3.5, by, b)
         bx += 8
@@ -280,8 +246,8 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     for (const t of data.territoires || []) {
       if (avecVille.has(t.id)) continue
       const c = t.centre || polygonCentroid(t.polygone); if (!c) continue
-      const lab = new Text({ text: t.nom || t.id, style: { fontFamily: 'Georgia, serif', fontSize: 11, fill: 0xf3e9d2, stroke: { color: 0x14110c, width: 3 } } })
-      lab.anchor.set(0.5, 0.5); lab.position.set(c[0], c[1]); lab.alpha = 0.8; lab.eventMode = 'none'
+      const lab = new Text({ text: t.nom || t.id, style: { fontFamily: '"EB Garamond", Georgia, serif', fontStyle: 'italic', fontSize: 12, fontWeight: '600', fill: 0x3a2a18, stroke: { color: 0xf1e6c8, width: 3, join: 'round' } } })
+      lab.anchor.set(0.5, 0.5); lab.position.set(c[0], c[1]); lab.alpha = 0.85; lab.eventMode = 'none'
       provLabels.addChild(lab)
     }
     labels.addChild(provLabels); provLabelsRef.current = provLabels
@@ -296,7 +262,7 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       const prop = resolveFaction(terrById(tid) || { id: tid })
       const p = prop && stateRef.current.pays[prop]
       const exploite = !!(p && (p.villes || []).some((v) => v.territoire === tid && (v.batiments || []).includes(LUXE_BAT[lx])))
-      drawLuxeBadge(labels, c[0] + 15, c[1] + 9, lx, exploite)
+      drawLuxeBadge(labels, c[0] + 13, c[1] + 24, lx, exploite)
     }
 
     // Repères des merveilles sur la carte (✦ doré = active/intacte, grisé = ruine/site).
@@ -306,15 +272,8 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       const c = t.centre || polygonCentroid(t.polygone)
       if (!c) continue
       const etat = (mervEtats[t.merveille.id] || {}).etat
-      const naturelle = t.merveille.type === 'naturelle'
-      const actif = naturelle || ['intacte', 'restauree', 'construite'].includes(etat)
-      // Doré = monument (intact/restauré), vert = site naturel, grisé = ruine/site à fouiller.
-      const col = naturelle ? 0x8fd19e : actif ? 0xe8c267 : 0x9a8c6a
-      const bg = new Graphics(); bg.circle(c[0], c[1] - 2, 8.5)
-      bg.fill({ color: 0x14110c, alpha: 0.6 }); bg.stroke({ width: 1.3, color: col, alpha: 0.95 })
-      bg.eventMode = 'none'; labels.addChild(bg)
-      const star = new Text({ text: naturelle ? '❋' : '✦', style: { fontFamily: 'Georgia, serif', fontSize: 13, fontWeight: '700', fill: col, stroke: { color: 0x14110c, width: 2 } } })
-      star.anchor.set(0.5, 0.5); star.position.set(c[0], c[1] - 2); star.eventMode = 'none'; labels.addChild(star)
+      const actif = t.merveille.type === 'naturelle' || ['intacte', 'restauree', 'construite'].includes(etat)
+      dessinerMerveille(labels, c[0] - 13, c[1] + 24, t.merveille.type, actif)
     }
 
     // Hordes barbares / rebelles : campement menaçant + trait vers leur proie.
@@ -333,16 +292,13 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
         }
         g.stroke({ width: 1.6, color: 0xc0392b, alpha: 0.75 }); g.eventMode = 'none'; labels.addChild(g)
       }
-      const dot = new Graphics(); dot.circle(c[0], c[1], 9)
-      dot.fill({ color: 0x3b1512, alpha: 0.85 }); dot.stroke({ width: 2, color: 0xc0392b })
-      dot.eventMode = 'none'; labels.addChild(dot)
-      const ic = new Text({ text: '⚔', style: { fontFamily: 'Georgia, serif', fontSize: 12, fill: 0xf5d9a0 } })
-      ic.anchor.set(0.5, 0.5); ic.position.set(c[0], c[1]); ic.eventMode = 'none'; labels.addChild(ic)
+      dessinerHorde(labels, c[0], c[1])
       const lab = new Text({
         text: `${h.nom} (${Math.round(h.force)})`,
-        style: { fontFamily: 'Georgia, serif', fontSize: 11, fontWeight: '700', fill: 0xe07a68, stroke: { color: 0x14110c, width: 3 } },
+        style: { fontFamily: 'Cinzel, Georgia, serif', fontSize: 9, fontWeight: '700', fill: 0x8e1f16, stroke: { color: 0xf3e8cc, width: 3 } },
+        resolution: 4,
       })
-      lab.anchor.set(0.5, 1); lab.position.set(c[0], c[1] - 11); lab.eventMode = 'none'; labels.addChild(lab)
+      lab.anchor.set(0.5, 1); lab.position.set(c[0], c[1] - 12); lab.eventMode = 'none'; labels.addChild(lab)
     }
 
     // Projets du conseiller (espions, garnisons…) : point à l'origine + trait vers la cible.
@@ -378,21 +334,18 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     for (const a of collectArmies()) {
       if (enMarche && a.pos && Math.hypot(a.pos[0] - enMarche.from[0], a.pos[1] - enMarche.from[1]) < 2) continue
       const [x, y] = a.pos; const mine = a.faction === joueurId()
-      const col = hexToNumber(factionColor(a.faction)); const sel = mine && selUnitTerrRef.current === a.territoire
-      const badge = new Graphics(); badge.roundRect(x - 13, y - 30, 26, 18, 5)
-      badge.fill({ color: col, alpha: 0.97 }); badge.stroke({ width: sel ? 2.5 : 1.4, color: sel ? ARROW_LAND : 0x14110c })
-      badge.eventMode = 'none'
-      units.addChild(badge)
+      const sel = mine && selUnitTerrRef.current === a.territoire
+      // L'écu se pose en haut à droite de la cité (ou du centre de la province).
+      const ax = x + 17, ay = y - 7
+      dessinerBouclier(units, ax, ay, factionColor(a.faction), a.effectif, sel, mine && !a.idsLibres.length)
       if (mine) {
-        // Zone de clic GÉNÉREUSE autour du jeton (le badge seul était trop petit).
-        const zone = new Graphics(); zone.circle(x, y - 20, 24)
+        // Zone de clic GÉNÉREUSE autour du jeton.
+        const zone = new Graphics(); zone.circle(ax, ay, 15)
         zone.fill({ color: 0xffffff, alpha: 0.001 })
         zone.eventMode = 'static'; zone.cursor = 'pointer'
         zone.on('pointertap', (e) => { e.stopPropagation && e.stopPropagation(); onArmyTap(a) })
         units.addChild(zone)
       }
-      const txt = new Text({ text: `⚔ ${a.effectif}`, style: { fontFamily: 'Georgia, serif', fontSize: 12, fontWeight: '700', fill: 0xfdf6e3, stroke: { color: 0x14110c, width: 2 } } })
-      txt.anchor.set(0.5); txt.position.set(x, y - 21); txt.eventMode = 'none'; units.addChild(txt)
     }
 
     // Flèches de déplacement depuis l'armée sélectionnée.
@@ -405,15 +358,77 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     }
   }
 
-  function paint(g, t, factionId, hover, reach) {
-    const flat = (t.polygone || []).flat()
-    const isReach = reach && reach.all.has(t.id)
-    const isSel = selProvRef.current === t.id
-    g.clear(); g.poly(flat)
-    g.fill({ color: fillFor(factionId), alpha: hover ? 1 : factionId ? 0.96 : 0.88 })
-    // Priorité du liseré : sélection (or) > survol > destination atteignable.
-    if (isSel) g.stroke({ width: 3, color: 0xe8c267, alpha: 1 })
-    else g.stroke({ width: hover || isReach ? 2.4 : 0.8, color: hover ? HOVER_LINE : isReach ? ARROW_LAND : BORDER_COLOR, alpha: hover || isReach ? 1 : 0.9 })
+  // Survol, sélection et destinations : UN seul calque redessiné (les polygones
+  // d'interaction, eux, sont invisibles et créés une fois pour toutes).
+  function peindreSurbrillance(reach) {
+    const g = surbrillanceRef.current; if (!g) return
+    if (reach === undefined) reach = selUnitTerrRef.current ? reachable(selUnitTerrRef.current) : null
+    g.clear()
+    const poly = (id) => { const t = terrById(id); return t && (t.polygone || []).flat() }
+    if (reach) for (const id of reach.all) {
+      const pts = poly(id); if (!pts) continue
+      const mer = !reach.land.has(id)
+      g.poly(pts); g.fill({ color: mer ? ARROW_SEA : ARROW_LAND, alpha: 0.13 })
+      g.poly(pts); g.stroke({ width: 1.6, color: mer ? ARROW_SEA : ARROW_LAND, alpha: 0.95, join: 'round' })
+    }
+    const hov = hoveredRef.current && poly(hoveredRef.current)
+    if (hov && hoveredRef.current !== selProvRef.current) {
+      g.poly(hov); g.fill({ color: 0xfff6dd, alpha: 0.16 })
+      g.poly(hov); g.stroke({ width: 1.3, color: 0xfff6dd, alpha: 0.95, join: 'round' })
+    }
+    const sel = selProvRef.current && poly(selProvRef.current)
+    if (sel) {
+      g.poly(sel); g.fill({ color: 0xfff6dd, alpha: 0.1 })
+      g.poly(sel); g.stroke({ width: 6, color: 0xe8c267, alpha: 0.28, join: 'round' })
+      g.poly(sel); g.stroke({ width: 2, color: 0xe8c267, alpha: 1, join: 'round' })
+    }
+  }
+
+  // Lavis des royaumes : repeint seulement quand une province change de mains.
+  function majRoyaumes() {
+    const data = dataRef.current, tr = tronconsRef.current, layer = fondLayerRef.current
+    if (!data || !tr || !layer) return
+    const proprio = {}
+    for (const t of data.territoires || []) proprio[t.id] = resolveFaction(t)
+    const couleurs = {}
+    const st = stateRef.current
+    for (const fid of new Set(Object.values(proprio).filter(Boolean)))
+      couleurs[fid] = (st && st.pays && st.pays[fid] && st.pays[fid].couleur) || factionColor(fid)
+    const sig = JSON.stringify([proprio, couleurs])
+    const R = royaumesRef.current
+    if (sig === R.signature && R.sprite) return
+    R.signature = sig
+    R.canvas = peindreRoyaumes(R.canvas, data, tr, (id) => proprio[id] || null, (fid) => couleurs[fid])
+    if (R.sprite) { R.sprite.texture.source.update() }
+    else {
+      R.sprite = new Sprite(Texture.from(R.canvas))
+      R.sprite.scale.set(1 / ECHELLE_ROYAUMES); R.sprite.blendMode = 'multiply'; R.sprite.eventMode = 'none'
+      layer.addChild(R.sprite)
+    }
+  }
+
+  // Polygones d'interaction (invisibles), créés une fois au chargement.
+  function construireProvinces() {
+    const hit = hitLayerRef.current, data = dataRef.current
+    if (!hit || !data) return
+    hit.removeChildren()
+    for (const t of data.territoires || []) {
+      if (!Array.isArray(t.polygone) || t.polygone.length < 3) continue
+      const g = new Graphics()
+      g.poly(t.polygone.flat()); g.fill({ color: 0xffffff, alpha: 0.001 })
+      g.eventMode = 'static'; g.cursor = 'pointer'
+      g.on('pointerover', (e) => {
+        hoveredRef.current = t.id; peindreSurbrillance()
+        setApercu({ terr: t.id, nom: t.nom || t.id, faction: resolveFaction(t), merveille: t.merveille || null, gisement: ((stateRef.current || {}).gisements || {})[t.id] || null, x: e.global.x, y: e.global.y })
+      })
+      g.on('pointermove', (e) => setApercu((a) => (a && a.terr === t.id ? { ...a, x: e.global.x, y: e.global.y } : a)))
+      g.on('pointerout', () => {
+        if (hoveredRef.current === t.id) { hoveredRef.current = null; peindreSurbrillance() }
+        setApercu((a) => (a && a.terr === t.id ? null : a))
+      })
+      g.on('pointertap', () => onProvinceTap(t, resolveFaction(t)))
+      hit.addChild(g)
+    }
   }
 
   function drawArrow(layer, a, b, color) {
@@ -423,11 +438,12 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
     const sx = a[0] + ux * 14, sy = a[1] + uy * 14       // démarre hors du centre
     const ex = b[0] - ux * 12, ey = b[1] - uy * 12       // s'arrête avant le centre cible
     const g = new Graphics()
-    g.moveTo(sx, sy); g.lineTo(ex, ey); g.stroke({ width: 3, color, alpha: 0.95 })
-    // pointe
-    const ah = 9, aw = 6
+    const ah = 8, aw = 5.5
     const bx = ex - ux * ah, by = ey - uy * ah; const px = -uy, py = ux
+    g.moveTo(sx, sy); g.lineTo(bx, by); g.stroke({ width: 4.2, color: 0x1d150c, alpha: 0.55, cap: 'round' })
+    g.moveTo(sx, sy); g.lineTo(bx, by); g.stroke({ width: 2.4, color, alpha: 0.95, cap: 'round' })
     g.poly([ex, ey, bx + px * aw, by + py * aw, bx - px * aw, by - py * aw]).fill({ color, alpha: 0.95 })
+    g.poly([ex, ey, bx + px * aw, by + py * aw, bx - px * aw, by - py * aw]).stroke({ width: 0.8, color: 0x1d150c, alpha: 0.6 })
     g.eventMode = 'none'; layer.addChild(g)
   }
 
@@ -579,13 +595,27 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       if (destroyed) { app.destroy(true, { children: true }); return }
       appRef.current = app; if (hostRef.current) hostRef.current.appendChild(app.canvas)
       worldRef.current = new Container(); app.stage.addChild(worldRef.current)
+      fondLayerRef.current = new Container(); worldRef.current.addChild(fondLayerRef.current)
+      hitLayerRef.current = new Container(); worldRef.current.addChild(hitLayerRef.current)
+      surbrillanceRef.current = new Graphics(); surbrillanceRef.current.eventMode = 'none'; worldRef.current.addChild(surbrillanceRef.current)
       arrowLayerRef.current = new Container(); app.stage.addChild(arrowLayerRef.current)
       labelLayerRef.current = new Container(); app.stage.addChild(labelLayerRef.current)
       unitLayerRef.current = new Container(); app.stage.addChild(unitLayerRef.current)
       marqueurLayerRef.current = new Container(); app.stage.addChild(marqueurLayerRef.current)
       marcheLayerRef.current = new Container(); app.stage.addChild(marcheLayerRef.current)
       app.ticker.add(animerMarche); app.ticker.add(animerMarqueurs)
-      try { const data = await getMap(); if (destroyed) return; dataRef.current = data; setError(null); layout(true); draw() }
+      try {
+        const data = await getMap(); if (destroyed) return
+        dataRef.current = data; setError(null)
+        tronconsRef.current = indexerAretes(data.territoires || [], data.monde)
+        construireProvinces(); layout(true); draw()
+        // Le fond peint (une à deux secondes) arrive par-dessous quand il est prêt.
+        const fond = await peindreFond(data, tronconsRef.current)
+        if (destroyed || !fondLayerRef.current) return
+        const sp = new Sprite(Texture.from(fond)); sp.scale.set(1 / ECHELLE_FOND); sp.eventMode = 'none'
+        fondLayerRef.current.addChildAt(sp, 0)
+        draw()  // les étiquettes Pixi profitent des polices désormais chargées
+      }
       catch (err) { if (!destroyed) setError(err.message || 'Carte indisponible') }
       finally { if (!destroyed) setLoading(false) }
     }
@@ -615,7 +645,8 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       window.removeEventListener('keydown', onKey)
       window.removeEventListener('pointermove', onMove); window.removeEventListener('pointerup', onUp)
       if (appRef.current) appRef.current.destroy(true, { children: true, texture: true })
-      appRef.current = null; worldRef.current = null; labelLayerRef.current = null; unitLayerRef.current = null; arrowLayerRef.current = null; marcheLayerRef.current = null; marqueurLayerRef.current = null
+      appRef.current = null; worldRef.current = null; fondLayerRef.current = null; hitLayerRef.current = null; surbrillanceRef.current = null
+      royaumesRef.current = { canvas: null, sprite: null, signature: '' }; labelLayerRef.current = null; unitLayerRef.current = null; arrowLayerRef.current = null; marcheLayerRef.current = null; marqueurLayerRef.current = null
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -633,9 +664,16 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
 
   return (
     <div className="relative h-full w-full overflow-hidden"
-         style={{ background: `linear-gradient(180deg, #2b4a63 0%, #1c3343 55%, #14222e 100%)` }}>
+         style={{ background: 'radial-gradient(ellipse at 50% 40%, #2a2117 0%, #18120c 70%, #0f0b07 100%)' }}>
       <div ref={hostRef} className="h-full w-full" />
-      {loading && <div className="pointer-events-none absolute inset-0 flex items-center justify-center text-parchment/80">Chargement de la carte…</div>}
+      {/* Vignette (bords assombris, comme une carte sous la lampe) */}
+      <div className="pointer-events-none absolute inset-0" style={{ boxShadow: 'inset 0 0 120px 30px rgba(12,8,4,0.55)' }} />
+      <RoseDesVents />
+      {loading && !error && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+          <div className="rounded-lg border border-bronze-dark/60 bg-night/90 px-5 py-3 font-display text-sm tracking-widest text-gold">Les cartographes encrent la carte…</div>
+        </div>
+      )}
       {error && <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[#1c1813]/85 px-6 text-center"><p className="text-lg font-semibold text-terracotta">Carte indisponible</p><p className="max-w-sm text-sm text-parchment/80">{error}</p></div>}
       <MapLegend stateData={stateData} naval={hasNaval()} />
       {apercu && <ApercuProvince info={apercu} stateData={stateData} host={hostRef.current} />}
@@ -656,6 +694,31 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
   )
 
   function zoomCenter(f) { const host = hostRef.current; if (host) zoomAt(host.clientWidth / 2, host.clientHeight / 2, f) }
+}
+
+// Rose des vents décorative (coin inférieur droit).
+function RoseDesVents() {
+  const branche = (a, long, plein) => {
+    const r = (a * Math.PI) / 180, c = Math.cos(r), s = Math.sin(r)
+    const pt = (d, o) => `${50 + c * d - s * o},${50 + s * d + c * o}`
+    return (
+      <g key={a}>
+        <polygon points={`${pt(long, 0)} ${pt(0, 5)} ${pt(0, 0)}`} fill={plein ? '#2a1f14' : '#e9dcb9'} stroke="#2a1f14" strokeWidth="0.8" />
+        <polygon points={`${pt(long, 0)} ${pt(0, -5)} ${pt(0, 0)}`} fill={plein ? '#e9dcb9' : '#2a1f14'} stroke="#2a1f14" strokeWidth="0.8" />
+      </g>
+    )
+  }
+  return (
+    <svg viewBox="0 0 100 100" width="96" height="96" aria-hidden="true"
+         className="pointer-events-none absolute bottom-12 right-3 opacity-80 drop-shadow-[0_2px_4px_rgba(0,0,0,0.5)]">
+      <circle cx="50" cy="50" r="30" fill="rgba(233,220,185,0.55)" stroke="#2a1f14" strokeWidth="0.8" />
+      <circle cx="50" cy="50" r="26" fill="none" stroke="#2a1f14" strokeWidth="0.4" strokeDasharray="1.5 1.5" />
+      {[45, 135, 225, 315].map((a) => branche(a, 24, false))}
+      {[-90, 0, 90, 180].map((a) => branche(a, 42, true))}
+      <circle cx="50" cy="50" r="3" fill="#c9a13b" stroke="#2a1f14" strokeWidth="0.8" />
+      <text x="50" y="6.5" textAnchor="middle" fontFamily="Cinzel, Georgia, serif" fontSize="8" fontWeight="700" fill="#e9dcb9" stroke="#2a1f14" strokeWidth="0.4">N</text>
+    </svg>
+  )
 }
 
 function MapLegend({ stateData, naval }) {
