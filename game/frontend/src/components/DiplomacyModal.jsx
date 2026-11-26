@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { postAction } from '../api'
 import { factionColor, factionLabel, leaderName, reputationTone, num } from '../lib/format'
 import MessageThread from './MessageThread'
-import { FactionEmblem } from './Icons'
+import Medaillon from './Medaillon'
 
 // Panneau d'une civilisation, ouvert au clic sur celle-ci.
 // S'OUVRE SUR LA MESSAGERIE par défaut ; un bouton en haut bascule vers le menu
@@ -51,9 +51,7 @@ export default function DiplomacyModal({ cible, state, onClose, onStateChange })
         {/* En-tête */}
         <div className="flex items-center gap-3 border-b border-bronze-dark/60 px-4 py-3"
              style={{ background: `linear-gradient(90deg, ${accent}33, transparent)` }}>
-          <span className="flex h-9 w-9 items-center justify-center rounded-md border border-black/50" style={{ backgroundColor: accent + '33' }}>
-            <FactionEmblem faction={cible} size={24} style={{ color: accent }} />
-          </span>
+          <Medaillon faction={cible} taille={58} className="shrink-0 drop-shadow-[0_3px_5px_rgba(0,0,0,0.6)]" />
           <div className="flex-1">
             <div className="font-display text-lg font-bold text-parchment">{leader}</div>
             <div className="text-xs text-parchment/60">

@@ -15,6 +15,7 @@ import DogmeTree from './components/DogmeTree'
 import { factionColor, factionLabel, leaderName, reputationTone, num } from './lib/format'
 import { FactionEmblem, UiIcon } from './components/Icons'
 import { PanoramaAntique, Banniere, Filet, Laurier } from './components/Decors'
+import Medaillon from './components/Medaillon'
 
 const SLOT = 1
 
@@ -277,7 +278,9 @@ export default function App() {
                         className="h-32 w-24 shrink-0 drop-shadow-[0_6px_8px_rgba(0,0,0,0.55)] transition-transform duration-300 group-hover:-rotate-2 group-hover:scale-105" />
               <div className="min-w-0">
                 <div className="font-display text-xl font-bold tracking-wide" style={{ color: factionColor(c.id), textShadow: '0 1px 0 #000' }}>{c.nom}</div>
-                <div className="font-display text-[11px] uppercase tracking-[0.18em] text-gold/90">{c.leader}</div>
+                <div className="flex items-center gap-1.5 font-display text-[11px] uppercase tracking-[0.18em] text-gold/90">
+                  <Medaillon faction={c.id} taille={26} className="shrink-0" />{c.leader}
+                </div>
                 <div className="text-xs italic text-parchment/55">{c.style}</div>
                 <p className="mt-1.5 text-[13px] leading-snug text-parchment/85">{c.desc}</p>
                 <div className="mt-1.5 inline-block rounded border border-gold/30 bg-gold/10 px-1.5 py-0.5 text-[11px] text-gold">Atout : {c.bonus}</div>
@@ -368,7 +371,7 @@ export default function App() {
             {courriers.slice(0, 3).map((c) => (
               <div key={c.faction} className="panel !p-3">
                 <div className="flex items-start gap-2">
-                  <FactionEmblem faction={c.faction} size={20} className="mt-0.5 shrink-0" style={{ color: factionColor(c.faction) }} />
+                  <Medaillon faction={c.faction} taille={34} className="shrink-0 drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]" />
                   <div className="min-w-0 flex-1">
                     <div className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: factionColor(c.faction) }}>
                       ✉ {leaderName(c.faction)}
@@ -581,7 +584,7 @@ function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
               : rapport > 0.75 ? { t: 'armées comparables', c: 'text-amber-300' } : { t: 'armée plus faible', c: 'text-emerald-300' }
             return (
               <button key={id} onClick={() => onPick(id)} className="flex items-center gap-3 rounded-md border border-transparent bg-black/20 px-3 py-2 text-left transition hover:border-bronze hover:bg-black/30">
-                <FactionEmblem faction={id} size={24} className="shrink-0" style={{ color: p.couleur || factionColor(id) }} />
+                <Medaillon faction={id} taille={40} className="shrink-0 drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]" />
                 <span className="min-w-0 flex-1">
                   <span className="flex items-center gap-2">
                     <span className="text-sm font-semibold text-parchment">{factionLabel(id, p.nom)}</span>
