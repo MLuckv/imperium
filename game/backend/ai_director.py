@@ -40,6 +40,10 @@ OLLAMA_TAGS = f"{OLLAMA_URL}/api/tags"
 # que llama3.1:8b (camps d'alliance corrects, ton en caractère), vitesse équivalente.
 import os as _os
 MODELE = _os.environ.get("IMPERIUM_MODELE", "qwen2.5:7b")
+# Fenêtre de contexte des conversations : le fil + la fiche du personnage atteignent
+# ~3 000 jetons sur une longue négociation ; Ollama tronque le DÉBUT (la fiche !)
+# au-delà de 4 096 par défaut. On se donne de la marge.
+NUM_CTX = int(_os.environ.get("IMPERIUM_NUM_CTX", "8192"))
 # Délai de génération. Sur cette machine (M2, mode éco possible), une réponse peut
 # prendre ~20-25 s : mieux vaut attendre que basculer en repli générique. Le chat
 # joueur passe par le STREAMING (premiers mots en ~2 s), donc ce délai ne concerne
@@ -737,7 +741,7 @@ def _appel_chat(messages: list[dict], temperature: float = 0.7, num_predict: int
         return None
     try:
         payload = {"model": MODELE, "messages": messages, "stream": False, "keep_alive": "30m",
-                   "options": {"temperature": temperature, "num_predict": num_predict,
+                   "options": {"temperature": temperature, "num_predict": num_predict, "num_ctx": NUM_CTX,
                                "seed": random.randint(1, 2_000_000_000),
                                "top_p": 0.92, "repeat_penalty": 1.15}}
         if format_json:
@@ -756,7 +760,7 @@ def flux_chat(messages: list[dict], temperature: float = 0.7, num_predict: int =
     if not modele_pret():
         return
     payload = {"model": MODELE, "messages": messages, "stream": True, "keep_alive": "30m",
-               "options": {"temperature": temperature, "num_predict": num_predict,
+               "options": {"temperature": temperature, "num_predict": num_predict, "num_ctx": NUM_CTX,
                            "seed": random.randint(1, 2_000_000_000),
                            "top_p": 0.92, "repeat_penalty": 1.15}}
     if format_json:
