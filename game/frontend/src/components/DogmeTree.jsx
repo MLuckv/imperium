@@ -67,7 +67,7 @@ export default function DogmeTree({ state, onClose, onStateChange }) {
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="flex h-[88vh] w-full max-w-5xl flex-col overflow-hidden rounded-xl border border-bronze-dark bg-night shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="flex h-[88vh] w-full max-w-5xl flex-col fenetre overflow-hidden" onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-between border-b border-bronze-dark/60 px-4 py-3">
           <h2 className="font-display text-lg font-bold tracking-wide text-gold">Dogmes</h2>
           <div className="flex items-center gap-3">

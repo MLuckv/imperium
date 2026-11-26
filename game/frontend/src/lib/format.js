@@ -57,13 +57,13 @@ export function leaderName(factionId) {
 // Libellés et icônes (texte) des ressources de base. Sert uniquement à
 // l'affichage ; les valeurs viennent intégralement de l'API.
 export const RESOURCE_META = {
-  or: { label: 'Or', icon: '⬤', tint: '#c9a227' },
-  nourriture: { label: 'Nourriture', icon: '❖', tint: '#c0703a' },
-  eau: { label: 'Eau', icon: '≈', tint: '#3a7bc0' },
-  pierre: { label: 'Pierre', icon: '◼', tint: '#8a8a82' },
-  bois: { label: 'Bois', icon: '❙', tint: '#7a5a32' },
-  fer: { label: 'Fer', icon: '⛨', tint: '#6b6f72' },
-  population: { label: 'Population', icon: '☖', tint: '#9b6a9b' },
+  or: { label: 'Or', icon: '⬤', tint: '#e0b23e' },
+  nourriture: { label: 'Nourriture', icon: '❖', tint: '#d9a441' },
+  eau: { label: 'Eau', icon: '≈', tint: '#5b9bd5' },
+  pierre: { label: 'Pierre', icon: '◼', tint: '#a7a69c' },
+  bois: { label: 'Bois', icon: '❙', tint: '#9a6d3a' },
+  fer: { label: 'Fer', icon: '⛨', tint: '#8f979b' },
+  population: { label: 'Population', icon: '☖', tint: '#c49ac4' },
 }
 
 export const LUXURY_META = {

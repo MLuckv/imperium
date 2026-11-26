@@ -252,8 +252,8 @@ function nomBat(batiments, id) { const b = batiments.find((x) => x.id === id); r
 
 export function Overlay({ children, onClose }) {
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden rounded-xl border border-bronze-dark bg-night shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4 backdrop-blur-[2px]" onClick={onClose}>
+      <div className="fenetre flex max-h-[88vh] w-full max-w-2xl flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
         {children}
       </div>
     </div>

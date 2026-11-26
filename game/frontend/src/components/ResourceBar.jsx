@@ -1,4 +1,4 @@
-import { LuxeIcon } from './Icons'
+import { LuxeIcon, ResIcon } from './Icons'
 import {
   RESOURCE_META,
   LUXURY_META,
@@ -68,7 +68,7 @@ export default function ResourceBar({ meta, joueur }) {
           const lignes = detail[key] || []
           return (
             <div key={key} className="group relative flex items-baseline gap-1.5 whitespace-nowrap">
-              <span style={{ color: meta2.tint }} className="text-sm">{meta2.icon}</span>
+              <ResIcon id={key} size={15} className="relative top-[2px] shrink-0" style={{ color: meta2.tint }} />
               <span className="hidden text-xs text-parchment/70 lg:inline">{meta2.label}</span>
               <span className="font-semibold tabular-nums" title={meta2.label}>{num(value)}</span>
               {prod != null && (

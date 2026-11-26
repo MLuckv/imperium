@@ -161,15 +161,33 @@ body {
   }
 
   /* ---------- Panneau de section ---------- */
-  .panel {
-    border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 70%, transparent);
+  /* Bronze patiné : double filet (bordure + liseré intérieur doré), coins ornés
+     de petits fleurons, grain discret. */
+  .panel, .fenetre {
+    position: relative;
+    border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 85%, transparent);
     border-radius: 0.6rem;
     background:
-      linear-gradient(180deg, rgba(42, 34, 21, 0.92) 0%, rgba(28, 23, 16, 0.92) 100%);
+      radial-gradient(circle at 7px 7px, rgba(232, 194, 103, 0.55) 1.6px, transparent 2.2px),
+      radial-gradient(circle at calc(100% - 7px) 7px, rgba(232, 194, 103, 0.55) 1.6px, transparent 2.2px),
+      radial-gradient(circle at 7px calc(100% - 7px), rgba(232, 194, 103, 0.55) 1.6px, transparent 2.2px),
+      radial-gradient(circle at calc(100% - 7px) calc(100% - 7px), rgba(232, 194, 103, 0.55) 1.6px, transparent 2.2px),
+      radial-gradient(ellipse at 50% 0%, rgba(232, 194, 103, 0.07) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(42, 34, 21, 0.95) 0%, rgba(26, 21, 15, 0.95) 100%);
     box-shadow:
-      inset 0 1px 0 rgba(232, 194, 103, 0.08),
-      0 6px 18px rgba(0, 0, 0, 0.45);
+      inset 0 0 0 3px rgba(20, 15, 10, 0.6),
+      inset 0 0 0 4px rgba(232, 194, 103, 0.14),
+      0 8px 22px rgba(0, 0, 0, 0.5);
     padding: 0.85rem;
+  }
+  .fenetre {
+    padding: 0;
+    border-radius: 0.8rem;
+    border-color: color-mix(in srgb, var(--color-bronze) 55%, transparent);
+    box-shadow:
+      inset 0 0 0 3px rgba(20, 15, 10, 0.6),
+      inset 0 0 0 4px rgba(232, 194, 103, 0.16),
+      0 24px 60px rgba(0, 0, 0, 0.7);
   }
   .panel-title {
     font-family: var(--font-display);

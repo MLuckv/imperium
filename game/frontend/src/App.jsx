@@ -556,7 +556,7 @@ function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
   const monArmee = (joueur && joueur.force_armee) || 0
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="w-full max-w-lg rounded-xl border border-bronze-dark bg-night p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      <div className="fenetre w-full max-w-lg p-4" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between">
           <div>
             <h2 className="font-display text-lg font-bold text-gold">Diplomatie</h2>

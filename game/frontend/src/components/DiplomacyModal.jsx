@@ -46,7 +46,7 @@ export default function DiplomacyModal({ cible, state, onClose, onStateChange })
 
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="flex h-[82vh] w-full max-w-3xl flex-col overflow-hidden rounded-xl border border-bronze-dark bg-night shadow-2xl"
+      <div className="flex h-[82vh] w-full max-w-3xl flex-col fenetre overflow-hidden"
            onClick={(e) => e.stopPropagation()}>
         {/* En-tête */}
         <div className="flex items-center gap-3 border-b border-bronze-dark/60 px-4 py-3"
