@@ -390,3 +390,23 @@ body {
 .thin-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
+
+/* ---------- Lignes de production façon Civilization ---------- */
+.ligne-prod {
+  display: flex; align-items: center; gap: 0.7rem; width: 100%; text-align: left;
+  padding: 0.45rem 0.7rem 0.45rem 0.45rem; border-radius: 999px 0.6rem 0.6rem 999px;
+  border: 1px solid rgba(122, 93, 31, 0.55);
+  background: linear-gradient(90deg, rgba(48, 38, 24, 0.95), rgba(26, 21, 15, 0.95));
+  transition: border-color 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
+}
+.ligne-prod:hover:not(:disabled) { border-color: #e8c267; box-shadow: 0 0 14px rgba(232, 194, 103, 0.22); transform: translateX(2px); }
+.ligne-prod-off { opacity: 0.55; cursor: not-allowed; }
+.ligne-prod-fait { border-color: rgba(79, 179, 122, 0.55); background: linear-gradient(90deg, rgba(30, 60, 40, 0.6), rgba(20, 26, 18, 0.9)); }
+.medaillon-prod {
+  display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+  width: 2.6rem; height: 2.6rem; border-radius: 999px; color: #f1e3c0;
+  border: 2px solid rgba(232, 194, 103, 0.7);
+  background: radial-gradient(circle at 40% 35%, #4a3a20, #15100a);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.ligne-prod-fait .medaillon-prod { border-color: #4fb37a; }

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { getCatalog, postAction } from '../api'
 import { num } from '../lib/format'
 import { Overlay } from './ProductionModal'
-import { UnitIcon, UiIcon } from './Icons'
+import { UnitIcon, UiIcon, ResIcon } from './Icons'
 
 // Modale de RECRUTEMENT. On recrute AUTANT QUE L'ON VEUT tant qu'on a assez d'or
 // ET de population. Chaque clic lève une unité sur la région choisie.
@@ -56,66 +56,83 @@ export default function RecruitmentModal({ state, forcedTerr, provNames = {}, on
 
   const unites = (catalog && catalog.unites) || []
 
+  // Catégories d'unités (comme les onglets de production de Civilization).
+  const CATS = [
+    ['Infanterie', ['levee', 'infanterie_legere', 'legionnaire', 'hoplite', 'phalange', 'mercenaire']],
+    ['Cavalerie et bêtes de guerre', ['cavalerie', 'chevalier', 'elephant']],
+    ['Marine', ['trireme']],
+  ]
+  const groupes = CATS.map(([nom, ids]) => ({ nom, items: unites.filter((u) => ids.includes(u.id)) }))
+    .concat([{ nom: 'Autres', items: unites.filter((u) => !CATS.some(([, ids]) => ids.includes(u.id))) }])
+    .filter((g) => g.items.length)
+
   return (
-    <Overlay onClose={onClose}>
-      <div className="flex items-center justify-between border-b border-bronze-dark/60 px-4 py-3">
-        <h2 className="font-display text-lg font-bold tracking-wide text-gold">Recrutement</h2>
-        <div className="flex items-center gap-3 text-xs text-parchment/70">
-          <span>Or <b className="text-gold">{num(or)}</b></span>
-          <span>Population <b className="text-parchment">{num(pop)}</b></span>
-          {territoires.length > 0 && (
-            <select value={region} onChange={(e) => setRegion(e.target.value)} title="Région de levée"
-                    className="max-w-[150px] rounded border border-bronze-dark/60 bg-night px-1.5 py-0.5 text-parchment">
-              {territoires.map((t) => <option key={t} value={t}>{provNames[t] || t}</option>)}
-            </select>
-          )}
-          <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
+    <Overlay onClose={onClose} large>
+      <div className="flex items-center gap-3 border-b border-bronze-dark/60 px-5 py-3">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full border-2 border-gold/70 bg-[radial-gradient(circle_at_40%_35%,#5a2a20,#1e0e0a)] text-gold">
+          <UiIcon id="armee" size={22} />
+        </span>
+        <div className="min-w-0 flex-1">
+          <h2 className="font-display text-xl font-bold tracking-wide text-gold">Recrutement</h2>
+          <div className="text-xs text-parchment/60">Les unités sont levées dans la région choisie.</div>
         </div>
+        {territoires.length > 0 && (
+          <select value={region} onChange={(e) => setRegion(e.target.value)} title="Région de levée"
+                  className="max-w-[170px] rounded-md border border-bronze-dark/70 bg-black/40 px-2 py-1 text-sm text-parchment">
+            {territoires.map((t) => <option key={t} value={t}>{provNames[t] || t}</option>)}
+          </select>
+        )}
+        <span className="flex items-center gap-1 text-sm"><ResIcon id="or" size={15} style={{ color: '#e0b23e' }} /><b className="text-gold">{num(or)}</b></span>
+        <span className="flex items-center gap-1 text-sm"><ResIcon id="population" size={15} style={{ color: '#c49ac4' }} /><b className="text-parchment">{num(pop)}</b></span>
+        <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
       </div>
 
-      {flash && <div className={'px-4 py-1.5 text-sm ' + (flash.ok ? 'bg-emerald-950/40 text-emerald-100' : 'bg-red-950/40 text-red-100')}>{flash.text}</div>}
+      {flash && <div className={'px-5 py-1.5 text-sm ' + (flash.ok ? 'bg-emerald-950/50 text-emerald-100' : 'bg-red-950/50 text-red-100')}>{flash.text}</div>}
 
-      <div className="thin-scroll max-h-[70vh] overflow-y-auto p-4">
-        <p className="mb-3 text-xs text-parchment/50">Recrutez autant d'unités que vos réserves d'or et votre population le permettent. Chaque unité est levée sur la région choisie.</p>
-        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3">
-          {unites.map((u) => {
-            const mervOk = !u.merveille_requise || speciaux.has(u.merveille_requise)
-            const techOk = (!u.tech_requise || techs.has(u.tech_requise)) && mervOk
-            const coutRes = u.cout_res || {}
-            const resOk = Object.entries(coutRes).every(([rr, v]) => (ress[rr] || 0) >= v)
-            const ok = techOk && or >= u.cout && pop >= (u.cout_pop || 1) && resOk
-            const resTxt = Object.entries(coutRes).map(([rr, v]) => `${v} ${rr}`).join(', ')
-            // POURQUOI c'est grisé : dit explicitement, plutôt qu'un card-disabled muet.
-            const manques = []
-            if (!mervOk) manques.push('requiert la Salle de la Table Ronde')
-            else if (!techOk) manques.push(`requiert ${TECH_NOMS[u.tech_requise] || u.tech_requise}`)
-            if (or < u.cout) manques.push(`${u.cout - or} or`)
-            if (pop < (u.cout_pop || 1)) manques.push('population')
-            for (const [rr, v] of Object.entries(coutRes)) if ((ress[rr] || 0) < v) manques.push(`${v - (ress[rr] || 0)} ${RES_LABEL[rr] || rr}${RES_SOURCE[rr] ? ` (→ ${RES_SOURCE[rr]})` : ''}`)
-            return (
-              <button key={u.id} disabled={!ok || !!busy}
-                      onClick={() => recruit(u)}
-                      title={ok ? `Force ${u.force}` : manques.join(', ')}
-                      className={'card flex items-center gap-2.5 text-left ' + (ok ? '' : 'card-disabled')}>
-                <UnitIcon type={u.id} className="shrink-0 text-bronze" size={26} />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1 truncate text-sm font-semibold">{UNIT_LABELS[u.id] || u.id}{!techOk && <UiIcon id="lock" size={13} className="text-red-300/80" />}</div>
-                  <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-[11px] text-parchment/60">
-                    <span className="text-gold">{u.cout} or</span>
-                    <span>· {u.cout_pop || 1} pop</span>
-                    {resTxt && <span className={resOk ? '' : 'text-red-300'}>· {resTxt}</span>}
-                    <span>· force {u.force}</span>
-                  </div>
-                  {manques.length > 0 && (
-                    <div className="mt-0.5 text-[11px] text-red-300/90">
-                      {manques[0].startsWith('requiert') ? '' : 'Manque : '}{manques.join(', ')}
-                    </div>
-                  )}
-                </div>
-              </button>
-            )
-          })}
-        </div>
+      <div className="thin-scroll max-h-[68vh] space-y-4 overflow-y-auto p-4">
+        {groupes.map((g) => (
+          <div key={g.nom}>
+            <h3 className="mb-1.5 font-display text-[11px] uppercase tracking-[0.22em] text-bronze/80">{g.nom}</h3>
+            <div className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
+              {g.items.map((u) => {
+                const mervOk = !u.merveille_requise || speciaux.has(u.merveille_requise)
+                const techOk = (!u.tech_requise || techs.has(u.tech_requise)) && mervOk
+                const coutRes = u.cout_res || {}
+                const resOk = Object.entries(coutRes).every(([rr, v]) => (ress[rr] || 0) >= v)
+                const ok = techOk && or >= u.cout && pop >= (u.cout_pop || 1) && resOk
+                const manques = []
+                if (!mervOk) manques.push('requiert la Salle de la Table Ronde')
+                else if (!techOk) manques.push(`requiert ${TECH_NOMS[u.tech_requise] || u.tech_requise}`)
+                for (const [rr, v] of Object.entries(coutRes)) if ((ress[rr] || 0) < v && RES_SOURCE[rr]) manques.push(`${RES_LABEL[rr] || rr} : bâtissez ${RES_SOURCE[rr]}`)
+                return (
+                  <button key={u.id} disabled={!ok || !!busy} onClick={() => recruit(u)}
+                          title={ok ? `Recruter (force ${u.force})` : manques.join(' · ') || 'Ressources insuffisantes'}
+                          className={'ligne-prod ' + (ok ? '' : 'ligne-prod-off')}>
+                    <span className="medaillon-prod" style={{ borderColor: techOk ? undefined : '#6a6a6a' }}><UnitIcon type={u.id} size={24} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1.5 truncate font-display text-[13px] font-semibold tracking-wide text-parchment">
+                        {UNIT_LABELS[u.id] || u.id}{!techOk && <UiIcon id="lock" size={12} className="text-red-300/80" />}
+                      </span>
+                      <span className="flex items-center gap-1.5 text-[11.5px]">
+                        <span className="rounded bg-black/40 px-1.5 text-red-200/90" title="Force au combat">⚔ {u.force}</span>
+                        {manques.length > 0 && <span className="truncate text-red-300/90">{manques[0]}</span>}
+                      </span>
+                    </span>
+                    <span className="flex shrink-0 flex-col items-end gap-0.5 text-[11px]">
+                      <span className="flex items-center gap-2">
+                        <span className={'flex items-center gap-0.5 ' + (or >= u.cout ? 'text-gold' : 'text-red-300')}><ResIcon id="or" size={12} style={{ color: '#e0b23e' }} />{u.cout}</span>
+                        {Object.entries(coutRes).map(([rr, v]) => (
+                          <span key={rr} className={'flex items-center gap-0.5 ' + ((ress[rr] || 0) >= v ? 'text-parchment/75' : 'text-red-300')}><ResIcon id={rr} size={12} />{v}</span>
+                        ))}
+                      </span>
+                      <span className={'flex items-center gap-0.5 ' + (pop >= (u.cout_pop || 1) ? 'text-parchment/55' : 'text-red-300')}><ResIcon id="population" size={11} />{u.cout_pop || 0}</span>
+                    </span>
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        ))}
       </div>
     </Overlay>
   )
