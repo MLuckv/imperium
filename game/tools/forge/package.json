@@ -1,0 +1,13 @@
+{
+  "name": "imperium-forge",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "La Forge d'Imperium : peint les assets du jeu (armoiries, unités, savoirs, merveilles) en PNG/WebP dans frontend/public/art.",
+  "scripts": {
+    "assets": "node src/build.js"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "1.0.13"
+  }
+}

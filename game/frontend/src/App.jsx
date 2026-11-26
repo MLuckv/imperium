@@ -553,10 +553,6 @@ export default function App() {
 
 // Sélecteur de civilisation pour le bouton Diplomatie : un VRAI tableau de bord
 // des rivaux (terres, armées, puissance, traités, guerre), façon Civilization.
-const estClair = (hex) => {
-  const n = parseInt((hex || '#000').slice(1), 16)
-  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.55
-}
 const TRAITE_LABEL = { alliance: 'Alliance', non_agression: 'Non-agression', route_commerciale: 'Route commerciale', commercial: 'Commerce', traite_commercial: 'Commerce' }
 function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
   const guerres = ((state.diplomatie || {}).guerres_actives) || []
@@ -600,7 +596,7 @@ function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
             const s = Math.max(-100, Math.min(100, score || 0))
             return (
               <button key={id} onClick={() => onPick(id)} className="carte-rival group" style={{ '--c': couleur }}>
-                <span className="carte-rival-bande"><Embleme faction={id} taille={24} style={{ color: estClair(couleur) ? '#3a2508' : '#f7e6b5', filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.5))' }} /></span>
+                <span className="carte-rival-bande"><Embleme faction={id} taille={30} variante="or" /></span>
                 <Medaillon faction={id} taille={64} className="shrink-0 drop-shadow-[0_3px_5px_rgba(0,0,0,0.65)]" />
                 <span className="min-w-0 flex-1">
                   <span className="flex flex-wrap items-baseline gap-x-2">

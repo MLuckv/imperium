@@ -595,7 +595,7 @@ def conseiller_message_stream(req: ConseilReq):
         conversations.ajouter_message(state, "_conseiller", role="ia",
                                       auteur="Conseiller", texte=texte, tour=tour)
         ws.sauver_etat_courant(state)
-        yield "\x1e" + json.dumps({"projet": projet,
+        yield "\x1e" + json.dumps({"projet": projet, "texte": texte,
                                     "projets": pj.get("projets", [])}, ensure_ascii=False)
 
     return StreamingResponse(flux(), media_type="text/plain; charset=utf-8")

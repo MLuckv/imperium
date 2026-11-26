@@ -108,7 +108,7 @@ export default function RecruitmentModal({ state, forcedTerr, provNames = {}, on
                   <button key={u.id} disabled={!ok || !!busy} onClick={() => recruit(u)}
                           title={ok ? `Recruter (force ${u.force})` : manques.join(' · ') || 'Ressources insuffisantes'}
                           className={'ligne-prod ' + (ok ? '' : 'ligne-prod-off')}>
-                    <span className="medaillon-prod" style={{ borderColor: techOk ? undefined : '#6a6a6a' }}><UnitIcon type={u.id} size={24} /></span>
+                    <span className="medaillon-prod medaillon-unite" style={{ borderColor: techOk ? undefined : '#6a6a6a', filter: techOk ? undefined : 'grayscale(0.85) brightness(0.8)' }}><UnitIcon type={u.id} size={46} /></span>
                     <span className="min-w-0 flex-1">
                       <span className="flex items-center gap-1.5 truncate font-display text-[13px] font-semibold tracking-wide text-parchment">
                         {UNIT_LABELS[u.id] || u.id}{!techOk && <UiIcon id="lock" size={12} className="text-red-300/80" />}

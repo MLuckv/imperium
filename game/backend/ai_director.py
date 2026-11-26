@@ -391,7 +391,7 @@ TON RÔLE :
 Tu réponds en JSON STRICT, rien d'autre. Schéma :
 {"reponse": "<ce que tu dis à voix haute, EN CARACTÈRE, 2 à 4 phrases>",
   "directive": null | {"nom":"<nom court>","type":"espionnage|garnison|sabotage|rebellion|commerce|autre",
-  "cible_faction":"<un id parmi {RIVAUX} ou null>","cout_or":<entier>,"duree":<entier en MOIS>,
+  "cible_faction":"<un id parmi {IDS} ou null>","cout_or":<entier>,"duree":<entier en MOIS>,
   "rapport":"<une phrase sur ce que fait ce projet>"}}
 
 EXEMPLES (réponds EXACTEMENT dans ce format) :
@@ -402,9 +402,9 @@ Souverain: "Finance une rébellion pour soulever une province d'Égypte." →
 Souverain: "Forme une armée pour prendre une province d'Égypte, sans toucher Alexandrie." →
 {"reponse":"Des troupes se lèveront pour fondre sur leurs provinces, jamais sur leur capitale.","directive":{"nom":"Campagne d'Égypte","type":"rebellion","cible_faction":"carthage","cout_or":320,"duree":15,"rapport":"Une armée se forme pour arracher une province à l'Égypte."}}
 Souverain: "Invoque un démon pour détruire Sparte." →
-{"reponse":"Mon souverain... les démons n'obéissent pas au Sénat. Donnez-moi des hommes et de l'or, pas des sortilèges.","directive":null}
+{"reponse":"Mon souverain... les démons n'obéissent à personne. Donnez-moi des hommes et de l'or, pas des sortilèges.","directive":null}
 Souverain: "Comment se porte le royaume ?" →
-{"reponse":"Rome prospère, mais l'armée est faible ; renforçons-la.","directive":null}
+{"reponse":"{PAYS} prospère, mais l'armée est faible ; renforçons-la.","directive":null}
 
 Coûts indicatifs : espionnage 60-150 or (3-6 mois), garnison 80-220 or (3-8 mois),
 sabotage 100-220 or (4-8 mois), rébellion 250-500 or (12-36 mois).
@@ -439,8 +439,10 @@ def messages_conseil(faction: str, message: str, situation: str, projets: list[d
         "IDENTITE": ident, "STYLE": style, "PAYS": _nom_pays(faction),
         "DATE": "", "SITUATION": situation, "PROJETS": proj_txt,
         "RENSEIGNEMENTS": renseignements or "(aucun espion n'a encore livré de rapport)",
-        "RIVAUX": ", ".join(f"{_nom_pays(f)} [id={f}]" for f in CONSEILLERS
+        "RIVAUX": ", ".join(_nom_pays(f) for f in CONSEILLERS
                             if f != faction and (presents is None or f in presents)),
+        "IDS": ", ".join(f"{f} (= {_nom_pays(f)})" for f in CONSEILLERS
+                         if f != faction and (presents is None or f in presents)),
         "MESSAGE": "(voir le dernier message du souverain ci-dessous)",
     })
     msgs = [{"role": "system", "content": systeme}]
@@ -469,8 +471,10 @@ def prompt_conseil(faction: str, message: str, situation: str, projets: list[dic
         "DATE": _date_lisible(date_jeu), "SITUATION": situation,
         "PROJETS": proj_txt,
         "RENSEIGNEMENTS": renseignements or "(aucun espion n'a encore livré de rapport)",
-        "RIVAUX": ", ".join(f"{_nom_pays(f)} [id={f}]" for f in CONSEILLERS
+        "RIVAUX": ", ".join(_nom_pays(f) for f in CONSEILLERS
                             if f != faction and (presents is None or f in presents)),
+        "IDS": ", ".join(f"{f} (= {_nom_pays(f)})" for f in CONSEILLERS
+                         if f != faction and (presents is None or f in presents)),
         "MESSAGE": message,
     })
     if historique:
@@ -1334,6 +1338,8 @@ def _nettoyer_reponse(texte: str | None) -> str | None:
     if not texte:
         return texte
     t = _RE_META.sub("", texte)
+    # Identifiants techniques qui fuiraient du prompt (« [id=carthage] »).
+    t = re.sub(r"\s*\[id\s*=\s*[^\]]*\]", "", t)
     # Interjections d'ouverture parasites (tics du modèle) : coupées net.
     t = re.sub(r"^(?:Ahem|Hum+|Hmm+|Euh|Eh bien)\s*[,.!…]*\s*", "", t, flags=re.I)
     # Coupe un éventuel bloc d'explication détaché en fin de réponse.

@@ -47,8 +47,12 @@ const UNIT_SVG = {
 function unitKey(type) {
   return UNIT_SVG[type] ? type : 'swords'
 }
-export function UnitIcon({ type, className, size, style }) {
-  return <Svg className={className} size={size} style={style}>{UNIT_SVG[unitKey(type)]}</Svg>
+// Portraits d'unités peints par la Forge (tools/forge) : /art/unites/<type>.png
+const UNITES_PEINTES = new Set(['levee', 'infanterie_legere', 'legionnaire', 'hoplite', 'phalange', 'cavalerie', 'elephant', 'trireme', 'mercenaire', 'chevalier'])
+export function UnitIcon({ type, className, size = 16, style }) {
+  if (!UNITES_PEINTES.has(type)) return <Svg className={className} size={size} style={style}>{UNIT_SVG[unitKey(type)]}</Svg>
+  return <img src={`/art/unites/${type}.png`} width={size} height={size} alt="" draggable={false} className={className}
+              style={{ display: 'inline-block', objectFit: 'contain', ...style }} />
 }
 
 // ---------- BÂTIMENTS ----------
