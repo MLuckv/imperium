@@ -1342,6 +1342,10 @@ def _nettoyer_reponse(texte: str | None) -> str | None:
     m = re.search(r"[　-ヿ一-鿿가-힯＀-￯]", t)
     if m:
         t = t[:m.start()]
+    # Une réplique parlée tient en un paragraphe : pas de sauts de ligne ni de
+    # mise en forme Markdown (*italique*, **gras**) que certains modèles ajoutent.
+    t = re.sub(r"\*{1,2}([^*]+)\*{1,2}", r"\1", t)
+    t = re.sub(r"\s*\n+\s*", " ", t)
     t = t.strip()
     # Si la réponse a été tronquée en plein milieu (cap de tokens), on la ramène à la
     # dernière phrase complète — fin nette, jamais de mot coupé.

@@ -400,14 +400,15 @@ def diplomatie_message_stream(req: MessageReq):
                                  tampon, flags=_re.I)
                 demarre = True
                 morceaux.append(tampon)
-                yield tampon
+                yield tampon.replace("\n", " ").replace("*", "")
                 tampon = ""
                 continue
             morceaux.append(chunk)
-            yield chunk
+            # Affichage : une réplique d'un seul tenant (ni sauts de ligne ni Markdown).
+            yield chunk.replace("\n", " ").replace("*", "")
         if not demarre and tampon:
             morceaux.append(tampon)
-            yield tampon
+            yield tampon.replace("\n", " ").replace("*", "")
         if not morceaux:  # Ollama indisponible : repli déterministe
             repli = ai_director._repli_diplomatique(req.cible, req.texte)
             morceaux.append(repli)
