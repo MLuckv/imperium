@@ -1,6 +1,21 @@
 import { useEffect, useRef, useState } from 'react'
 import { getConversation, streamDiplomaticMessage } from '../api'
 import { factionColor } from '../lib/format'
+import Medaillon from './Medaillon'
+
+// Petites icônes gravées (24×24) pour les amorces et les traités.
+const AMORCE_SVG = {
+  alliance: <><circle cx="9" cy="12" r="5.2" fill="none" stroke="currentColor" strokeWidth="2" /><circle cx="15" cy="12" r="5.2" fill="none" stroke="currentColor" strokeWidth="2" /><path d="M12 7.6a5.2 5.2 0 0 1 0 8.8" fill="none" stroke="#1a130c" strokeWidth="3.4" /><path d="M12 7.6a5.2 5.2 0 0 1 0 8.8" fill="none" stroke="currentColor" strokeWidth="2" /></>,
+  commerce: <><path d="M12 3v17M7 20h10M4 7h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M6 7l-3 6h6zM18 7l-3 6h6z" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinejoin="round" /><path d="M3 13a3 2 0 0 0 6 0zM15 13a3 2 0 0 0 6 0z" fill="currentColor" /><circle cx="12" cy="3.5" r="1.5" fill="currentColor" /></>,
+  paix: <><path d="M5 20C9 14 13 9 20 4" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />{[[8, 15, -30], [11, 11.5, -40], [14.5, 8, -45], [17.5, 5.5, -50], [10, 17, 50], [13, 13.5, 45], [16, 10.5, 40]].map(([x, y, a], i) => <ellipse key={i} cx={x} cy={y} rx="2.9" ry="1.2" transform={`rotate(${a} ${x} ${y})`} fill="currentColor" />)}</>,
+  drapeau: <><path d="M6 21V3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" /><path d="M6 4c3-1.5 6 1.5 9 0s3-1 4 0v8c-1-1-2-1.5-4 0s-6-1.5-9 0z" fill="currentColor" /></>,
+  avertir: <><path d="M12 2.5l2 2v10.5h-4V4.5z" fill="currentColor" /><path d="M7 15h10v1.8H7z" fill="currentColor" /><path d="M11 17h2v3.5h-2z" fill="currentColor" /><circle cx="12" cy="21.3" r="1.3" fill="currentColor" /><path d="M12 5v9" stroke="#1a130c" strokeWidth=".8" opacity=".55" /></>,
+  don: <><ellipse cx="12" cy="17.5" rx="7" ry="2.4" fill="currentColor" /><path d="M5 17.5v-3c0 1.3 3.1 2.4 7 2.4s7-1.1 7-2.4v3" fill="currentColor" opacity=".75" /><ellipse cx="12" cy="14.5" rx="7" ry="2.4" fill="currentColor" /><path d="M5 14.5v-3c0 1.3 3.1 2.4 7 2.4s7-1.1 7-2.4v3" fill="currentColor" opacity=".75" /><ellipse cx="12" cy="11.5" rx="7" ry="2.4" fill="currentColor" /><ellipse cx="12" cy="11.5" rx="3.6" ry="1.1" fill="none" stroke="#1a130c" strokeWidth=".8" opacity=".5" /><path d="M16 4l1 2 2 .3-1.5 1.4.4 2-1.9-1-1.9 1 .4-2L13 6.3l2-.3z" fill="currentColor" /></>,
+  intentions: <><path d="M2 12c3-5 7-7 10-7s7 2 10 7c-3 5-7 7-10 7s-7-2-10-7z" fill="none" stroke="currentColor" strokeWidth="1.8" /><circle cx="12" cy="12" r="3.8" fill="currentColor" /><circle cx="13.3" cy="10.7" r="1.2" fill="#1a130c" opacity=".6" /></>,
+}
+export function IconeAmorce({ id, size = 14 }) {
+  return <svg viewBox="0 0 24 24" width={size} height={size} aria-hidden="true">{AMORCE_SVG[id] || AMORCE_SVG.intentions}</svg>
+}
 
 // Messagerie moderne (style Instagram / app de messagerie) pour le fil privé
 // avec une IA. L'IA garde la mémoire du fil côté backend (cohérence).
@@ -10,16 +25,16 @@ import { factionColor } from '../lib/format'
 // Amorces : le joueur sait rarement QUOI écrire à un souverain. Un clic remplit
 // le champ d'un brouillon qu'il peut retoucher avant d'envoyer.
 const AMORCES = [
-  { label: '🤝 Alliance', texte: 'Nos deux peuples ont tout à gagner à marcher ensemble. Je vous propose une alliance : nos ennemis seront les vôtres, et les vôtres les nôtres.' },
-  { label: '⚖ Commerce', texte: 'Ouvrons une route commerciale entre nos royaumes : nos caravanes et nos navires enrichiraient nos deux trésors sans qu\'une goutte de sang ne coule. Acceptez-vous ?' },
-  { label: '🕊 Non-agression', texte: 'Je vous propose un pacte de non-agression : ni l\'un ni l\'autre ne portera le fer chez son voisin pendant trois ans. Le jurez-vous ?' },
-  { label: '🏳 Paix', texte: 'Cette guerre a assez duré. Je vous propose de déposer les armes et de fixer ensemble les termes d\'une paix honorable.' },
-  { label: '⚠ Avertir', texte: 'Que ce soit clair : vos troupes s\'approchent de mes frontières. Reculez, ou je considérerai cela comme une déclaration de guerre.' },
-  { label: '🎁 Don', texte: 'En gage d\'amitié, j\'ai fait porter cinquante pièces d\'or à votre cour. Puisse ce geste ouvrir entre nous une ère de confiance.' },
-  { label: '❓ Intentions', texte: 'Parlons franchement : que pensez-vous de mon royaume, et quelles sont vos intentions à son égard ?' },
+  { icone: 'alliance', label: 'Alliance', texte: 'Nos deux peuples ont tout à gagner à marcher ensemble. Je vous propose une alliance : nos ennemis seront les vôtres, et les vôtres les nôtres.' },
+  { icone: 'commerce', label: 'Commerce', texte: 'Ouvrons une route commerciale entre nos royaumes : nos caravanes et nos navires enrichiraient nos deux trésors sans qu\'une goutte de sang ne coule. Acceptez-vous ?' },
+  { icone: 'paix', label: 'Non-agression', texte: 'Je vous propose un pacte de non-agression : ni l\'un ni l\'autre ne portera le fer chez son voisin pendant trois ans. Le jurez-vous ?' },
+  { icone: 'drapeau', label: 'Paix', texte: 'Cette guerre a assez duré. Je vous propose de déposer les armes et de fixer ensemble les termes d\'une paix honorable.' },
+  { icone: 'avertir', label: 'Avertir', texte: 'Que ce soit clair : vos troupes s\'approchent de mes frontières. Reculez, ou je considérerai cela comme une déclaration de guerre.' },
+  { icone: 'don', label: 'Don', texte: 'En gage d\'amitié, j\'ai fait porter cinquante pièces d\'or à votre cour. Puisse ce geste ouvrir entre nous une ère de confiance.' },
+  { icone: 'intentions', label: 'Intentions', texte: 'Parlons franchement : que pensez-vous de mon royaume, et quelles sont vos intentions à son égard ?' },
 ]
 
-export default function MessageThread({ cible, leaderName, joueurName }) {
+export default function MessageThread({ cible, leaderName, joueurName, joueurId }) {
   const [messages, setMessages] = useState([])
   const [texte, setTexte] = useState('')
   const [typing, setTyping] = useState(false)
@@ -99,32 +114,31 @@ export default function MessageThread({ cible, leaderName, joueurName }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       {/* Fil */}
-      <div ref={scrollRef} className="thin-scroll flex-1 space-y-2 overflow-y-auto px-1 py-2">
+      <div ref={scrollRef} className="thin-scroll flex-1 space-y-3 overflow-y-auto px-1 py-3">
         {loading && <p className="text-center text-xs text-parchment/50">Chargement du fil…</p>}
         {!loading && messages.length === 0 && (
-          <div className="px-3 py-6 text-center">
-            <p className="text-sm text-parchment/50">Aucun message. Entamez la conversation avec {leaderName}.</p>
-            <p className="mt-1 text-[11px] text-parchment/40">Les souverains ont leur caractère et leur mémoire : ce que vous dites compte.</p>
+          <div className="flex h-full flex-col items-center justify-center px-6 py-10 text-center">
+            <Medaillon faction={cible} taille={64} className="opacity-70" />
+            <p className="mt-4 font-display text-sm tracking-wide text-parchment/70">{leaderName} vous accorde audience.</p>
+            <p className="mt-1 max-w-sm font-serif text-[13px] italic text-parchment/45">Les souverains ont leur caractère et leur mémoire : ce que vous dites compte. Choisissez une amorce ci-dessous ou écrivez librement.</p>
           </div>
         )}
         {messages.map((m, i) => {
           const mine = m.role === 'joueur'
+          const suite = i > 0 && messages[i - 1].role === m.role
           return (
-            <div key={i} className={'flex ' + (mine ? 'justify-end' : 'justify-start')}>
-              <div className={'max-w-[80%] ' + (mine ? 'items-end' : 'items-start')}>
-                {!mine && (
-                  <div className="mb-0.5 pl-1 text-[10px] font-semibold" style={{ color: accent }}>
-                    {m.auteur || leaderName}
+            <div key={i} className={'flex items-end gap-2.5 ' + (mine ? 'flex-row-reverse' : '') + (suite ? ' !mt-1' : '')}>
+              <span className="w-9 shrink-0">
+                {!suite && <Medaillon faction={mine ? joueurId : cible} taille={36} className="drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]" />}
+              </span>
+              <div className={'max-w-[78%] ' + (mine ? 'text-right' : '')}>
+                {!suite && (
+                  <div className={'mb-1 font-display text-[11px] font-bold tracking-wider ' + (mine ? 'pr-1 text-gold/80' : 'pl-1')}
+                       style={mine ? undefined : { color: accent, filter: 'brightness(1.55) saturate(.8)' }}>
+                    {mine ? (joueurName || 'Vous') : (m.auteur || leaderName)}
                   </div>
                 )}
-                <div
-                  className={
-                    'whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm shadow ' +
-                    (mine
-                      ? 'rounded-br-sm bg-bronze text-ink'
-                      : 'rounded-bl-sm bg-[#2c2519] text-parchment')
-                  }
-                >
+                <div className={'bulle ' + (mine ? 'bulle-joueur' : 'bulle-souverain') + (m.enCours ? ' bulle-encours' : '')}>
                   {m.texte}
                 </div>
               </div>
@@ -132,9 +146,10 @@ export default function MessageThread({ cible, leaderName, joueurName }) {
           )
         })}
         {typing && (
-          <div className="flex justify-start">
-            <div className="rounded-2xl rounded-bl-sm bg-[#2c2519] px-3 py-2">
-              <span className="typing-dots text-parchment/70">{leaderName} écrit</span>
+          <div className="flex items-end gap-2.5">
+            <span className="w-9 shrink-0"><Medaillon faction={cible} taille={36} /></span>
+            <div className="bulle bulle-souverain !py-1.5">
+              <span className="typing-dots font-serif italic text-ink/60">{leaderName} prend la plume</span>
             </div>
           </div>
         )}
@@ -143,17 +158,16 @@ export default function MessageThread({ cible, leaderName, joueurName }) {
       {erreur && <p className="px-2 pb-1 text-xs text-red-300">{erreur}</p>}
 
       {/* Amorces (toujours disponibles, discrètes une fois le fil lancé) */}
-      <div className="thin-scroll flex gap-1 overflow-x-auto border-t border-bronze-dark/40 pt-2 pb-1">
+      <div className="thin-scroll flex gap-1.5 overflow-x-auto border-t border-bronze-dark/40 pt-2.5 pb-1.5">
         {AMORCES.map((a) => (
-          <button key={a.label} type="button" onClick={() => setTexte(a.texte)} disabled={typing}
-                  className="shrink-0 rounded-full border border-bronze-dark/60 px-2.5 py-0.5 text-[11px] text-parchment/70 transition hover:border-gold hover:text-gold disabled:opacity-40">
-            {a.label}
+          <button key={a.label} type="button" onClick={() => setTexte(a.texte)} disabled={typing} className="amorce">
+            <IconeAmorce id={a.icone} size={13} />{a.label}
           </button>
         ))}
       </div>
 
       {/* Saisie */}
-      <form onSubmit={envoyer} className="flex items-end gap-2 pt-1">
+      <form onSubmit={envoyer} className="saisie-audience">
         <textarea
           value={texte}
           onChange={(e) => setTexte(e.target.value)}
@@ -164,14 +178,10 @@ export default function MessageThread({ cible, leaderName, joueurName }) {
             }
           }}
           rows={1}
-          placeholder={`Écrire à ${leaderName}…`}
-          className="thin-scroll max-h-24 flex-1 resize-none rounded-2xl border border-bronze-dark/60 bg-parchment px-3 py-2 text-sm text-ink placeholder:text-stone-500 focus:outline-none focus:ring-2 focus:ring-bronze"
+          placeholder={`Votre message à ${leaderName}…`}
+          className="thin-scroll max-h-24 flex-1 resize-none bg-transparent px-3 py-2 font-serif text-[15px] text-ink placeholder:italic placeholder:text-ink/45 focus:outline-none"
         />
-        <button
-          type="submit"
-          disabled={typing || !texte.trim()}
-          className="shrink-0 rounded-full bg-bronze px-4 py-2 text-sm font-semibold text-ink shadow disabled:cursor-not-allowed disabled:opacity-50 hover:bg-bronze-dark hover:text-parchment"
-        >
+        <button type="submit" disabled={typing || !texte.trim()} className="btn-fin-tour !rounded-md !px-4 !py-2 !text-[12px] disabled:cursor-not-allowed disabled:opacity-50">
           {typing ? '…' : 'Envoyer'}
         </button>
       </form>

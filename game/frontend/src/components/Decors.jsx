@@ -4,6 +4,11 @@ import Embleme from './Emblemes'
 
 // ------------------------------------------------------------------ panorama
 // Étoiles réparties au hasard (graine fixe : le ciel ne change pas d'un rendu à l'autre).
+const POUSSIERE = (() => {
+  let s = 777
+  const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647 }
+  return Array.from({ length: 34 }, () => [700 + r() * 800, 420 + r() * 380, 0.8 + r() * 1.6, r() * 14])
+})()
 const ETOILES = (() => {
   let s = 12345
   const r = () => { s = (s * 16807) % 2147483647; return s / 2147483647 }
@@ -66,11 +71,25 @@ export function PanoramaAntique({ className = '' }) {
         .pa-navire { animation: pa-houle 6s ease-in-out infinite; transform-box: fill-box; transform-origin: center bottom }
         .pa-reflet { animation: pa-scintille 3.2s ease-in-out infinite }
         .pa-oiseaux { animation: pa-vol 40s linear infinite alternate }
+        @keyframes pa-flotte { 0% { transform: translate(0,0); opacity: 0 } 15% { opacity: .8 } 85% { opacity: .6 } 100% { transform: translate(-40px,-120px); opacity: 0 } }
+        .pa-poussiere circle { animation: pa-flotte 14s ease-in-out infinite; }
+        @keyframes pa-respire { 0%,100% { opacity: .45 } 50% { opacity: .65 } }
+        .pa-rais { animation: pa-respire 9s ease-in-out infinite }
       `}</style>
 
       {/* Ciel, étoiles, soleil */}
       <rect width="1600" height="900" fill="url(#pa-ciel)" />
       {ETOILES.map(([x, y, r, o], i) => <circle key={i} cx={x} cy={y} r={r} fill="#fff8e6" opacity={o} />)}
+      <mask id="pa-rais-masque"><rect width="1600" height="900" fill="url(#pa-rais-fondu)" /></mask>
+      <radialGradient id="pa-rais-fondu" cx="1080" cy="552" r="720" gradientUnits="userSpaceOnUse">
+        <stop offset="0" stopColor="#fff" stopOpacity="1" /><stop offset="0.55" stopColor="#fff" stopOpacity="0.45" /><stop offset="1" stopColor="#fff" stopOpacity="0" />
+      </radialGradient>
+      <g className="pa-rais" opacity="0.5" mask="url(#pa-rais-masque)">
+        {Array.from({ length: 9 }, (_, i) => {
+          const a = (-170 + i * 20) * (Math.PI / 180)
+          return <path key={i} d={`M1080 552 L${1080 + Math.cos(a - 0.035) * 900} ${552 + Math.sin(a - 0.035) * 900} L${1080 + Math.cos(a + 0.035) * 900} ${552 + Math.sin(a + 0.035) * 900}Z`} fill="#ffdca0" opacity={0.05 + (i % 3) * 0.015} />
+        })}
+      </g>
       <circle cx="1080" cy="560" r="280" fill="url(#pa-halo)" />
       <circle cx="1080" cy="552" r="62" fill="url(#pa-soleil)" />
 
@@ -99,6 +118,17 @@ export function PanoramaAntique({ className = '' }) {
       {Array.from({ length: 26 }, (_, i) => (
         <path key={i} d={`M${(i * 211) % 1500 + 40} ${650 + (i * 47) % 230} q14 -5 28 0`} stroke="#c59a86" strokeOpacity="0.18" strokeWidth="1.6" fill="none" />
       ))}
+
+      {/* Cité côtière sur la colline de droite, et son phare */}
+      <path d="M1180 640 Q1260 560 1360 590 Q1440 600 1520 640Z" fill="#3a2c3c" />
+      <g fill="#5a4652">
+        {[[1250, 600, 26, 22], [1280, 590, 22, 30], [1308, 596, 30, 24], [1342, 600, 24, 20], [1370, 606, 28, 18], [1230, 614, 22, 16]].map(([x, y, w, h], i) => (
+          <g key={i}><rect x={x} y={y} width={w} height={h} /><rect x={x + w * 0.6} y={y} width={w * 0.4} height={h} fill="#46364a" /></g>
+        ))}
+      </g>
+      <g fill="#e7a35e" opacity="0.85">{[[1256, 606], [1286, 600], [1316, 604], [1348, 608], [1376, 612]].map(([x, y], i) => <rect key={i} x={x} y={y} width="4" height="5" />)}</g>
+      <rect x="1446" y="560" width="14" height="60" fill="#4a3a48" /><rect x="1453" y="560" width="7" height="60" fill="#3a2c3a" />
+      <circle cx="1453" cy="554" r="7" fill="#ffd27a" className="pa-reflet" /><circle cx="1453" cy="554" r="22" fill="#ffd27a" opacity="0.18" />
 
       {/* Île et cité lointaine à droite */}
       <path d="M1330 612 q40 -26 90 -24 q60 2 100 24z" fill="#2b2030" />
@@ -132,6 +162,11 @@ export function PanoramaAntique({ className = '' }) {
       {[[120, 498, 1], [150, 500, 0.8], [548, 500, 0.9], [586, 516, 0.7]].map(([x, y, k], i) => (
         <path key={i} d={`M${x} ${y} q${-10 * k} ${-40 * k} 0 ${-110 * k} q${10 * k} ${70 * k} 0 ${110 * k}z`} fill="#0e1410" />
       ))}
+
+      {/* Poussière d'or qui flotte dans la lumière */}
+      <g className="pa-poussiere">
+        {POUSSIERE.map(([x, y, r, d], i) => <circle key={i} cx={x} cy={y} r={r} fill="#ffe3a8" style={{ animationDelay: `${d}s` }} />)}
+      </g>
 
       {/* Premier plan */}
       <path d="M760 900 L780 860 L860 842 L960 856 L1060 834 L1180 852 L1320 828 L1460 846 L1600 830 L1600 900Z" fill="#0b0a0d" />

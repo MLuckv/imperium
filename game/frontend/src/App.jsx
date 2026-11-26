@@ -16,6 +16,7 @@ import { factionColor, factionLabel, leaderName, reputationTone, num } from './l
 import { FactionEmblem, UiIcon } from './components/Icons'
 import { PanoramaAntique, Banniere, Filet, Laurier } from './components/Decors'
 import Medaillon from './components/Medaillon'
+import Embleme from './components/Emblemes'
 
 const SLOT = 1
 
@@ -224,13 +225,13 @@ export default function App() {
         <PanoramaAntique />
         <div className="menu-voile" />
         <div className="flex flex-col items-center" style={{ marginTop: '-8vh' }}>
-          <div className="titre-imperium">IMPERIVM</div>
+          <div className="titre-imperium titre-brille">IMPERIVM</div>
           <Laurier className="-mt-1" largeur={150} />
           <p className="menu-subtitle">Grande stratégie — des souverains de toutes les époques, une seule Méditerranée</p>
           <div className="menu-carte mt-8">
-            <button onClick={() => setScreen('civ')} disabled={busy} className="btn btn-primary w-full" style={{ fontSize: '1.1rem', padding: '0.8rem 1.5rem' }}>Nouvelle partie</button>
-            {hasSavedGame && <button onClick={() => setScreen('game')} className="btn btn-ghost w-full">Reprendre la partie</button>}
-            <button onClick={handleLoad} disabled={busy} className="btn btn-ghost w-full">Charger (emplacement {SLOT})</button>
+            <button onClick={() => setScreen('civ')} disabled={busy} className="btn-fin-tour w-full justify-center rounded-md" style={{ fontSize: '1rem', padding: '0.85rem 1.5rem' }}>Nouvelle partie</button>
+            {hasSavedGame && <button onClick={() => setScreen('game')} className="btn-hud w-full justify-center !py-2"><span className="hud-ico"><UiIcon id="journal" size={14} /></span>Reprendre la partie</button>}
+            <button onClick={handleLoad} disabled={busy} className="btn-hud w-full justify-center !py-2"><span className="hud-ico"><UiIcon id="production" size={14} /></span>Charger (emplacement {SLOT})</button>
             <Filet className="mt-1 opacity-80" largeur={220} />
           </div>
         </div>
@@ -551,57 +552,87 @@ export default function App() {
 }
 
 // Sélecteur de civilisation pour le bouton Diplomatie : un VRAI tableau de bord
-// des rivaux (terres, armées, puissance, traités, guerre), pas une simple liste.
+// des rivaux (terres, armées, puissance, traités, guerre), façon Civilization.
+const estClair = (hex) => {
+  const n = parseInt((hex || '#000').slice(1), 16)
+  return (0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255 > 0.55
+}
+const TRAITE_LABEL = { alliance: 'Alliance', non_agression: 'Non-agression', route_commerciale: 'Route commerciale', commercial: 'Commerce', traite_commercial: 'Commerce' }
 function CivPicker({ autres, state, joueur, joueurId, onPick, onClose }) {
   const guerres = ((state.diplomatie || {}).guerres_actives) || []
   const traites = ((state.diplomatie || {}).traites_actifs) || []
   const maPuissance = (joueur && joueur.puissance) || 0
   const monArmee = (joueur && joueur.force_armee) || 0
+  const maCouleur = factionColor(joueurId, joueur && joueur.couleur)
+  const parties = (tr) => (tr.parties && tr.parties.length ? tr.parties : [tr.a, tr.b].filter(Boolean))
   return (
     <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
-      <div className="fenetre w-full max-w-lg p-4" onClick={(e) => e.stopPropagation()}>
-        <div className="mb-3 flex items-center justify-between">
-          <div>
-            <h2 className="font-display text-lg font-bold text-gold">Diplomatie</h2>
-            <div className="text-[11px] text-parchment/50">Vous : armée <b className="text-parchment/80">⚔ {num(monArmee)}</b> · puissance <b className="text-parchment/80">✦ {num(maPuissance)}</b></div>
+      <div className="fenetre w-full max-w-3xl p-5" onClick={(e) => e.stopPropagation()}>
+        <div className="mb-4 flex items-center gap-4">
+          <Medaillon faction={joueurId} taille={52} className="shrink-0 drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]" />
+          <div className="min-w-0 flex-1">
+            <h2 className="titre-fenetre">Chancellerie</h2>
+            <div className="mt-0.5 flex flex-wrap items-center gap-3 text-[11px] text-parchment/60">
+              <span>Les souverains connus du monde</span>
+              <span className="pastille-stat"><UiIcon id="armee" size={12} /> {num(monArmee)}</span>
+              <span className="pastille-stat"><UiIcon id="merveille" size={12} /> {num(maPuissance)}</span>
+            </div>
           </div>
           <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
         </div>
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2.5">
           {autres.map((id) => {
             const p = state.pays[id] || {}
+            const couleur = factionColor(id, p.couleur)
             const score = joueur && joueur.reputation && joueur.reputation[id]
             const tone = reputationTone(score)
             const enGuerre = guerres.some((g) => new Set([g.a, g.b]).has(id) && new Set([g.a, g.b]).has(joueurId))
-            const parties = (tr) => (tr.parties && tr.parties.length ? tr.parties : [tr.a, tr.b].filter(Boolean))
-            const TRAITE_LABEL = { alliance: 'Alliance', non_agression: 'Non-agression', route_commerciale: 'Commerce', commercial: 'Commerce', traite_commercial: 'Commerce' }
             const mesTraites = traites.filter((tr) => parties(tr).includes(id) && parties(tr).includes(joueurId))
+            const allie = mesTraites.some((tr) => tr.type === 'alliance')
+            const statut = enGuerre ? { t: 'En guerre', c: 'statut-guerre' } : allie ? { t: 'Alliés', c: 'statut-allie' } : { t: 'En paix', c: 'statut-paix' }
             const puissance = p.puissance != null ? p.puissance : p.puissance_estimee
             const estime = p.puissance == null
-            const armee = p.force_armee != null ? p.force_armee : p.force_armee_estimee
-            const rapport = monArmee > 0 ? (armee || 0) / monArmee : (armee > 0 ? Infinity : null)
-            const force = rapport == null ? null : rapport > 1.35 ? { t: 'armée plus forte', c: 'text-red-300' }
-              : rapport > 0.75 ? { t: 'armées comparables', c: 'text-amber-300' } : { t: 'armée plus faible', c: 'text-emerald-300' }
+            const armee = (p.force_armee != null ? p.force_armee : p.force_armee_estimee) || 0
+            const part = monArmee + armee > 0 ? monArmee / (monArmee + armee) : 0.5
+            const rapport = monArmee > 0 ? armee / monArmee : (armee > 0 ? Infinity : null)
+            const force = rapport == null ? null : rapport > 1.35 ? { t: 'Armée plus forte que la vôtre', c: 'text-red-300' }
+              : rapport > 0.75 ? { t: 'Armées comparables', c: 'text-amber-200' } : { t: 'Armée plus faible', c: 'text-emerald-300' }
+            const s = Math.max(-100, Math.min(100, score || 0))
             return (
-              <button key={id} onClick={() => onPick(id)} className="flex items-center gap-3 rounded-md border border-transparent bg-black/20 px-3 py-2 text-left transition hover:border-bronze hover:bg-black/30">
-                <Medaillon faction={id} taille={40} className="shrink-0 drop-shadow-[0_2px_3px_rgba(0,0,0,0.6)]" />
+              <button key={id} onClick={() => onPick(id)} className="carte-rival group" style={{ '--c': couleur }}>
+                <span className="carte-rival-bande"><Embleme faction={id} taille={24} style={{ color: estClair(couleur) ? '#3a2508' : '#f7e6b5', filter: 'drop-shadow(0 1px 1px rgba(0,0,0,.5))' }} /></span>
+                <Medaillon faction={id} taille={64} className="shrink-0 drop-shadow-[0_3px_5px_rgba(0,0,0,0.65)]" />
                 <span className="min-w-0 flex-1">
-                  <span className="flex items-center gap-2">
-                    <span className="text-sm font-semibold text-parchment">{factionLabel(id, p.nom)}</span>
-                    <span className="text-[11px] text-parchment/50">{leaderName(id)}</span>
-                    {enGuerre && <span className="chip chip-war">Guerre</span>}
-                    {mesTraites.map((tr) => <span key={tr.type} className="chip text-emerald-200">{TRAITE_LABEL[tr.type] || tr.type}</span>)}
+                  <span className="flex flex-wrap items-baseline gap-x-2">
+                    <span className="font-display text-base font-bold tracking-wide" style={{ color: couleur, filter: 'brightness(1.5) saturate(0.8)' }}>{factionLabel(id, p.nom)}</span>
+                    <span className="font-serif text-[13px] italic text-parchment/70">{leaderName(id)}</span>
+                    <span className={'statut-ruban ' + statut.c}>{statut.t}</span>
+                    {mesTraites.filter((tr) => tr.type !== 'alliance').map((tr, i) => <span key={tr.type + i} className="statut-ruban statut-traite">{TRAITE_LABEL[tr.type] || tr.type}</span>)}
                   </span>
-                  <span className="mt-0.5 block text-[11px] text-parchment/60">
-                    {(p.territoires || []).length} prov. · {(p.unites || []).length} unité{(p.unites || []).length > 1 ? 's' : ''} · ⚔ {estime ? '≈' : ''}{num(armee || 0)}
-                    {puissance != null && <> · ✦ {estime ? '≈' : ''}{num(puissance)}</>}
-                    {force && <span className={'ml-1 ' + force.c}>({force.t})</span>}
+                  <span className="mt-2 grid grid-cols-[1fr_1fr] gap-x-5 gap-y-1">
+                    <span>
+                      <span className="flex justify-between text-[10px] uppercase tracking-[0.14em] text-parchment/45"><span>Opinion</span><span className={tone.className + ' normal-case tracking-normal font-semibold'}>{tone.label}{score != null && ` (${score > 0 ? '+' : ''}${num(score)})`}</span></span>
+                      <span className="jauge-opinion">
+                        <span className="jauge-opinion-milieu" />
+                        <span className="jauge-opinion-rempli" style={{ left: s < 0 ? `${50 + s / 2}%` : '50%', width: `${Math.abs(s) / 2}%`, background: tone.bar }} />
+                        <span className="jauge-opinion-curseur" style={{ left: `${50 + s / 2}%` }} />
+                      </span>
+                    </span>
+                    <span>
+                      <span className="flex justify-between text-[10px] uppercase tracking-[0.14em] text-parchment/45"><span>Rapport de forces</span>{force && <span className={force.c + ' normal-case tracking-normal font-semibold'}>{force.t}</span>}</span>
+                      <span className="jauge-forces">
+                        <span style={{ width: `${part * 100}%`, background: maCouleur }} />
+                        <span style={{ flex: 1, background: couleur }} />
+                      </span>
+                    </span>
+                  </span>
+                  <span className="mt-2 flex flex-wrap gap-1.5 text-[11px] text-parchment/75">
+                    <span className="pastille-stat"><UiIcon id="annexer" size={12} /> {(p.territoires || []).length} province{(p.territoires || []).length > 1 ? 's' : ''}</span>
+                    <span className="pastille-stat"><UiIcon id="armee" size={12} /> {(p.unites || []).length} armée{(p.unites || []).length > 1 ? 's' : ''} · {estime ? '≈' : ''}{num(armee)}</span>
+                    {puissance != null && <span className="pastille-stat"><UiIcon id="merveille" size={12} /> Puissance {estime ? '≈' : ''}{num(puissance)}</span>}
                   </span>
                 </span>
-                <span className={'shrink-0 text-right text-xs font-semibold ' + tone.className}>
-                  {tone.label}
-                  {score != null && <span className="block font-normal text-parchment/50">{score > 0 ? '+' : ''}{num(score)}</span>}
-                </span>
+                <span className="carte-rival-parler">Parler<span className="ml-1 transition group-hover:translate-x-0.5">›</span></span>
               </button>
             )
           })}
