@@ -136,3 +136,44 @@ export function dessinerHorde(layer, x, y) {
   layer.addChild(g)
   return g
 }
+
+// Marqueur d'événement (bataille, incendie, éruption, révolte, horde, merveille) :
+// glyphe vectoriel dans un médaillon ; null si l'icône n'a pas de dessin dédié.
+export function dessinerIconeEvenement(g, x, y, icone, s, a) {
+  const R = 6.2 * s
+  switch (icone) {
+    case '⚔': // épées croisées
+      g.moveTo(x - R, y + R); g.lineTo(x + R, y - R); g.moveTo(x + R, y + R); g.lineTo(x - R, y - R)
+      g.stroke({ width: 1.6 * s, color: 0xf2e3bd, alpha: a, cap: 'round' })
+      g.moveTo(x - R * 0.75, y + R * 0.25); g.lineTo(x - R * 0.25, y + R * 0.75); g.moveTo(x + R * 0.75, y + R * 0.25); g.lineTo(x + R * 0.25, y + R * 0.75)
+      g.stroke({ width: 1.4 * s, color: OR, alpha: a, cap: 'round' })
+      return true
+    case '🔥': // flamme
+      g.moveTo(x, y - R * 1.1); g.bezierCurveTo(x + R, y - R * 0.2, x + R * 0.9, y + R, x, y + R)
+      g.bezierCurveTo(x - R * 0.9, y + R, x - R, y - R * 0.1, x - R * 0.2, y - R * 0.5)
+      g.bezierCurveTo(x - R * 0.1, y - R * 0.1, x + R * 0.1, y - R * 0.4, x, y - R * 1.1)
+      g.fill({ color: 0xe8752e, alpha: a })
+      g.ellipse(x, y + R * 0.45, R * 0.38, R * 0.5); g.fill({ color: 0xffd27a, alpha: a })
+      return true
+    case '🌋': // volcan fumant
+      g.poly([x - R, y + R * 0.8, x - R * 0.3, y - R * 0.3, x + R * 0.3, y - R * 0.3, x + R, y + R * 0.8]); g.fill({ color: 0x7a5a42, alpha: a })
+      g.poly([x - R * 0.3, y - R * 0.3, x, y + R * 0.2, x + R * 0.3, y - R * 0.3]); g.fill({ color: 0xe8752e, alpha: a })
+      g.circle(x - R * 0.1, y - R * 0.8, R * 0.32); g.circle(x + R * 0.3, y - R * 1.05, R * 0.25); g.fill({ color: 0xbfb4a0, alpha: a })
+      return true
+    case '✊': // étendard de révolte
+      g.moveTo(x - R * 0.5, y + R); g.lineTo(x - R * 0.5, y - R); g.stroke({ width: 1.2 * s, color: 0xf2e3bd, alpha: a })
+      g.poly([x - R * 0.5, y - R, x + R, y - R * 0.6, x - R * 0.5, y - R * 0.1]); g.fill({ color: 0xc0392b, alpha: a })
+      return true
+    case '☠': // crâne
+      g.circle(x, y - R * 0.15, R * 0.7); g.fill({ color: 0xf2e3bd, alpha: a })
+      g.rect(x - R * 0.4, y + R * 0.35, R * 0.8, R * 0.45); g.fill({ color: 0xf2e3bd, alpha: a })
+      g.circle(x - R * 0.27, y - R * 0.15, R * 0.17); g.circle(x + R * 0.27, y - R * 0.15, R * 0.17); g.fill({ color: 0x1d160d, alpha: a })
+      return true
+    case '✦': // éclat de merveille
+      g.poly([x, y - R, x + R * 0.25, y - R * 0.25, x + R, y, x + R * 0.25, y + R * 0.25, x, y + R, x - R * 0.25, y + R * 0.25, x - R, y, x - R * 0.25, y - R * 0.25])
+      g.fill({ color: OR, alpha: a })
+      return true
+    default:
+      return false
+  }
+}

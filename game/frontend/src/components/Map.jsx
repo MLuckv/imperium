@@ -4,7 +4,7 @@ import { getMap } from '../api'
 import { factionColor, factionLabel } from '../lib/format'
 import { LuxeIcon } from './Icons'
 import { indexerAretes, peindreFond, peindreRoyaumes, ECHELLE_FOND, ECHELLE_ROYAUMES } from '../map/peinture'
-import { dessinerCite, dessinerCapitale, etiquetteCite, dessinerBouclier, dessinerMerveille, dessinerHorde } from '../map/glyphes'
+import { dessinerCite, dessinerCapitale, etiquetteCite, dessinerBouclier, dessinerMerveille, dessinerHorde, dessinerIconeEvenement } from '../map/glyphes'
 
 // Carte « ancienne » peinte (cf. map/peinture.js) : mer gravée, parchemin, reliefs,
 // lavis aquarelle des royaumes ; glyphes vectoriels pour cités et armées. Clic sur une province => elle se SOULÈVE (sélection).
@@ -198,8 +198,12 @@ export default function Map({ stateData, onSelectFaction, onMoveStack, onSelectP
       ring.stroke({ width: 2.2 * s, color: 0xe8c267, alpha: (0.35 + 0.45 * (1 - pulse)) * fade })
       ring.circle(m.x, m.y, 10 * s); ring.fill({ color: 0x14110c, alpha: 0.72 * fade })
       ring.eventMode = 'none'; layer.addChild(ring)
-      const ic = new Text({ text: m.icone, style: { fontFamily: 'Georgia, serif', fontSize: 13 * s, fill: 0xffffff } })
-      ic.anchor.set(0.5, 0.5); ic.position.set(m.x, m.y); ic.alpha = fade; ic.eventMode = 'none'; layer.addChild(ic)
+      const gl = new Graphics(); gl.eventMode = 'none'
+      if (dessinerIconeEvenement(gl, m.x, m.y, m.icone, s, fade)) layer.addChild(gl)
+      else {
+        const ic = new Text({ text: m.icone, style: { fontFamily: 'Georgia, serif', fontSize: 13 * s, fill: 0xffffff } })
+        ic.anchor.set(0.5, 0.5); ic.position.set(m.x, m.y); ic.alpha = fade; ic.eventMode = 'none'; layer.addChild(ic)
+      }
     }
   }
 
