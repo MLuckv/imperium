@@ -174,11 +174,11 @@ function teinter(masque, couleur) {
 // Le champ « terrain » des données est grossier (157 plaines sur 182) : on le
 // complète par une géographie dessinée à la main — chaînes de montagnes, grandes
 // forêts du nord, steppes, déserts.
-const MONTAGNES = new Set(['graubunden', 'bozen', 'tirol', 'turin', 'kocevje', 'kocevje_2', 'zlatiborski', 'niksic', 'pec',
-  'shkoder', 'branicevski', 'sofia', 'prilep', 'peloponnisos_2', 'sterea_ellada', 'lerida', 'lerida_2', 'asturias', 'burgos',
-  'highland', 'highland_2', 'meknes_tafilalet', 'taza_al_hoceima_taounate', 'marrakech_tensift_al_haouz', 'souss_massa_draa',
-  'suceava', 'bihor', 'banskobystricky', 'kayseri', 'sivas', 'beqaa', 'puy_de_dome', 'aveyron', 'tamanghasset', 'tibesti',
-  'banja_luka', 'vest_agder', 'konya', 'sanliurfa', 'kriti', 'haute_corse'])
+// Seules les grandes chaînes : Alpes, Pyrénées, Atlas, Carpates, Dinarides, Taurus,
+// Highlands, Hoggar et Tibesti (sinon la carte entière se hérisse de pics).
+const MONTAGNES = new Set(['graubunden', 'bozen', 'tirol', 'lerida', 'lerida_2', 'meknes_tafilalet',
+  'taza_al_hoceima_taounate', 'marrakech_tensift_al_haouz', 'souss_massa_draa', 'suceava', 'bihor', 'niksic',
+  'zlatiborski', 'pec', 'kayseri', 'sivas', 'highland', 'tamanghasset', 'tibesti'])
 const FORETS = new Set(['niedersachsen', 'nordrhein_westfalen', 'sachsen_anhalt', 'brandenburg', 'mecklenburg_vorpommern',
   'west_pomeranian', 'pomeranian', 'baden_wurttemberg', 'bayern', 'stredocesky', 'jihomoravsky', 'gelderland', 'luxembourg',
   'diekirch', 'rheinland_pfalz', 'maine_et_loire', 'greater_poland', 'masovian', 'lublin', 'odz', 'warmian_masurian',
@@ -256,41 +256,66 @@ const REGIONS = [
 // ------------------------------------------------------------------ glyphes du relief
 const ENCRE = '#4a3925'
 function glypheMontagne(ctx, x, y, s, r) {
-  const g = s * (0.85 + r() * 0.3), dx = (r() - 0.5) * s * 0.25
-  const sommet = [x + dx, y - s * 1.05]
-  ctx.beginPath(); ctx.moveTo(x - g, y); ctx.lineTo(sommet[0], sommet[1]); ctx.lineTo(x + g, y); ctx.closePath()
-  ctx.fillStyle = '#eadcbc'; ctx.fill()
-  ctx.beginPath(); ctx.moveTo(sommet[0], sommet[1]); ctx.lineTo(x + g, y); ctx.lineTo(x + s * 0.12, y); ctx.closePath()
-  ctx.fillStyle = '#ad9772'; ctx.fill()
-  ctx.strokeStyle = ENCRE; ctx.lineWidth = 0.55; ctx.lineJoin = 'round'
-  ctx.beginPath(); ctx.moveTo(x - g, y); ctx.lineTo(sommet[0], sommet[1]); ctx.lineTo(x + g, y); ctx.stroke()
-  ctx.lineWidth = 0.32
-  for (let k = 1; k <= 3; k++) {  // hachures de l'ubac
-    const t = k / 4
-    const ax = sommet[0] + (x + g - sommet[0]) * t, ay = sommet[1] + (y - sommet[1]) * t
-    ctx.beginPath(); ctx.moveTo(ax - s * 0.05, ay + s * 0.06); ctx.lineTo(ax - s * 0.28, ay + s * 0.28); ctx.stroke()
+  const g = s * (0.9 + r() * 0.35), dx = (r() - 0.5) * s * 0.3
+  const sx = x + dx, sy = y - s * (1.0 + r() * 0.2)
+  // Ombre portée au pied, côté est.
+  ctx.fillStyle = 'rgba(70,50,25,0.16)'
+  ctx.beginPath(); ctx.ellipse(x + g * 0.35, y + 0.6, g * 0.9, s * 0.16, 0, 0, Math.PI * 2); ctx.fill()
+  // Contour à l'encre (silhouette légèrement grossie), puis les deux versants.
+  const sommet = (k) => { ctx.beginPath(); ctx.moveTo(x - g - k, y + k * 0.4); ctx.lineTo(sx, sy - k * 1.2); ctx.lineTo(x + g + k, y + k * 0.4); ctx.closePath() }
+  sommet(0.55); ctx.fillStyle = ENCRE; ctx.fill()
+  const lum = ctx.createLinearGradient(x - g, sy, x + g * 0.2, y)
+  lum.addColorStop(0, '#f2e6c8'); lum.addColorStop(1, '#d6c4a0')
+  sommet(0); ctx.fillStyle = lum; ctx.fill()
+  ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(x + g, y); ctx.lineTo(x + s * 0.05, y); ctx.lineTo(sx + s * 0.1, sy + s * 0.5); ctx.closePath()
+  const omb = ctx.createLinearGradient(sx, sy, x + g, y)
+  omb.addColorStop(0, '#a68d68'); omb.addColorStop(1, '#8a7252')
+  ctx.fillStyle = omb; ctx.fill()
+  // Hachures fines du versant à l'ombre.
+  ctx.strokeStyle = 'rgba(60,44,26,0.45)'; ctx.lineWidth = 0.28
+  for (let k = 1; k <= 4; k++) {
+    const t2 = k / 5, ax = sx + (x + g - sx) * t2, ay = sy + (y - sy) * t2
+    ctx.beginPath(); ctx.moveTo(ax - s * 0.04, ay + s * 0.05); ctx.lineTo(ax - s * 0.22 * (1 - t2 * 0.4), ay + s * 0.22); ctx.stroke()
   }
-  if (s > 8.5) {  // neiges éternelles
-    ctx.beginPath(); ctx.moveTo(sommet[0], sommet[1]); ctx.lineTo(sommet[0] - s * 0.22, sommet[1] + s * 0.26)
-    ctx.lineTo(sommet[0] + s * 0.02, sommet[1] + s * 0.2); ctx.lineTo(sommet[0] + s * 0.2, sommet[1] + s * 0.24); ctx.closePath()
-    ctx.fillStyle = '#fbf6ea'; ctx.fill()
+  if (s > 9) {  // neiges éternelles, découpées
+    ctx.beginPath(); ctx.moveTo(sx, sy)
+    ctx.lineTo(sx - s * 0.24, sy + s * 0.3); ctx.lineTo(sx - s * 0.1, sy + s * 0.22); ctx.lineTo(sx + s * 0.02, sy + s * 0.32)
+    ctx.lineTo(sx + s * 0.12, sy + s * 0.22); ctx.lineTo(sx + s * 0.22, sy + s * 0.27); ctx.closePath()
+    ctx.fillStyle = '#fdfaf1'; ctx.fill()
   }
 }
 function glypheFeuillu(ctx, x, y, s, r) {
-  const rr = s * (0.42 + r() * 0.12)
-  ctx.strokeStyle = ENCRE; ctx.lineWidth = 0.4
+  const rr = s * (0.36 + r() * 0.1)
+  const lobes = [[-rr * 0.55, -s * 0.72, rr * 0.82], [rr * 0.55, -s * 0.74, rr * 0.8], [0, -s * 0.98, rr]]
+  ctx.fillStyle = 'rgba(60,50,25,0.18)'
+  ctx.beginPath(); ctx.ellipse(x + rr * 0.4, y + 0.3, rr * 1.2, rr * 0.35, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = ENCRE; ctx.lineWidth = 0.55; ctx.lineCap = 'round'
   ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y - s * 0.45); ctx.stroke()
-  ctx.beginPath(); ctx.arc(x, y - s * 0.78, rr, 0, Math.PI * 2)
-  ctx.fillStyle = r() < 0.5 ? '#8f9a5d' : '#7e8c52'; ctx.fill()
-  ctx.beginPath(); ctx.arc(x + rr * 0.25, y - s * 0.72, rr * 0.7, -0.6, 1.9)
-  ctx.fillStyle = 'rgba(70,80,40,0.35)'; ctx.fill()
-  ctx.beginPath(); ctx.arc(x, y - s * 0.78, rr, 0, Math.PI * 2); ctx.stroke()
+  // Silhouette à l'encre (cercles grossis), puis le feuillage modelé.
+  ctx.fillStyle = ENCRE
+  for (const [dx, dy, rad] of lobes) { ctx.beginPath(); ctx.arc(x + dx, y + dy, rad + 0.45, 0, Math.PI * 2); ctx.fill() }
+  const teinte = r() < 0.5 ? ['#9aa865', '#7d8c4c', '#62703a'] : ['#a4ad69', '#86924f', '#6a763e']
+  for (const [dx, dy, rad] of lobes) { ctx.beginPath(); ctx.arc(x + dx, y + dy, rad, 0, Math.PI * 2); ctx.fillStyle = teinte[1]; ctx.fill() }
+  ctx.fillStyle = teinte[2]
+  for (const [dx, dy, rad] of lobes) { ctx.beginPath(); ctx.arc(x + dx + rad * 0.3, y + dy + rad * 0.28, rad * 0.62, 0, Math.PI * 2); ctx.fill() }
+  ctx.fillStyle = teinte[0]
+  ctx.beginPath(); ctx.arc(x - rr * 0.28, y - s * 1.08, rr * 0.42, 0, Math.PI * 2); ctx.fill()
 }
 function glypheResineux(ctx, x, y, s) {
-  ctx.beginPath(); ctx.moveTo(x, y - s * 1.2); ctx.lineTo(x + s * 0.38, y - s * 0.1); ctx.lineTo(x - s * 0.38, y - s * 0.1); ctx.closePath()
-  ctx.fillStyle = '#6f7d4b'; ctx.fill()
-  ctx.strokeStyle = ENCRE; ctx.lineWidth = 0.4; ctx.stroke()
-  ctx.beginPath(); ctx.moveTo(x, y - s * 0.1); ctx.lineTo(x, y + s * 0.12); ctx.stroke()
+  const etage = (k, dilate) => {
+    const yb = y - s * (0.15 + k * 0.32), h = s * 0.62, w = s * (0.42 - k * 0.09)
+    ctx.beginPath(); ctx.moveTo(x, yb - h - dilate * 1.3); ctx.lineTo(x + w + dilate, yb + dilate * 0.5); ctx.lineTo(x - w - dilate, yb + dilate * 0.5); ctx.closePath()
+  }
+  ctx.fillStyle = 'rgba(60,50,25,0.18)'
+  ctx.beginPath(); ctx.ellipse(x + s * 0.2, y + 0.3, s * 0.42, s * 0.12, 0, 0, Math.PI * 2); ctx.fill()
+  ctx.strokeStyle = ENCRE; ctx.lineWidth = 0.55
+  ctx.beginPath(); ctx.moveTo(x, y + s * 0.05); ctx.lineTo(x, y - s * 0.2); ctx.stroke()
+  for (let k = 0; k < 3; k++) { etage(k, 0.45); ctx.fillStyle = ENCRE; ctx.fill() }
+  for (let k = 0; k < 3; k++) {
+    etage(k, 0); ctx.fillStyle = '#6f7f4a'; ctx.fill()
+    const yb = y - s * (0.15 + k * 0.32), h = s * 0.62, w = s * (0.42 - k * 0.09)
+    ctx.beginPath(); ctx.moveTo(x, yb - h); ctx.lineTo(x + w, yb); ctx.lineTo(x, yb); ctx.closePath(); ctx.fillStyle = '#55633a'; ctx.fill()
+  }
 }
 function glypheDune(ctx, x, y, s) {
   // Face à l'ombre (aplat) puis crête à l'encre, et quelques grains de sable.
@@ -338,6 +363,28 @@ function semer(poly, centre, densite, espace, graine, garde = 15) {
     if (!libre) continue
     const k = cle(x, y); const l = cases.get(k); if (l) l.push([x, y]); else cases.set(k, [[x, y]])
     pts.push([x, y, r])
+  }
+  return pts
+}
+
+// Bosquets : quelques amas denses plutôt qu'un semis uniforme (une vraie forêt).
+function semerAmas(poly, centre, graine, nbParMille = 4.5, rayon = 13, espace = 5.6, garde = 15) {
+  const r = aleatoire(graine)
+  const b = boite(poly)
+  const nbAmas = Math.max(1, Math.min(10, Math.round((aire(poly) / 1000) * nbParMille * 0.3)))
+  const pts = []
+  for (let a = 0, essais = 0; a < nbAmas && essais < 60; essais++) {
+    const cx = b.x0 + r() * (b.x1 - b.x0), cy = b.y0 + r() * (b.y1 - b.y0)
+    if (!dansPoly(cx, cy, poly) || (centre && Math.hypot(cx - centre[0], cy - centre[1]) < garde + rayon * 0.5)) continue
+    a++
+    const nb = 7 + Math.floor(r() * 9)
+    for (let k = 0, e2 = 0; k < nb && e2 < nb * 5; e2++) {
+      const ang = r() * Math.PI * 2, d = Math.sqrt(r()) * rayon
+      const x = cx + Math.cos(ang) * d, y = cy + Math.sin(ang) * d * 0.7
+      if (!dansPoly(x, y, poly) || (centre && Math.hypot(x - centre[0], y - centre[1]) < garde)) continue
+      if (pts.some((q) => Math.hypot(q[0] - x, q[1] - y) < espace)) continue
+      pts.push([x, y, r]); k++
+    }
   }
   return pts
 }
@@ -461,8 +508,8 @@ export async function peindreFond(data, troncons) {
   const glyphes = []
   for (const t of terrs) {
     const gnr = genre(t), centre = t.centre, gr = hacher(t.id)
-    if (gnr === 'montagne') for (const [x, y, r] of semer(t.polygone, centre, 1 / 300, 15, gr)) glyphes.push([y, 'm', x, 7.5 + r() * 5, r])
-    else if (gnr === 'foret') for (const [x, y, r] of semer(t.polygone, centre, 1 / 125, 8, gr)) glyphes.push([y, y < CONIFERES_Y ? 'c' : 'f', x, 4 + r() * 1.6, r])
+    if (gnr === 'montagne') for (const [x, y, r] of semer(t.polygone, centre, 1 / 520, 19, gr)) glyphes.push([y, 'm', x, 8 + r() * 5, r])
+    else if (gnr === 'foret') for (const [x, y, r] of semerAmas(t.polygone, centre, gr)) glyphes.push([y, y < CONIFERES_Y ? 'c' : 'f', x, 5 + r() * 1.8, r])
     else if (gnr === 'desert') for (const [x, y, r] of semer(t.polygone, centre, 1 / 95, 11, gr)) glyphes.push([y, 'd', x, 4.5 + r() * 3, r])
     else if (gnr === 'steppe') for (const [x, y, r] of semer(t.polygone, centre, 1 / 160, 10, gr)) glyphes.push([y, 'h', x, 3.5, r])
     else if (gnr === 'fertile') for (const [x, y, r] of semer(t.polygone, centre, 1 / 220, 11, gr)) glyphes.push([y, 'h', x, 3, r])
