@@ -293,7 +293,13 @@ function glypheResineux(ctx, x, y, s) {
   ctx.beginPath(); ctx.moveTo(x, y - s * 0.1); ctx.lineTo(x, y + s * 0.12); ctx.stroke()
 }
 function glypheDune(ctx, x, y, s) {
-  ctx.strokeStyle = 'rgba(150,110,55,0.75)'; ctx.lineWidth = 0.5
+  // Face à l'ombre (aplat) puis crête à l'encre, et quelques grains de sable.
+  ctx.fillStyle = 'rgba(176,128,62,0.28)'
+  ctx.beginPath(); ctx.moveTo(x - s * 0.2, y - s * 0.32); ctx.quadraticCurveTo(x + s * 0.3, y - s * 0.1, x + s * 0.6, y - s * 0.1)
+  ctx.quadraticCurveTo(x + s * 0.2, y + s * 0.15, x - s * 0.2, y - s * 0.32); ctx.fill()
+  ctx.fillStyle = 'rgba(140,100,50,0.5)'
+  for (let k = 0; k < 4; k++) { ctx.beginPath(); ctx.arc(x - s + k * s * 0.55, y + s * 0.45 + (k % 2) * s * 0.15, 0.32, 0, Math.PI * 2); ctx.fill() }
+  ctx.strokeStyle = 'rgba(130,92,45,0.85)'; ctx.lineWidth = 0.55
   ctx.beginPath(); ctx.moveTo(x - s, y); ctx.quadraticCurveTo(x - s * 0.2, y - s * 0.55, x + s * 0.6, y - s * 0.1); ctx.stroke()
   ctx.strokeStyle = 'rgba(150,110,55,0.4)'
   ctx.beginPath(); ctx.moveTo(x - s * 0.3, y + s * 0.25); ctx.quadraticCurveTo(x + s * 0.2, y - s * 0.05, x + s, y + s * 0.2); ctx.stroke()
@@ -457,7 +463,7 @@ export async function peindreFond(data, troncons) {
     const gnr = genre(t), centre = t.centre, gr = hacher(t.id)
     if (gnr === 'montagne') for (const [x, y, r] of semer(t.polygone, centre, 1 / 300, 15, gr)) glyphes.push([y, 'm', x, 7.5 + r() * 5, r])
     else if (gnr === 'foret') for (const [x, y, r] of semer(t.polygone, centre, 1 / 125, 8, gr)) glyphes.push([y, y < CONIFERES_Y ? 'c' : 'f', x, 4 + r() * 1.6, r])
-    else if (gnr === 'desert') for (const [x, y, r] of semer(t.polygone, centre, 1 / 180, 12, gr)) glyphes.push([y, 'd', x, 4 + r() * 2.5, r])
+    else if (gnr === 'desert') for (const [x, y, r] of semer(t.polygone, centre, 1 / 95, 11, gr)) glyphes.push([y, 'd', x, 4.5 + r() * 3, r])
     else if (gnr === 'steppe') for (const [x, y, r] of semer(t.polygone, centre, 1 / 160, 10, gr)) glyphes.push([y, 'h', x, 3.5, r])
     else if (gnr === 'fertile') for (const [x, y, r] of semer(t.polygone, centre, 1 / 220, 11, gr)) glyphes.push([y, 'h', x, 3, r])
   }
