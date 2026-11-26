@@ -1,3 +1,4 @@
+import Embleme from './Emblemes'
 import { LuxeIcon, ResIcon } from './Icons'
 import {
   RESOURCE_META,
@@ -42,15 +43,15 @@ export default function ResourceBar({ meta, joueur }) {
   const luxeCount = luxesActifs.reduce((m, l) => { m[l] = (m[l] || 0) + 1; return m }, {})
 
   return (
-    <header className="flex flex-wrap items-center gap-x-5 gap-y-2 border-b border-bronze-dark/70 bg-gradient-to-b from-[#2b2419] to-[#211b12] px-4 py-2 text-parchment shadow">
+    <header className="barre-haut flex flex-wrap items-center gap-x-4 gap-y-2 px-4 py-1.5 text-parchment">
       {/* Identité joueur + date */}
       <div className="flex items-center gap-3 pr-3">
-        <span
-          className="inline-block h-5 w-5 rounded-sm border border-black/50"
-          style={{ backgroundColor: (joueur && joueur.couleur) || '#b03a2e' }}
-        />
+        <span className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-gold/70 shadow-[0_2px_6px_rgba(0,0,0,0.6)]"
+              style={{ background: `radial-gradient(circle at 40% 35%, ${(joueur && joueur.couleur) || '#b03a2e'}, #120c06 115%)` }}>
+          <Embleme faction={joueur && joueur.id} taille={26} variante="or" />
+        </span>
         <div className="leading-tight">
-          <div className="text-base font-semibold tracking-wide">
+          <div className="font-display text-[15px] font-bold tracking-[0.12em] text-gold">
             {(joueur && joueur.nom) || 'Faction'}
           </div>
           <div className="text-xs text-bronze">{formatTourDate(meta)}</div>
@@ -67,7 +68,7 @@ export default function ResourceBar({ meta, joueur }) {
           const prod = production[key]
           const lignes = detail[key] || []
           return (
-            <div key={key} className="group relative flex items-baseline gap-1.5 whitespace-nowrap">
+            <div key={key} className="group relative flex items-center gap-1.5 whitespace-nowrap rounded-full border border-bronze-dark/50 bg-black/30 px-2.5 py-[3px] shadow-[inset_0_1px_0_rgba(255,230,170,0.06)]">
               <ResIcon id={key} size={15} className="relative top-[2px] shrink-0" style={{ color: meta2.tint }} />
               <span className="hidden text-xs text-parchment/70 lg:inline">{meta2.label}</span>
               <span className="font-semibold tabular-nums" title={meta2.label}>{num(value)}</span>

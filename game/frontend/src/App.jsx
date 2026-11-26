@@ -444,23 +444,23 @@ export default function App() {
           étroit ; « Fin de tour » reste TOUJOURS visible à droite (jamais de bouton
           principal caché derrière un défilement). Sous 1024 px, les libellés
           s'effacent et les icônes suffisent. */}
-      <div className="flex items-stretch border-t border-bronze-dark/60 bg-night">
+      <div className="barre-bas flex items-stretch">
         <div className="thin-scroll flex min-w-0 flex-1 flex-nowrap items-center gap-1.5 overflow-x-auto px-2 py-1.5">
-          <button onClick={() => setModal('tech')} className="btn btn-ghost btn-sm shrink-0" title="Technologies (T)"><UiIcon id="tech" /><span className="hidden lg:inline">Technos</span></button>
-          <button onClick={() => setModal('dogmes')} className="btn btn-ghost btn-sm shrink-0" title="Dogmes (G)"><UiIcon id="dogmes" /><span className="hidden lg:inline">Dogmes</span></button>
-          <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn btn-ghost btn-sm relative shrink-0" title="Diplomatie (D)">
-            <UiIcon id="diplomatie" /><span className="hidden lg:inline">Diplomatie</span>
+          <button onClick={() => setModal('tech')} className="btn-hud shrink-0" title="Technologies (T)"><span className="hud-ico"><UiIcon id="tech" size={15} /></span><span className="hidden lg:inline">Technos</span></button>
+          <button onClick={() => setModal('dogmes')} className="btn-hud shrink-0" title="Dogmes (G)"><span className="hud-ico"><UiIcon id="dogmes" size={15} /></span><span className="hidden lg:inline">Dogmes</span></button>
+          <button onClick={() => { setModal('civs'); setMsgIA(0) }} className="btn-hud relative shrink-0" title="Diplomatie (D)">
+            <span className="hud-ico"><UiIcon id="diplomatie" size={15} /></span><span className="hidden lg:inline">Diplomatie</span>
             {msgIA > 0 && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-red-600 px-1 text-[10px] font-bold text-white">{msgIA}</span>}
           </button>
-          <button onClick={() => setModal('conseiller')} className="btn btn-ghost btn-sm shrink-0" title="Conseiller (C)"><UiIcon id="conseiller" /><span className="hidden lg:inline">Conseiller</span></button>
-          <button onClick={() => { setModal('journal'); setJournalVu(nbJournal) }} className="btn btn-ghost btn-sm relative shrink-0" title="Journal du règne (J)">
-            <UiIcon id="journal" /><span className="hidden lg:inline">Journal</span>
+          <button onClick={() => setModal('conseiller')} className="btn-hud shrink-0" title="Conseiller (C)"><span className="hud-ico"><UiIcon id="conseiller" size={15} /></span><span className="hidden lg:inline">Conseiller</span></button>
+          <button onClick={() => { setModal('journal'); setJournalVu(nbJournal) }} className="btn-hud relative shrink-0" title="Journal du règne (J)">
+            <span className="hud-ico"><UiIcon id="journal" size={15} /></span><span className="hidden lg:inline">Journal</span>
             {nbJournal > journalVu && <span className="absolute -right-1 -top-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-gold px-1 text-[10px] font-bold text-ink">{nbJournal - journalVu}</span>}
           </button>
 
           {impotsOpts.length > 0 && (
             <select value={(joueur && joueur.impots) || 'normal'} onChange={(e) => setImpots(e.target.value)}
-                    title="Niveau d'imposition" className="shrink-0 rounded border border-bronze-dark/60 bg-night px-1.5 py-1 text-xs text-parchment">
+                    title="Niveau d'imposition" className="shrink-0 rounded-full border border-bronze-dark/60 bg-black/40 px-3 py-1.5 text-xs text-parchment">
               {impotsOpts.map((o) => <option key={o.id} value={o.id}>Impôts : {o.nom} ({o.stab >= 0 ? '+' : ''}{o.stab} stab)</option>)}
             </select>
           )}
@@ -471,7 +471,7 @@ export default function App() {
                       const r = e.currentTarget.getBoundingClientRect()
                       setMenuOuvert(menuOuvert ? null : { bas: window.innerHeight - r.top + 4, droite: window.innerWidth - r.right })
                     }}
-                    className="btn btn-ghost btn-sm" title="Partie"><UiIcon id="menu" /></button>
+                    className="btn-hud !pr-1" title="Partie"><span className="hud-ico"><UiIcon id="menu" size={15} /></span></button>
             {menuOuvert && (
               <>
                 <div className="fixed inset-0 z-20" onClick={() => setMenuOuvert(null)} />
@@ -487,9 +487,9 @@ export default function App() {
           </div>
         </div>
 
-        <div className="flex shrink-0 items-center border-l border-bronze-dark/60 px-2 py-1.5">
-          <div className="flex items-stretch gap-px overflow-hidden rounded-md">
-            <button onClick={() => handleEndTurn(1)} disabled={busy} className="btn btn-primary rounded-none"
+        <div className="flex shrink-0 items-center px-3 py-1.5">
+          <div className="flex items-stretch gap-px overflow-hidden rounded-full shadow-[0_0_18px_rgba(232,194,103,0.25)]">
+            <button onClick={() => handleEndTurn(1)} disabled={busy} className="btn-fin-tour"
                     title={armeesPretes > 0 ? `${armeesPretes} armée(s) peuvent encore marcher — Espace` : "Avancer d'un mois (Espace)"}>
               {busy ? 'Le monde avance…' : 'Fin de tour ▸'}
               {!busy && armeesPretes > 0 && (
@@ -498,8 +498,8 @@ export default function App() {
                 </span>
               )}
             </button>
-            <button onClick={() => handleEndTurn(3)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer de 3 mois">+3 m</button>
-            <button onClick={() => handleEndTurn(12)} disabled={busy} className="btn btn-primary rounded-none px-2" title="Avancer d'un an (12 mois)">+1 an</button>
+            <button onClick={() => handleEndTurn(3)} disabled={busy} className="btn-fin-tour-mini" title="Avancer de 3 mois">+3 m</button>
+            <button onClick={() => handleEndTurn(12)} disabled={busy} className="btn-fin-tour-mini" title="Avancer d'un an (12 mois)">+1 an</button>
           </div>
         </div>
       </div>

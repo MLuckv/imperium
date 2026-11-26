@@ -410,3 +410,56 @@ body {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
 }
 .ligne-prod-fait .medaillon-prod { border-color: #4fb37a; }
+
+/* ---------- Barre supérieure ---------- */
+.barre-haut {
+  position: relative;
+  background:
+    linear-gradient(180deg, rgba(255, 230, 170, 0.05), transparent 40%),
+    linear-gradient(180deg, #2e2619 0%, #1f1911 100%);
+  border-bottom: 1px solid #5c4618;
+  box-shadow: 0 1px 0 rgba(232, 194, 103, 0.25), 0 6px 16px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+
+/* ---------- Barre inférieure (HUD) ---------- */
+.barre-bas {
+  position: relative;
+  background:
+    linear-gradient(0deg, rgba(255, 230, 170, 0.04), transparent 40%),
+    linear-gradient(180deg, #221b12 0%, #2c2418 100%);
+  border-top: 1px solid #5c4618;
+  box-shadow: 0 -1px 0 rgba(232, 194, 103, 0.22), 0 -6px 16px rgba(0, 0, 0, 0.45);
+  z-index: 5;
+}
+.btn-hud {
+  display: inline-flex; align-items: center; gap: 0.45rem;
+  padding: 0.2rem 0.85rem 0.2rem 0.2rem; border-radius: 999px;
+  border: 1px solid rgba(122, 93, 31, 0.65);
+  background: linear-gradient(180deg, rgba(58, 46, 28, 0.9), rgba(30, 24, 16, 0.9));
+  font-family: var(--font-display); font-size: 0.78rem; letter-spacing: 0.08em; color: var(--color-parchment);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, color 0.15s ease;
+}
+.btn-hud:hover { border-color: #e8c267; color: #f6dc94; box-shadow: 0 0 12px rgba(232, 194, 103, 0.25); }
+.hud-ico {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 1.75rem; height: 1.75rem; border-radius: 999px; color: #f1d58c;
+  border: 1.5px solid rgba(232, 194, 103, 0.7);
+  background: radial-gradient(circle at 40% 35%, #4a3a20, #120c06);
+}
+.btn-fin-tour {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.55rem 1.25rem; font-family: var(--font-display); font-weight: 700; letter-spacing: 0.12em;
+  font-size: 0.86rem; text-transform: uppercase; color: #2a1d08;
+  background: linear-gradient(180deg, #ffe6a3 0%, #e8c267 45%, #b8872c 100%);
+  border-right: 1px solid rgba(60, 40, 10, 0.5);
+  text-shadow: 0 1px 0 rgba(255, 240, 200, 0.5);
+}
+.btn-fin-tour:hover:not(:disabled) { filter: brightness(1.08); }
+.btn-fin-tour:disabled { filter: grayscale(0.4) brightness(0.8); cursor: wait; }
+.btn-fin-tour-mini {
+  padding: 0.55rem 0.7rem; font-family: var(--font-display); font-weight: 700; font-size: 0.75rem; color: #2a1d08;
+  background: linear-gradient(180deg, #f2d48a 0%, #cfa448 60%, #a87a26 100%);
+  border-left: 1px solid rgba(255, 240, 200, 0.35);
+}
+.btn-fin-tour-mini:hover:not(:disabled) { filter: brightness(1.08); }
