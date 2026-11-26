@@ -561,50 +561,43 @@ def _conseil_repli(faction: str, message: str, situation: str,
 # =====================================================================
 #  1) Réponse diplomatique d'un dirigeant à un message joueur
 # =====================================================================
-# Insultes et grossièretés (formes SMS comprises) : le 7B ne les comprend pas toujours
-# (« cc pd ») et poursuit alors l'affaire en cours comme si de rien n'était.
-_INSULTES = re.compile(
-    r"\b(pd|pédé|pede|fdp|ntm|nique|niquer|tg|ta gueule|connard|connasse|con|conne|salaud|salope|"
-    r"enculé|encule|enculer|bâtard|batard|abruti|crétin|cretin|débile|debile|idiot|imbécile|imbecile|"
-    r"merde|putain|pute|bouffon|tocard|minable|raclure|chien galeux|fils de chien|va te faire)\b",
-    re.I)
-# Abréviations familières : on les glose pour que le souverain comprenne.
-_ABREV = {"cc": "coucou", "slt": "salut", "bjr": "bonjour", "bsr": "bonsoir", "stp": "s'il te plaît",
-          "svp": "s'il vous plaît", "pq": "pourquoi", "pcq": "parce que", "jsp": "je ne sais pas",
-          "mdr": "(il rit)", "lol": "(il rit)", "ok": "d'accord", "dac": "d'accord", "tkt": "ne t'inquiète pas",
-          "bcp": "beaucoup", "qd": "quand", "tjrs": "toujours", "ptdr": "(il rit aux éclats)"}
+# Langage SMS : le souverain n'y comprend rien et n'aime pas ça. On ne sollicite
+# PAS le modèle (contexte allégé, réponse instantanée) : une réplique écrite à la
+# main, dans le style de chaque personnage. Le joueur apprend vite à écrire aux rois.
+_SMS = {"cc", "slt", "bjr", "bsr", "stp", "svp", "pq", "pk", "pcq", "jsp", "jpp", "mdr", "ptdr",
+        "lol", "tkt", "tqt", "bcp", "qd", "tjrs", "dac", "dak", "pd", "fdp", "ntm", "tg", "wsh",
+        "wesh", "jtm", "jte", "dsl", "mrc", "bg", "frr", "osef", "oklm", "ajd", "auj", "koi", "ki",
+        "ct", "c", "g", "k", "t", "jsuis", "chui", "vazy", "askip", "wtf", "omg", "msg", "dm"}
+
+REPONSES_SMS = {
+    "rome": ["Qu'est-ce que ce charabia ? Rome parle la langue des poètes, pas celle des palefreniers. Récrivez-moi quand vous saurez écrire.",
+             "Je n'ai rien compris, et ce que je n'ai pas compris m'a déplu. Un empereur mérite des phrases.",
+             "Mes scribes ont cru à un code d'espion. Parlez clairement, ou ne parlez pas."],
+    "carthage": ["Mes scribes d'Alexandrie lisent sept langues ; aucune ne ressemble à ceci. Expliquez-vous.",
+                 "Je ne comprends pas ce griffonnage, et je n'aime guère qu'on m'écrive ainsi. Écrivez comme un roi."],
+    "macedoine": ["Qu'est-ce que ce cri de corbeau ? Parle comme un roi, ou tais-toi.",
+                  "Je ne comprends pas un mot. Et ce que je ne comprends pas, d'ordinaire, je le conquiers."],
+    "sparte": ["Laconique, soit. Incompréhensible, non. Répète en mots d'homme.",
+               "Ce n'est ni du grec ni rien que je connaisse. Parle clairement."],
+    "francs": ["Je ne comprends pas ce langage, et il ne sied pas à un souverain. Parlez-moi franchement, je vous écouterai.",
+               "Est-ce un mot de passe de vos soldats ? Je ne l'entends pas. Écrivez-moi comme on écrit à une reine."],
+    "bretons": ["À Camelot on parle clair. Ce message, ni Merlin ni moi ne l'avons compris.",
+                "Un roi ne répond pas à ce qu'il ne comprend pas. Recommencez, et en bon langage."],
+}
 
 
-def est_insulte(texte: str) -> bool:
-    return bool(_INSULTES.search(texte or ""))
+def est_sms(texte: str) -> bool:
+    mots = re.findall(r"[a-zàâçéèêëîïôûùüÿœ']+", (texte or "").lower())
+    return any(m in _SMS for m in mots)
 
 
-def _rappel_ton(message_joueur: str) -> str:
-    """Note CIBLÉE sur le ton du message : insulte → réaction offensée (selon le
-    caractère), abréviations → glose. Sans cela, le modèle répétait l'accord en cours
-    (« Marché conclu… ») en réponse à « cc pd »."""
-    if "[NOTE" in (message_joueur or ""):
-        return message_joueur
-    notes = []
-    mots = re.findall(r"[a-zA-Zàâçéèêëîïôûùüÿœ']+", (message_joueur or "").lower())
-    gloses = [f"« {m} » = « {_ABREV[m]} »" for m in dict.fromkeys(mots) if m in _ABREV]
-    if gloses:
-        notes.append("langage très familier : " + ", ".join(gloses))
-    if est_insulte(message_joueur):
-        notes.append("ce message est une INJURE obscène adressée à ta personne — un affront public "
-                     "qu'aucun roi ne laisse passer. Ta réponse doit commencer par relever l'insulte. "
-                     "Réagis selon ton caractère (colère, mépris glacial, menace), en une à trois phrases. "
-                     "Ne parle PAS du commerce ni d'aucun accord, ne sois pas aimable")
-    elif len(mots) <= 3 and gloses:
-        notes.append("message bref et désinvolte : réponds brièvement à ce ton, sans relancer l'affaire précédente")
-    if not notes:
-        return message_joueur
-    return f"{message_joueur}\n[NOTE : " + " ; ".join(notes) + ".]"
+def reponse_sms(faction: str) -> str:
+    return random.choice(REPONSES_SMS.get(faction) or ["Je ne comprends pas ce langage, et il me déplaît."])
 
 
 def preparer_message(message_joueur: str, presents: tuple[str, ...] | None) -> str:
     """Message du joueur tel que présenté au modèle (rappels ciblés ajoutés)."""
-    return _rappel_ton(_rappel_absents(message_joueur, presents))
+    return _rappel_absents(message_joueur, presents)
 
 
 def _rappel_absents(message_joueur: str, presents: tuple[str, ...] | None) -> str:
@@ -709,18 +702,18 @@ def messages_diplomatiques(
         hist.append({"role": "joueur", "texte": message_joueur})
     else:
         hist[-1] = {"role": "joueur", "texte": message_joueur}  # avec le RAPPEL éventuel
-    # Une NOTE ciblée (insulte, abréviations) est extraite du tour utilisateur et
-    # donnée en consigne système FINALE : c'est la place où le 7B la respecte.
-    note_finale = None
-    dernier = hist[-1].get("texte", "") if hist else ""
-    if "\n[NOTE : " in dernier:
-        brut, note = dernier.split("\n[NOTE : ", 1)
-        if est_insulte(brut):
-            # L'affront est DÉCRIT dans le tour lui-même : le 7B ne peut plus le prendre
-            # pour une formule obscure et poursuivre aimablement l'affaire en cours.
-            brut = f"(Il t'adresse une injure obscène, sans autre mot : « {brut} ».)"
-        hist[-1] = {"role": "joueur", "texte": brut}
-        note_finale = "À PROPOS DE SON DERNIER MESSAGE : " + note.rstrip("]").strip()
+    # Les échanges en langage SMS (et la réplique écrite qui leur répond) n'apportent
+    # rien au fil : on les retire du contexte.
+    propre = []
+    for h in hist:
+        if h.get("role") == "joueur" and est_sms(h.get("texte", "")) and h is not hist[-1]:
+            propre.append(None)  # marque : la réplique suivante saute aussi
+            continue
+        if propre and propre[-1] is None and h.get("role") == "ia":
+            propre.pop()
+            continue
+        propre.append(h)
+    hist = [h for h in propre if h is not None]
     # Bornage : les 14 derniers tours intégralement, les plus anciens du joueur résumés.
     n = len(hist)
     for i, h in enumerate(hist):
@@ -733,11 +726,7 @@ def messages_diplomatiques(
                 continue
             msgs.append({"role": "assistant", "content": txt})
         else:
-            if i < n - 1 and est_insulte(txt):
-                txt = f"(injure) {txt}"
             msgs.append({"role": "user", "content": txt if recent else _trim(txt, 140)})
-    if note_finale:
-        msgs.append({"role": "system", "content": note_finale})
     return msgs
 
 
@@ -854,6 +843,8 @@ def reponse_diplomatique(
 ) -> dict:
     """Génère la réponse d'un dirigeant IA (non-stream). {reponse, auteur, source}."""
     auteur = nom_dirigeant(faction_cible)
+    if est_sms(message_joueur):
+        return {"reponse": reponse_sms(faction_cible), "auteur": auteur, "source": "sms"}
     message_joueur = preparer_message(message_joueur, presents)
     msgs = messages_diplomatiques(faction_cible, message_joueur, historique, pays_joueur,
                                   situation_joueur, situation_ia, presents)

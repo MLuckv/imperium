@@ -316,21 +316,14 @@ def province_annex(req: AnnexReq):
     return {"ok": res.get("ok", False), "raison": res.get("raison", ""), "state": state}
 
 
-def _consequence_insulte(state: dict, cible: str, pays_joueur: str, texte: str) -> None:
-    """Insulter un souverain a un prix : −10 de réputation, et au troisième affront
-    en un an, il passe aux menaces (qui escaladent si l'on ne répare pas)."""
-    if not ai_director.est_insulte(texte):
+def _consequence_sms(state: dict, cible: str, pays_joueur: str, texte: str) -> None:
+    """Écrire en langage SMS à un souverain l'agace un peu : −3 de réputation."""
+    if not ai_director.est_sms(texte):
         return
     f = state.get("pays", {}).get(cible)
-    if not f:
-        return
-    rep = f.setdefault("reputation", {})
-    rep[pays_joueur] = max(-100, rep.get(pays_joueur, 0) - 10)
-    tour = state.get("meta", {}).get("tour", 1)
-    affronts = [x for x in f.get("_affronts", []) if tour - x < 12] + [tour]
-    f["_affronts"] = affronts
-    if len(affronts) >= 3 and not f.get("attente_reponse"):
-        f["attente_reponse"] = {"intent": "menace", "tour_msg": tour}
+    if f:
+        rep = f.setdefault("reputation", {})
+        rep[pays_joueur] = max(-100, rep.get(pays_joueur, 0) - 3)
 
 
 def _situations_diplomatiques(state: dict, cible: str, pays_joueur: str) -> tuple[str, str]:
@@ -376,7 +369,7 @@ def diplomatie_message_stream(req: MessageReq):
         state, req.cible, role="joueur",
         auteur=state.get("pays", {}).get(pays_joueur, {}).get("nom", pays_joueur),
         texte=req.texte, tour=tour)
-    _consequence_insulte(state, req.cible, pays_joueur, req.texte)
+    _consequence_sms(state, req.cible, pays_joueur, req.texte)
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
     situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
     presents = tuple(f for f, p in state.get("pays", {}).items() if not p.get("elimine"))
@@ -385,6 +378,13 @@ def diplomatie_message_stream(req: MessageReq):
         pays_joueur=pays_joueur, situation_joueur=situation_joueur, situation_ia=situation_ia,
         presents=presents)
     auteur = ai_director.nom_dirigeant(req.cible)
+
+    if ai_director.est_sms(req.texte):
+        # Langage SMS : réplique écrite du personnage, sans solliciter le modèle.
+        texte_sms = ai_director.reponse_sms(req.cible)
+        conversations.ajouter_message(state, req.cible, role="ia", auteur=auteur, texte=texte_sms, tour=tour)
+        ws.sauver_etat_courant(state)
+        return StreamingResponse(iter([texte_sms]), media_type="text/plain; charset=utf-8")
 
     def flux():
         import re as _re
@@ -445,7 +445,7 @@ def diplomatie_message(req: MessageReq):
         state, req.cible, role="joueur",
         auteur=state.get("pays", {}).get(pays_joueur, {}).get("nom", pays_joueur),
         texte=req.texte, tour=tour)
-    _consequence_insulte(state, req.cible, pays_joueur, req.texte)
+    _consequence_sms(state, req.cible, pays_joueur, req.texte)
     historique = conversations.historique_pour_prompt(state, req.cible, limite=60)
 
     situation_joueur, situation_ia = _situations_diplomatiques(state, req.cible, pays_joueur)
