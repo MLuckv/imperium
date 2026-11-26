@@ -1,3 +1,4 @@
+import { useId } from 'react'
 // Illustrations EXCLUSIVES par merveille — SVG bespoke, style « gravure antique ».
 // Palette accordée au thème : marbre/parchemin, bronze, or, terre cuite. Aucune
 // dépendance réseau : les visuels sont vectoriels, nets à toute taille, jamais cassés.
@@ -6,10 +7,51 @@ const MARBLE = '#ece3cf', MARBLE_SH = '#c9b48a', STONE = '#d8c39a', STONE_SH = '
 const OUTLINE = '#4a3f2a', GOLD = '#e8c267', BRONZE = '#a9803f', BRONZE_LT = '#c79a4e'
 const PATINA = '#7fa98c', TERRA = '#b5552f', TERRA_DK = '#8f3f22', SHADOW = '#3a3120'
 
-function Frame({ children, size = 100, className, style }) {
+// Cadre de scène commun : ciel selon l'AMBIANCE, soleil voilé, collines au loin,
+// sol, puis la merveille ; par-dessus, une lumière rasante venue de gauche, une
+// vignette et un filet d'or. Les dessins plats prennent ainsi du volume.
+const AMBIANCES = {
+  aube: ['#f2d9a8', '#e8b98a', '#cf9874', '#fff3d0'],
+  jour: ['#9cc0d4', '#c9dddd', '#ece2c6', '#fffbe8'],
+  crepuscule: ['#4e4266', '#b9735e', '#efb878', '#ffe2a8'],
+}
+function Frame({ children, size = 100, className, style, ambiance = 'aube' }) {
+  const id = useId().replace(/[^a-zA-Z0-9]/g, '')
+  const [haut, milieu, horizon, soleil] = AMBIANCES[ambiance] || AMBIANCES.aube
   return (
     <svg viewBox="0 0 100 64" width={size} height={size * 0.64} className={className}
-         style={style} aria-hidden="true">{children}</svg>
+         style={style} aria-hidden="true">
+      <defs>
+        <linearGradient id={`${id}c`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor={haut} /><stop offset="0.55" stopColor={milieu} /><stop offset="0.9" stopColor={horizon} />
+        </linearGradient>
+        <radialGradient id={`${id}s`} cx="0.5" cy="0.5" r="0.5">
+          <stop offset="0" stopColor={soleil} stopOpacity="0.95" /><stop offset="1" stopColor={soleil} stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id={`${id}l`} x1="0" y1="0" x2="1" y2="0.6">
+          <stop offset="0" stopColor="#fff6dc" stopOpacity="0.28" /><stop offset="0.55" stopColor="#fff6dc" stopOpacity="0" />
+          <stop offset="1" stopColor="#1d1208" stopOpacity="0.22" />
+        </linearGradient>
+        <radialGradient id={`${id}v`} cx="0.5" cy="0.45" r="0.72">
+          <stop offset="0.62" stopColor="#1a120a" stopOpacity="0" /><stop offset="1" stopColor="#1a120a" stopOpacity="0.55" />
+        </radialGradient>
+        <linearGradient id={`${id}g`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#a8936a" /><stop offset="1" stopColor="#6e5a3c" />
+        </linearGradient>
+        <clipPath id={`${id}k`}><rect width="100" height="64" rx="2.5" /></clipPath>
+      </defs>
+      <g clipPath={`url(#${id}k)`}>
+        <rect width="100" height="64" fill={`url(#${id}c)`} />
+        <circle cx="80" cy="16" r="20" fill={`url(#${id}s)`} />
+        <path d="M0 50 Q14 40 28 46 Q44 36 60 45 Q78 38 100 46 L100 58 L0 58Z" fill={horizon} opacity="0.55" />
+        <path d="M0 53 Q20 47 40 51 Q62 45 100 51 L100 60 L0 60Z" fill="#8c7a5a" opacity="0.35" />
+        <rect y="57" width="100" height="7" fill={`url(#${id}g)`} />
+        {children}
+        <rect width="100" height="64" fill={`url(#${id}l)`} />
+        <rect width="100" height="64" fill={`url(#${id}v)`} />
+      </g>
+      <rect x="0.6" y="0.6" width="98.8" height="62.8" rx="2.2" fill="none" stroke="#e8c267" strokeOpacity="0.55" strokeWidth="0.7" />
+    </svg>
   )
 }
 
@@ -435,20 +477,77 @@ function Tumulus(props) {
   )
 }
 
+// ---- Compostelle : église romane, clocher, portail en plein cintre, coquille, pèlerins ----
+function Compostelle(props) {
+  return (
+    <Frame {...props}>
+      <path d="M0 60 Q30 56 50 58 Q70 60 100 56 L100 64 L0 64Z" fill="#9c8660" />
+      <path d="M8 63 Q30 58 46 59" stroke="#d9c79c" strokeWidth="2.2" fill="none" />
+      <rect x="40" y="26" width="38" height="31" fill={STONE} stroke={OUTLINE} strokeWidth="1" />
+      <polygon points="38,26 59,13 80,26" fill={STONE_SH} stroke={OUTLINE} strokeWidth="1" />
+      <rect x="62" y="11" width="12" height="46" fill={STONE} stroke={OUTLINE} strokeWidth="1" />
+      <polygon points="61,11 68,3 75,11" fill={TERRA} stroke={OUTLINE} strokeWidth="0.9" />
+      <path d="M65 20 v-4 a3 3 0 0 1 6 0 v4Z M65 31 v-4 a3 3 0 0 1 6 0 v4Z" fill={SHADOW} />
+      <path d="M46 57 v-12 a7 7 0 0 1 14 0 v12Z" fill={SHADOW} stroke={OUTLINE} strokeWidth="0.8" />
+      <path d="M44 45 a9 9 0 0 1 18 0" fill="none" stroke={STONE_SH} strokeWidth="1.4" />
+      {/* coquille Saint-Jacques */}
+      <path d="M53 33 l-5 -6 q5 -3 10 0 z" fill={GOLD} stroke={OUTLINE} strokeWidth="0.5" />
+      {[-3, -1.5, 0, 1.5, 3].map((d) => <path key={d} d={`M53 33 L${53 + d * 1.4} 27.6`} stroke={OUTLINE} strokeWidth="0.35" />)}
+      {/* pèlerins au bâton */}
+      {[[14, 58], [24, 57], [32, 57.5]].map(([x, y], i) => (
+        <g key={i}>
+          <circle cx={x} cy={y - 7} r="1.4" fill="#3a2a1a" />
+          <path d={`M${x} ${y - 5.6} l-1.8 5.6 h3.6z`} fill="#5a3d24" />
+          <path d={`M${x + 2} ${y - 8.5} v8.5`} stroke="#3a2a1a" strokeWidth="0.6" />
+        </g>
+      ))}
+    </Frame>
+  )
+}
+
+// ---- Grande Muraille : rempart qui serpente de crête en crête, tours de guet ----
+function Muraille(props) {
+  const crete = 'M0 44 L14 34 L26 42 L40 26 L54 38 L68 22 L82 34 L100 24'
+  return (
+    <Frame {...props}>
+      <path d="M0 64 L0 44 L14 34 L26 42 L40 26 L54 38 L68 22 L82 34 L100 24 L100 64Z" fill="#7f8a5a" />
+      <path d="M0 64 L0 52 L18 46 L34 54 L56 46 L78 54 L100 48 L100 64Z" fill="#6a7448" />
+      <path d={crete} stroke={STONE_SH} strokeWidth="5.5" fill="none" strokeLinejoin="round" />
+      <path d={crete} stroke={STONE} strokeWidth="3.6" fill="none" strokeLinejoin="round" />
+      <path d={crete} stroke={OUTLINE} strokeWidth="0.5" strokeDasharray="1.2 1.4" fill="none" transform="translate(0 -2.4)" />
+      {[[14, 34], [40, 26], [68, 22], [100, 24]].map(([x, y]) => (
+        <g key={x}>
+          <rect x={x - 3.2} y={y - 8} width="6.4" height="8" fill={STONE} stroke={OUTLINE} strokeWidth="0.7" />
+          <path d={`M${x - 3.8} ${y - 8} h7.6 l-1 -2.2 h-5.6z`} fill={TERRA} stroke={OUTLINE} strokeWidth="0.5" />
+          <rect x={x - 0.8} y={y - 5.6} width="1.6" height="2.2" fill={SHADOW} />
+        </g>
+      ))}
+    </Frame>
+  )
+}
+
 const ART = {
   parthenon: Parthenon, colosse_rhodes: ColosseRhodes, knossos: Knossos, colisee: Colisee,
   stonehenge: Stonehenge, pyramides: Pyramides, vesuve: Volcan, broceliande: Foret,
-  compostelle: Cathedrale, porta_nigra: Porte, chersonese: RuineGrecque,
+  compostelle: Compostelle, porta_nigra: Porte, chersonese: RuineGrecque,
   altamira: Grotte, kourganes: Tumulus, troie: Fouille,
-  mur_d_hadrien: Mur, grande_muraille: Mur, pont_du_gard: Aqueduc,
+  mur_d_hadrien: Mur, grande_muraille: Muraille, pont_du_gard: Aqueduc,
   grande_bibliotheque: Bibliotheque, grand_phare: Phare, jardins_suspendus: Jardins,
   pantheon: Pantheon, cathedrale: Cathedrale, table_ronde: TableRonde, mausolee: Mausolee,
 }
 // Repli par type pour toute merveille sans dessin dédié.
 const ART_TYPE = { antique: Parthenon, naturelle: Foret, ruine: RuineGrecque, fouille: Fouille, construction: Bibliotheque }
 
+const AMBIANCE = {
+  parthenon: 'jour', colosse_rhodes: 'crepuscule', knossos: 'aube', colisee: 'aube', stonehenge: 'crepuscule',
+  pyramides: 'aube', vesuve: 'crepuscule', broceliande: 'jour', compostelle: 'aube', porta_nigra: 'crepuscule',
+  chersonese: 'crepuscule', troie: 'aube', mur_d_hadrien: 'jour', grande_muraille: 'jour', pont_du_gard: 'jour',
+  grande_bibliotheque: 'jour', grand_phare: 'crepuscule', jardins_suspendus: 'jour', pantheon: 'jour',
+  cathedrale: 'aube', mausolee: 'jour', kourganes: 'aube',
+}
+
 export default function WonderArt({ id, type, size, className, style }) {
   const C = ART[id] || ART_TYPE[type]
   if (!C) return null
-  return <C size={size} className={className} style={style} />
+  return <C size={size} className={className} style={style} ambiance={AMBIANCE[id] || 'aube'} />
 }

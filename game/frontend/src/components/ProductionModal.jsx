@@ -82,9 +82,9 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
               const ruine = m.type === 'ruine' && etat !== 'restauree'
               return (
                 <div key={m.id} className="card mb-2 flex gap-3">
-                  <div className="shrink-0 self-start overflow-hidden rounded-md border border-bronze-dark/50 bg-gradient-to-b from-[#211b12] to-black/40 p-1"
+                  <div className="shrink-0 self-start overflow-hidden rounded-md shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
                        style={ruine ? { filter: 'grayscale(0.7) brightness(0.8)' } : undefined}>
-                    <WonderArt id={m.id} type={m.type} size={96} />
+                    <WonderArt id={m.id} type={m.type} size={120} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center justify-between">
@@ -194,9 +194,9 @@ export default function ProductionModal({ state, forcedTerr, onClose, onStateCha
                   const enChantier = etat === 'en_construction'
                   return (
                     <div key={m.id} className="card mb-2 flex gap-3">
-                      <div className="shrink-0 self-start overflow-hidden rounded-md border border-bronze-dark/50 bg-gradient-to-b from-[#211b12] to-black/40 p-1"
+                      <div className="shrink-0 self-start overflow-hidden rounded-md shadow-[0_4px_10px_rgba(0,0,0,0.5)]"
                            style={(!etat || etat === 'non_construite' || enChantier) ? { filter: 'grayscale(0.55) brightness(0.85)' } : undefined}>
-                        <WonderArt id={m.id} type={m.type} size={96} />
+                        <WonderArt id={m.id} type={m.type} size={120} />
                       </div>
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center justify-between">

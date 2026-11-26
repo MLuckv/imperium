@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { getCatalog } from '../api'
 import { factionColor, factionLabel, leaderName, num } from '../lib/format'
 import { BuildingIcon, UnitIcon, FactionEmblem, UiIcon, LuxeIcon } from './Icons'
+import WonderArt from './WonderArt'
 
 // PANNEAU DE PROVINCE — ce que le joueur voit quand il clique une province, façon
 // Civ / AoH : la cité, ses bâtiments, le chantier en cours, la garnison, et les
@@ -116,6 +117,8 @@ export default function ProvincePanel({ prov, state, annexable, conqueteCost, on
         })()}
         {merv && (
           <div className="rounded border border-gold/30 bg-gold/5 px-2 py-1.5">
+            <WonderArt id={merv.id} type={merv.type} size={212} className="mb-1.5 block rounded"
+                       style={['ruine', 'fouille'].includes(merv.type) && !['restauree', 'fouillee'].includes(mervEtat) ? { filter: 'grayscale(0.6) brightness(0.85)' } : undefined} />
             <div className="flex items-center gap-1.5 text-[12px] font-semibold text-gold">
               <UiIcon id={merv.type === 'naturelle' ? 'nature' : 'merveille'} size={13} />
               {merv.nom}

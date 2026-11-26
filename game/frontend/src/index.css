@@ -104,6 +104,62 @@ body {
     color: color-mix(in srgb, var(--color-parchment) 75%, transparent);
   }
 
+  /* ---------- Titre et menus illustrés ---------- */
+  .titre-imperium {
+    font-family: var(--font-display);
+    font-weight: 700;
+    font-size: clamp(3rem, 9vw, 6.2rem);
+    letter-spacing: 0.16em;
+    line-height: 1;
+    background: linear-gradient(180deg, #fff1c4 0%, #f0cd78 38%, #c08f2c 62%, #8a6420 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    filter: drop-shadow(0 2px 0 #3a2a10) drop-shadow(0 0 22px rgba(240, 190, 100, 0.35));
+  }
+  .menu-voile {
+    position: absolute !important;
+    inset: 0;
+    background:
+      radial-gradient(ellipse at 50% 42%, rgba(10, 7, 4, 0.55) 0%, rgba(10, 7, 4, 0.15) 45%, transparent 70%),
+      linear-gradient(180deg, transparent 55%, rgba(8, 6, 4, 0.55) 100%);
+    pointer-events: none;
+  }
+  .menu-voile-fort { background: linear-gradient(180deg, rgba(10, 7, 4, 0.72), rgba(10, 7, 4, 0.82)); }
+  .menu-carte {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.6rem;
+    min-width: 280px;
+    padding: 1.2rem 1.4rem 0.9rem;
+    border: 1px solid color-mix(in srgb, var(--color-bronze) 55%, transparent);
+    border-radius: 0.7rem;
+    background: linear-gradient(180deg, rgba(36, 27, 17, 0.82), rgba(18, 13, 9, 0.88));
+    box-shadow: 0 18px 50px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 230, 170, 0.12);
+    backdrop-filter: blur(3px);
+  }
+  .civ-carte {
+    position: relative;
+    display: flex;
+    align-items: flex-start;
+    gap: 0.9rem;
+    padding: 0.9rem 0.9rem 0.9rem 0.7rem;
+    border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 80%, transparent);
+    border-top: 3px solid var(--civ);
+    border-radius: 0.6rem;
+    background:
+      radial-gradient(ellipse at 15% 0%, color-mix(in srgb, var(--civ) 28%, transparent) 0%, transparent 60%),
+      linear-gradient(180deg, rgba(38, 30, 20, 0.92), rgba(20, 16, 11, 0.95));
+    box-shadow: 0 8px 22px rgba(0, 0, 0, 0.5);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .civ-carte:hover:not(:disabled) {
+    transform: translateY(-4px);
+    border-color: color-mix(in srgb, var(--civ) 70%, #e8c267);
+    box-shadow: 0 14px 30px rgba(0, 0, 0, 0.6), 0 0 24px color-mix(in srgb, var(--civ) 45%, transparent);
+  }
+
   /* ---------- Panneau de section ---------- */
   .panel {
     border: 1px solid color-mix(in srgb, var(--color-bronze-dark) 70%, transparent);

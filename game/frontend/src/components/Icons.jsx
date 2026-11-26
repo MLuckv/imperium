@@ -80,6 +80,10 @@ const EMBLEM_SVG = {
   // Bretons : couronne sur Excalibur — la Table Ronde d'Arthur.
   bretons: <g {...S}><path d="M12 4v13" /><path d="M8.5 8h7" /><path d="M12 17l-1.6 3h3.2L12 17z" /><path d="M5 5l1.8 2.4L9 4.6" /><path d="M19 5l-1.8 2.4L15 4.6" /></g>,
 }
+// Tracé brut de l'emblème (à placer dans un <svg> existant, viewBox 24×24).
+export function EmblemeTrace({ faction }) {
+  return EMBLEM_SVG[faction] || EMBLEM_SVG.rome
+}
 export function FactionEmblem({ faction, className, size, style }) {
   return <Svg className={className} size={size} style={style}>{EMBLEM_SVG[faction] || EMBLEM_SVG.rome}</Svg>
 }

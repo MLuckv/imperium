@@ -14,6 +14,7 @@ import TechTree from './components/TechTree'
 import DogmeTree from './components/DogmeTree'
 import { factionColor, factionLabel, leaderName, reputationTone, num } from './lib/format'
 import { FactionEmblem, UiIcon } from './components/Icons'
+import { PanoramaAntique, Banniere, Filet, Laurier } from './components/Decors'
 
 const SLOT = 1
 
@@ -206,7 +207,7 @@ export default function App() {
   }
 
   // ---- Écrans hors-jeu ----
-  if (booting) return <div className="menu-screen"><div className="menu-title">IMPERIVM</div><p className="menu-subtitle">Connexion…</p></div>
+  if (booting) return <div className="menu-screen"><PanoramaAntique /><div className="titre-imperium">IMPERIVM</div><p className="menu-subtitle">Connexion…</p></div>
   if (!backendOk) {
     return (
       <div className="menu-screen">
@@ -219,53 +220,68 @@ export default function App() {
   if (screen === 'menu') {
     return (
       <div className="menu-screen">
-        <div className="menu-title">IMPERIVM</div>
-        <p className="menu-subtitle">Grande stratégie antique — Méditerranée, 5 av. J.-C.</p>
-        <div className="mt-10 flex flex-col gap-3">
-          <button onClick={() => setScreen('civ')} disabled={busy} className="btn btn-primary" style={{ minWidth: 240, fontSize: '1.1rem', padding: '0.8rem 1.5rem' }}>Jouer</button>
-          {hasSavedGame && <button onClick={() => setScreen('game')} className="btn btn-ghost" style={{ minWidth: 240 }}>Reprendre la partie</button>}
-          <button onClick={handleLoad} disabled={busy} className="btn btn-ghost" style={{ minWidth: 240 }}>Charger (slot {SLOT})</button>
+        <PanoramaAntique />
+        <div className="menu-voile" />
+        <div className="flex flex-col items-center" style={{ marginTop: '-8vh' }}>
+          <div className="titre-imperium">IMPERIVM</div>
+          <Laurier className="-mt-1" largeur={150} />
+          <p className="menu-subtitle">Grande stratégie — des souverains de toutes les époques, une seule Méditerranée</p>
+          <div className="menu-carte mt-8">
+            <button onClick={() => setScreen('civ')} disabled={busy} className="btn btn-primary w-full" style={{ fontSize: '1.1rem', padding: '0.8rem 1.5rem' }}>Nouvelle partie</button>
+            {hasSavedGame && <button onClick={() => setScreen('game')} className="btn btn-ghost w-full">Reprendre la partie</button>}
+            <button onClick={handleLoad} disabled={busy} className="btn btn-ghost w-full">Charger (emplacement {SLOT})</button>
+            <Filet className="mt-1 opacity-80" largeur={220} />
+          </div>
         </div>
-        {health && <p className="mt-10 text-xs text-parchment/40">IA : {health.modele_pret ? `prête (${health.modele})` : health.ollama ? 'modèle en chargement (repli)' : 'hors-ligne (mode repli)'}</p>}
+        {health && (
+          <p className="absolute bottom-4 text-xs text-parchment/45">
+            Conseillers et souverains : {health.modele_pret ? `prêts (${health.modele})` : health.ollama ? 'le modèle se charge…' : 'hors-ligne (répliques de secours)'}
+          </p>
+        )}
       </div>
     )
   }
   if (screen === 'civ') {
     return (
-      <div className="menu-screen">
-        <div className="menu-title" style={{ fontSize: 'clamp(1.8rem,4vw,2.8rem)' }}>Choisissez votre civilisation</div>
+      <div className="menu-screen !justify-start overflow-y-auto py-10">
+        <PanoramaAntique className="opacity-60" />
+        <div className="menu-voile menu-voile-fort" />
+        <div className="titre-imperium" style={{ fontSize: 'clamp(1.7rem,3.6vw,2.6rem)' }}>Choisissez votre civilisation</div>
+        <Filet className="mt-2" largeur={300} />
         <p className="menu-subtitle">Vous débuterez avec une seule province et tout à bâtir.</p>
 
         {/* Nombre d'adversaires : les civilisations écartées n'existent pas dans la partie */}
-        <div className="mt-6 flex flex-col items-center gap-2">
-          <div className="text-xs uppercase tracking-widest text-bronze">Adversaires</div>
+        <div className="mt-5 flex flex-col items-center gap-2">
+          <div className="font-display text-[11px] uppercase tracking-[0.25em] text-bronze">Adversaires</div>
           <div className="flex items-center gap-1.5">
             {[1, 2, 3, 4, 5].map((n) => (
               <button key={n} onClick={() => { setNbIa(n); nbIaRef.current = n }}
-                      className={'h-9 w-9 rounded-md border text-sm font-semibold transition ' +
+                      className={'h-9 w-9 rounded-md border font-display text-sm font-semibold transition ' +
                         (nbIa === n
-                          ? 'border-gold bg-gold/20 text-gold'
-                          : 'border-bronze-dark/60 text-parchment/70 hover:border-bronze')}>
+                          ? 'border-gold bg-gold/20 text-gold shadow-[0_0_12px_rgba(232,194,103,0.35)]'
+                          : 'border-bronze-dark/60 bg-black/30 text-parchment/70 hover:border-bronze')}>
                 {n}
               </button>
             ))}
           </div>
-          <div className="text-[11px] text-parchment/50">
+          <div className="text-[12px] italic text-parchment/60">
             {nbIa === 5 ? 'Toutes les civilisations entrent en lice.'
                         : `${nbIa} ${nbIa > 1 ? 'rivaux tirés' : 'rival tiré'} au sort ; les autres n'existeront pas.`}
           </div>
         </div>
-        <div className="mt-8 grid max-w-4xl grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="mt-7 grid w-full max-w-5xl grid-cols-1 gap-4 px-4 md:grid-cols-2 lg:grid-cols-3">
           {CIVS.map((c) => (
             <button key={c.id} onClick={() => startGame(c.id)} disabled={busy}
-                    className="panel text-left transition hover:scale-[1.02]" style={{ borderColor: factionColor(c.id) }}>
-              <div className="flex items-center gap-2">
-                <FactionEmblem faction={c.id} size={28} className="shrink-0" style={{ color: factionColor(c.id) }} />
-                <span className="font-display text-lg font-bold" style={{ color: factionColor(c.id) }}>{c.nom}</span>
+                    className="civ-carte group text-left" style={{ '--civ': factionColor(c.id) }}>
+              <Banniere faction={c.id} couleur={factionColor(c.id)}
+                        className="h-32 w-24 shrink-0 drop-shadow-[0_6px_8px_rgba(0,0,0,0.55)] transition-transform duration-300 group-hover:-rotate-2 group-hover:scale-105" />
+              <div className="min-w-0">
+                <div className="font-display text-xl font-bold tracking-wide" style={{ color: factionColor(c.id), textShadow: '0 1px 0 #000' }}>{c.nom}</div>
+                <div className="font-display text-[11px] uppercase tracking-[0.18em] text-gold/90">{c.leader}</div>
+                <div className="text-xs italic text-parchment/55">{c.style}</div>
+                <p className="mt-1.5 text-[13px] leading-snug text-parchment/85">{c.desc}</p>
+                <div className="mt-1.5 inline-block rounded border border-gold/30 bg-gold/10 px-1.5 py-0.5 text-[11px] text-gold">Atout : {c.bonus}</div>
               </div>
-              <div className="mt-1 text-xs italic text-parchment/60">{c.leader} · {c.style}</div>
-              <p className="mt-2 text-sm text-parchment/85">{c.desc}</p>
-              <div className="mt-2 text-xs text-gold">Atout : {c.bonus}</div>
             </button>
           ))}
         </div>
