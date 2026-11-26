@@ -1,17 +1,21 @@
 import { useEffect, useMemo, useState } from 'react'
-import { getTechTree, postAction } from '../api'
+import { getTechTree, getCatalog, postAction } from '../api'
+import ArbreCiv from './ArbreCiv'
 
-// Arbre technologique : vrai GRAPHE de dépendances. Les colonnes = profondeur de
-// prérequis ; des traits relient chaque prérequis à la techno qu'il débloque.
+// Arbre technologique façon Civilization (cf. ArbreCiv) : une recherche à la fois,
+// un clic sur une case disponible la lance (le progrès acquis n'est pas perdu).
 
-const BRANCH_TINT = {
-  militaire: '#c0392b', economie: '#c9a227', culture: '#1e8449',
-  construction: '#8a8a82', default: '#a07d2c',
-}
-const CARD_W = 184, CARD_H = 96, GAP_X = 52, GAP_Y = 16, PAD = 20
+const BRANCHES = [
+  { id: 'militaire', nom: 'Militaire', couleur: '#d0564a' },
+  { id: 'economie', nom: 'Économie', couleur: '#d9ad3c' },
+  { id: 'culture', nom: 'Culture', couleur: '#4fb37a' },
+  { id: 'construction', nom: 'Construction', couleur: '#a3a39a' },
+]
+const NOMS_UNITES = { elephant: 'Éléphant de guerre' }
 
 export default function TechTree({ state, onClose, onStateChange }) {
   const [tree, setTree] = useState(null)
+  const [catalog, setCatalog] = useState(null)
   const [error, setError] = useState(null)
   const [busy, setBusy] = useState(null)
   const [msg, setMsg] = useState(null)
@@ -21,48 +25,37 @@ export default function TechTree({ state, onClose, onStateChange }) {
   const connues = useMemo(() => new Set((joueur && joueur.technologies) || []), [joueur])
   const enCours = joueur && joueur.recherche_en_cours
   const ptsTour = (joueur && joueur.recherche_points) || 0
-  // Tours restants pour une techno : ce que le joueur veut VRAIMENT savoir.
-  const toursPour = (cout, progres = 0) => ptsTour > 0 ? Math.max(1, Math.ceil((cout - progres) / ptsTour)) : null
+  const toursPour = (c, progres = 0) => (ptsTour > 0 ? Math.max(1, Math.ceil((c - progres) / ptsTour)) : null)
 
   useEffect(() => {
     let cancel = false
     getTechTree().then((d) => !cancel && setTree(d)).catch((e) => !cancel && setError(e.message || 'Indisponible'))
+    getCatalog().then((d) => !cancel && setCatalog(d)).catch(() => {})
     return () => { cancel = true }
   }, [])
 
   const techs = (tree && tree.technologies) || []
   const byId = useMemo(() => Object.fromEntries(techs.map((t) => [t.id, t])), [techs])
+  const debloquages = useMemo(() => {
+    const m = {}
+    for (const u of (catalog && catalog.unites) || []) if (u.tech_requise) (m[u.tech_requise] = m[u.tech_requise] || []).push({ cle: 'u' + u.id, type: 'unite', id: u.id, libelle: `Débloque : ${NOMS_UNITES[u.id] || u.id}` })
+    for (const w of (catalog && catalog.merveilles) || []) if (w.tech_requise) (m[w.tech_requise] = m[w.tech_requise] || []).push({ cle: 'm' + w.id, type: 'merveille', id: w.id, libelle: `Merveille : ${w.nom}` })
+    return m
+  }, [catalog])
 
-  // Profondeur = plus longue chaîne de prérequis.
-  const layout = useMemo(() => {
-    const depthMemo = {}
-    const depth = (id, seen = new Set()) => {
-      if (depthMemo[id] != null) return depthMemo[id]
-      if (seen.has(id)) return 0
-      seen.add(id)
-      const t = byId[id]
-      const pre = (t && t.prerequis) || []
-      const d = pre.length ? 1 + Math.max(...pre.map((p) => depth(p, seen))) : 0
-      depthMemo[id] = d
-      return d
-    }
-    const cols = {}
-    for (const t of techs) {
-      const d = depth(t.id)
-      ;(cols[d] = cols[d] || []).push(t)
-    }
-    const pos = {}
-    let maxRows = 0
-    Object.keys(cols).map(Number).sort((a, b) => a - b).forEach((d) => {
-      const list = cols[d].sort((a, b) => (a.branche || '').localeCompare(b.branche || '') || a.nom.localeCompare(b.nom))
-      list.forEach((t, r) => { pos[t.id] = { x: PAD + d * (CARD_W + GAP_X), y: PAD + r * (CARD_H + GAP_Y) } })
-      maxRows = Math.max(maxRows, list.length)
-    })
-    const ncols = Object.keys(cols).length
-    return { pos, w: PAD * 2 + ncols * CARD_W + (ncols - 1) * GAP_X, h: PAD * 2 + maxRows * (CARD_H + GAP_Y) }
-  }, [techs, byId])
+  function statut(t) {
+    if (connues.has(t.id)) return 'acquise'
+    if (enCours && enCours.tech === t.id) return 'encours'
+    if ((t.prerequis || []).every((p) => connues.has(p))) return 'dispo'
+    return 'verrou'
+  }
 
-  async function research(t) {
+  async function rechercher(t) {
+    const st = statut(t)
+    if (st === 'acquise' || st === 'verrou' || st === 'encours') {
+      if (st === 'verrou') setMsg({ ok: false, text: `Il faut d'abord : ${(t.prerequis || []).filter((p) => !connues.has(p)).map((p) => (byId[p] || {}).nom || p).join(', ')}.` })
+      return
+    }
     setBusy(t.id); setMsg(null)
     try {
       const r = await postAction({ type: 'rechercher', params: { tech: t.id } })
@@ -72,81 +65,33 @@ export default function TechTree({ state, onClose, onStateChange }) {
     finally { setBusy(null) }
   }
 
-  function statut(t) {
-    if (connues.has(t.id)) return 'acquise'
-    if (enCours && enCours.tech === t.id) return 'encours'
-    if ((t.prerequis || []).every((p) => connues.has(p))) return 'dispo'
-    return 'verrou'
-  }
+  const courante = enCours && byId[enCours.tech]
+  const frac = courante ? Math.min(1, (enCours.progres || 0) / (enCours.cout || 1)) : 0
 
   return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/75 p-4" onClick={onClose}>
-      <div className="flex h-[88vh] w-full max-w-6xl flex-col fenetre overflow-hidden" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between border-b border-bronze-dark/60 px-4 py-3">
-          <h2 className="font-display text-lg font-bold tracking-wide text-gold">Arbre technologique</h2>
-          <div className="flex items-center gap-3">
-            {enCours && enCours.tech && (
-              <span className="text-xs text-amber-200">
-                Recherche : {byId[enCours.tech] ? byId[enCours.tech].nom : enCours.tech} ({Math.round(enCours.progres || 0)}/{enCours.cout || '?'})
-                {ptsTour > 0 && <span className="text-parchment/60"> · +{Math.round(ptsTour)}/tour · ~{toursPour(enCours.cout || 0, enCours.progres || 0)} tour{toursPour(enCours.cout || 0, enCours.progres || 0) > 1 ? 's' : ''}</span>}
-              </span>
-            )}
-            <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
-          </div>
+    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/75 p-4 backdrop-blur-[2px]" onClick={onClose}>
+      <div className="fenetre flex h-[90vh] w-full max-w-[1400px] flex-col overflow-hidden" onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center gap-4 border-b border-bronze-dark/60 px-5 py-3">
+          <h2 className="font-display text-xl font-bold tracking-[0.12em] text-gold">Arbre technologique</h2>
+          {courante && (
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <span className="truncate text-sm text-parchment/80">Recherche : <b className="text-[#6fd0f0]">{courante.nom}</b></span>
+              <div className="h-2 w-48 overflow-hidden rounded-full bg-black/50"><div className="h-full rounded-full bg-[#6fd0f0]" style={{ width: `${frac * 100}%` }} /></div>
+              <span className="text-xs text-parchment/60">{Math.round(enCours.progres || 0)}/{enCours.cout} · +{Math.round(ptsTour)}/tour{toursPour(enCours.cout || 0, enCours.progres || 0) ? ` · ${toursPour(enCours.cout || 0, enCours.progres || 0)} t` : ''}</span>
+            </div>
+          )}
+          {!courante && <span className="flex-1 text-sm italic text-parchment/50">Aucune recherche en cours — choisissez une case disponible.</span>}
+          <button onClick={onClose} className="btn btn-ghost btn-sm">Fermer</button>
         </div>
-        {msg && <div className={'px-4 py-1.5 text-sm ' + (msg.ok ? 'bg-emerald-950/40 text-emerald-100' : 'bg-red-950/40 text-red-100')}>{msg.text}</div>}
+        {msg && <div className={'px-5 py-1.5 text-sm ' + (msg.ok ? 'bg-emerald-950/50 text-emerald-100' : 'bg-red-950/50 text-red-100')}>{msg.text}</div>}
         {error && <div className="p-4 text-red-200">{error}</div>}
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 border-b border-bronze-dark/40 px-4 py-1.5 text-[11px] text-parchment/60">
-          {[['militaire', 'Militaire'], ['economie', 'Économie'], ['culture', 'Culture'], ['construction', 'Construction']].map(([k, l]) => (
-            <span key={k} className="flex items-center gap-1.5"><span className="inline-block h-2.5 w-2.5 rounded-sm" style={{ background: BRANCH_TINT[k] }} />{l}</span>
-          ))}
-          <span className="ml-auto">Une seule recherche à la fois · le bouton « Rechercher » change de cible sans perdre le progrès acquis.</span>
-        </div>
-
-        <div className="thin-scroll flex-1 overflow-auto p-2">
-          <div className="relative" style={{ width: layout.w, height: layout.h }}>
-            {/* Traits de dépendance */}
-            <svg className="pointer-events-none absolute inset-0" width={layout.w} height={layout.h}>
-              {techs.map((t) => (t.prerequis || []).map((p) => {
-                const a = layout.pos[p], b = layout.pos[t.id]
-                if (!a || !b) return null
-                const x1 = a.x + CARD_W, y1 = a.y + CARD_H / 2, x2 = b.x, y2 = b.y + CARD_H / 2
-                const mx = (x1 + x2) / 2
-                const done = connues.has(p)
-                return <path key={p + '>' + t.id} d={`M${x1},${y1} C${mx},${y1} ${mx},${y2} ${x2},${y2}`}
-                             fill="none" stroke={done ? '#c9a227' : '#5b4a26'} strokeWidth={done ? 2 : 1.4} opacity={done ? 0.9 : 0.55} />
-              }))}
-            </svg>
-            {/* Cartes */}
-            {techs.map((t) => {
-              const p = layout.pos[t.id]; if (!p) return null
-              const st = statut(t); const tint = BRANCH_TINT[t.branche] || BRANCH_TINT.default
-              const border = st === 'acquise' ? '#2f7d4f' : st === 'encours' ? '#c08a2a' : st === 'dispo' ? tint : '#3a3326'
-              return (
-                <div key={t.id} className="absolute rounded-md border bg-[#1c1813] p-2 shadow"
-                     style={{ left: p.x, top: p.y, width: CARD_W, height: CARD_H, borderColor: border, borderLeftWidth: 4, borderLeftColor: tint, opacity: st === 'verrou' ? 0.6 : 1 }}>
-                  <div className="flex items-start justify-between gap-1">
-                    <span className="text-sm font-semibold leading-tight text-parchment">{t.nom}</span>
-                    <span className="shrink-0 rounded px-1 py-0.5 text-[9px] font-bold uppercase"
-                          style={{ background: border + '33', color: border === '#3a3326' ? '#b9ae93' : border }}>
-                      {st === 'acquise' ? 'Acquise' : st === 'encours' ? 'En cours' : st === 'dispo' ? 'Dispo' : 'Verrou'}
-                    </span>
-                  </div>
-                  <div className="mt-0.5 line-clamp-2 text-[10px] text-bronze/90">{t.effet}</div>
-                  <div className="absolute inset-x-2 bottom-1.5 flex items-center justify-between text-[10px] text-parchment/50">
-                    <span>Coût {t.cout_recherche}{st === 'dispo' && toursPour(t.cout_recherche) ? ` · ~${toursPour(t.cout_recherche)} t` : ''}</span>
-                    {st !== 'acquise' && (
-                      <button onClick={() => research(t)} disabled={st === 'verrou' || !!busy}
-                              className="rounded bg-bronze px-1.5 py-0.5 text-[10px] font-semibold text-ink hover:bg-bronze-dark hover:text-parchment disabled:opacity-40">
-                        {busy === t.id ? '…' : st === 'encours' ? 'Continuer' : 'Rechercher'}
-                      </button>
-                    )}
-                  </div>
-                </div>
-              )
-            })}
-          </div>
-        </div>
+        <ArbreCiv elements={techs} branches={BRANCHES} theme="savoir" statut={statut} busy={busy}
+                  progression={(t) => (enCours && enCours.tech === t.id ? frac : 0)}
+                  delai={(t) => { const s = statut(t); if (s === 'encours') return `${toursPour(enCours.cout || 0, enCours.progres || 0) || '?'} t`; if (s === 'dispo') { const n = toursPour(t.cout_recherche); return n ? `${n} t` : '' } return '' }}
+                  cout={(t) => `Coût : ${t.cout_recherche} points de recherche`}
+                  debloque={(t) => debloquages[t.id] || []}
+                  libelleAction={(t) => ({ acquise: 'Acquise', encours: 'En cours', dispo: 'Cliquer pour rechercher', verrou: 'Prérequis manquants' })[statut(t)]}
+                  onAction={rechercher} />
       </div>
     </div>
   )
